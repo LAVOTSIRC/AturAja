@@ -56,7 +56,12 @@ class _CategorySlice {
   final String catKey;
 
   const _CategorySlice(
-      this.label, this.pct, this.color, this.amount, this.catKey);
+    this.label,
+    this.pct,
+    this.color,
+    this.amount,
+    this.catKey,
+  );
 }
 
 // ── Screen ───────────────────────────────────────────────────────────────────
@@ -79,17 +84,19 @@ class _FinanceScreenState extends State<FinanceScreen> {
   @override
   void initState() {
     super.initState();
-    _transactions = List.from(sampleTransactions);
+    _transactions = transactionStore;
   }
 
   List<TransactionItem> _transactionsForCategory(String catKey) {
     if (catKey == 'other') {
       return _transactions
-          .where((t) =>
-              t.cat != 'food' &&
-              t.cat != 'entertainment' &&
-              t.cat != 'transport' &&
-              t.cat != 'income')
+          .where(
+            (t) =>
+                t.cat != 'food' &&
+                t.cat != 'entertainment' &&
+                t.cat != 'transport' &&
+                t.cat != 'income',
+          )
           .toList();
     }
     return _transactions.where((t) => t.cat == catKey).toList();
@@ -108,7 +115,7 @@ class _FinanceScreenState extends State<FinanceScreen> {
       'Hiburan',
       'Transport',
       'Belanja',
-      'Lainnya'
+      'Lainnya',
     ];
     final categories = isIncome ? incomeCategories : expenseCategories;
     String selectedCategory = categories.first;
@@ -152,8 +159,9 @@ class _FinanceScreenState extends State<FinanceScreen> {
                           margin: const EdgeInsets.only(bottom: AppSpacing.md),
                           decoration: BoxDecoration(
                             color: c.surfaceHigh,
-                            borderRadius:
-                                BorderRadius.circular(AppSpacing.huge),
+                            borderRadius: BorderRadius.circular(
+                              AppSpacing.huge,
+                            ),
                           ),
                         ),
                       ),
@@ -164,10 +172,10 @@ class _FinanceScreenState extends State<FinanceScreen> {
                             width: AppSpacing.iconBox,
                             height: AppSpacing.iconBox,
                             decoration: BoxDecoration(
-                              color:
-                                  isIncome ? c.successDim : c.expenseDim,
-                              borderRadius:
-                                  BorderRadius.circular(AppSpacing.sm),
+                              color: isIncome ? c.successDim : c.expenseDim,
+                              borderRadius: BorderRadius.circular(
+                                AppSpacing.sm,
+                              ),
                             ),
                             alignment: Alignment.center,
                             child: Icon(
@@ -189,8 +197,7 @@ class _FinanceScreenState extends State<FinanceScreen> {
                       ),
                       const SizedBox(height: AppSpacing.md),
                       // Amount field
-                      Text('Nominal',
-                          style: AppTypography.meta(c.textMuted)),
+                      Text('Nominal', style: AppTypography.meta(c.textMuted)),
                       const SizedBox(height: AppSpacing.xs),
                       TextField(
                         controller: amountCtrl,
@@ -210,8 +217,7 @@ class _FinanceScreenState extends State<FinanceScreen> {
                       ),
                       const SizedBox(height: AppSpacing.md),
                       // Category chips
-                      Text('Kategori',
-                          style: AppTypography.meta(c.textMuted)),
+                      Text('Kategori', style: AppTypography.meta(c.textMuted)),
                       const SizedBox(height: AppSpacing.xs),
                       Wrap(
                         spacing: AppSpacing.xs,
@@ -219,8 +225,8 @@ class _FinanceScreenState extends State<FinanceScreen> {
                         children: categories.map((cat) {
                           final bool active = selectedCategory == cat;
                           return GestureDetector(
-                            onTap: () => setModalState(
-                                () => selectedCategory = cat),
+                            onTap: () =>
+                                setModalState(() => selectedCategory = cat),
                             child: AnimatedContainer(
                               duration: const Duration(milliseconds: 150),
                               padding: const EdgeInsets.symmetric(
@@ -229,33 +235,29 @@ class _FinanceScreenState extends State<FinanceScreen> {
                               ),
                               decoration: BoxDecoration(
                                 color: active
-                                    ? (isIncome
-                                        ? c.successDim
-                                        : c.expenseDim)
+                                    ? (isIncome ? c.successDim : c.expenseDim)
                                     : c.surfaceHigh,
-                                borderRadius:
-                                    BorderRadius.circular(AppSpacing.huge),
+                                borderRadius: BorderRadius.circular(
+                                  AppSpacing.huge,
+                                ),
                                 border: Border.all(
                                   color: active
-                                      ? (isIncome
-                                          ? c.success
-                                          : c.expense)
+                                      ? (isIncome ? c.success : c.expense)
                                       : c.border,
                                 ),
                               ),
                               child: Text(
                                 cat,
-                                style: AppTypography.label(
-                                  active
-                                      ? (isIncome
-                                          ? c.success
-                                          : c.expense)
-                                      : c.textSub,
-                                ).copyWith(
-                                  fontWeight: active
-                                      ? FontWeight.w600
-                                      : FontWeight.w400,
-                                ),
+                                style:
+                                    AppTypography.label(
+                                      active
+                                          ? (isIncome ? c.success : c.expense)
+                                          : c.textSub,
+                                    ).copyWith(
+                                      fontWeight: active
+                                          ? FontWeight.w600
+                                          : FontWeight.w400,
+                                    ),
                               ),
                             ),
                           );
@@ -263,8 +265,10 @@ class _FinanceScreenState extends State<FinanceScreen> {
                       ),
                       const SizedBox(height: AppSpacing.md),
                       // Description field
-                      Text('Deskripsi (opsional)',
-                          style: AppTypography.meta(c.textMuted)),
+                      Text(
+                        'Deskripsi (opsional)',
+                        style: AppTypography.meta(c.textMuted),
+                      ),
                       const SizedBox(height: AppSpacing.xs),
                       TextField(
                         controller: descCtrl,
@@ -285,21 +289,22 @@ class _FinanceScreenState extends State<FinanceScreen> {
                         child: PressableScale(
                           onTap: () {
                             final rawAmount = int.tryParse(
-                              amountCtrl.text
-                                  .replaceAll(RegExp(r'[^0-9]'), ''),
+                              amountCtrl.text.replaceAll(RegExp(r'[^0-9]'), ''),
                             );
                             if (rawAmount == null || rawAmount <= 0) {
-                              setModalState(() => errorMessage =
-                                  'Nominal wajib diisi dan harus lebih dari Rp0.');
+                              setModalState(
+                                () => errorMessage = 'Nominal wajib diisi dan harus lebih dari Rp0.',
+                              );
                               return;
                             }
                             if (rawAmount > kMaxTransactionAmount) {
-                              setModalState(() => errorMessage =
-                                  'Nominal maksimal ${formatRupiah(kMaxTransactionAmount)}.');
+                              setModalState(
+                                () => errorMessage =
+                                    'Nominal maksimal ${formatRupiah(kMaxTransactionAmount)}.',
+                              );
                               return;
                             }
-                            final newId =
-                                DateTime.now().millisecondsSinceEpoch;
+                            final newId = DateTime.now().millisecondsSinceEpoch;
                             final resolvedCatKey = isIncome
                                 ? 'income'
                                 : _catKey(selectedCategory);
@@ -308,8 +313,7 @@ class _FinanceScreenState extends State<FinanceScreen> {
                               label: descCtrl.text.trim().isEmpty
                                   ? selectedCategory
                                   : descCtrl.text.trim(),
-                              amount:
-                                  isIncome ? rawAmount : -rawAmount,
+                              amount: isIncome ? rawAmount : -rawAmount,
                               cat: resolvedCatKey,
                               time: TimeOfDay.now().format(ctx),
                               date: 'Hari ini',
@@ -336,12 +340,14 @@ class _FinanceScreenState extends State<FinanceScreen> {
                           tooltip: 'Simpan',
                           child: Container(
                             constraints: const BoxConstraints(
-                                minHeight: AppSpacing.target),
+                              minHeight: AppSpacing.target,
+                            ),
                             alignment: Alignment.center,
                             decoration: BoxDecoration(
                               color: isIncome ? c.success : c.expense,
-                              borderRadius:
-                                  BorderRadius.circular(AppSpacing.sm),
+                              borderRadius: BorderRadius.circular(
+                                AppSpacing.sm,
+                              ),
                             ),
                             child: Text(
                               'Simpan',
@@ -356,8 +362,10 @@ class _FinanceScreenState extends State<FinanceScreen> {
                         width: double.infinity,
                         child: TextButton(
                           onPressed: () => Navigator.of(ctx).pop(),
-                          child: Text('Batal',
-                              style: AppTypography.label(c.textMuted)),
+                          child: Text(
+                            'Batal',
+                            style: AppTypography.label(c.textMuted),
+                          ),
                         ),
                       ),
                     ],
@@ -391,10 +399,8 @@ class _FinanceScreenState extends State<FinanceScreen> {
           );
         },
         onDelete: () {
-          final removedIndex =
-              _transactions.indexWhere((x) => x.id == t.id);
-          setState(
-              () => _transactions.removeWhere((x) => x.id == t.id));
+          final removedIndex = _transactions.indexWhere((x) => x.id == t.id);
+          setState(() => _transactions.removeWhere((x) => x.id == t.id));
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text('"${t.label}" dihapus dari riwayat'),
@@ -402,8 +408,10 @@ class _FinanceScreenState extends State<FinanceScreen> {
                 label: 'Urungkan',
                 onPressed: () {
                   setState(() {
-                    final insertIndex =
-                        removedIndex.clamp(0, _transactions.length);
+                    final insertIndex = removedIndex.clamp(
+                      0,
+                      _transactions.length,
+                    );
                     _transactions.insert(insertIndex, t);
                   });
                 },
@@ -438,8 +446,8 @@ class _FinanceScreenState extends State<FinanceScreen> {
     final Color budgetColor = usagePct < 0.70
         ? c.success
         : usagePct < 0.90
-            ? c.warning
-            : c.expense;
+        ? c.warning
+        : c.expense;
 
     return Container(
       color: c.bg,
@@ -447,7 +455,8 @@ class _FinanceScreenState extends State<FinanceScreen> {
         child: SingleChildScrollView(
           // No FAB anymore — just nav bar height + comfortable margin
           padding: const EdgeInsets.only(
-              bottom: AppSpacing.navHeight + AppSpacing.lg),
+            bottom: AppSpacing.navHeight + AppSpacing.lg,
+          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -496,10 +505,7 @@ class _FinanceScreenState extends State<FinanceScreen> {
                           ],
                         ),
                         const SizedBox(height: 2),
-                        Text(
-                          'Tema',
-                          style: AppTypography.micro(c.textMuted),
-                        ),
+                        Text('Tema', style: AppTypography.micro(c.textMuted)),
                       ],
                     ),
                   ],
@@ -528,8 +534,7 @@ class _FinanceScreenState extends State<FinanceScreen> {
                           alignment: Alignment.center,
                           decoration: BoxDecoration(
                             color: c.success,
-                            borderRadius:
-                                BorderRadius.circular(14),
+                            borderRadius: BorderRadius.circular(14),
                           ),
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
@@ -543,8 +548,7 @@ class _FinanceScreenState extends State<FinanceScreen> {
                               Text(
                                 'Pemasukan',
                                 style: AppTypography.label(c.onAccent)
-                                    .copyWith(
-                                        fontWeight: FontWeight.w700),
+                                    .copyWith(fontWeight: FontWeight.w700),
                               ),
                             ],
                           ),
@@ -564,8 +568,7 @@ class _FinanceScreenState extends State<FinanceScreen> {
                           alignment: Alignment.center,
                           decoration: BoxDecoration(
                             color: c.expense,
-                            borderRadius:
-                                BorderRadius.circular(14),
+                            borderRadius: BorderRadius.circular(14),
                           ),
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
@@ -579,8 +582,7 @@ class _FinanceScreenState extends State<FinanceScreen> {
                               Text(
                                 'Pengeluaran',
                                 style: AppTypography.label(c.onAccent)
-                                    .copyWith(
-                                        fontWeight: FontWeight.w700),
+                                    .copyWith(fontWeight: FontWeight.w700),
                               ),
                             ],
                           ),
@@ -597,15 +599,12 @@ class _FinanceScreenState extends State<FinanceScreen> {
                         tooltip: 'Scan struk',
                         child: Container(
                           height: 50,
-                          constraints:
-                              const BoxConstraints(minWidth: 44),
+                          constraints: const BoxConstraints(minWidth: 44),
                           alignment: Alignment.center,
                           decoration: BoxDecoration(
                             color: c.blueDim,
-                            borderRadius:
-                                BorderRadius.circular(14),
-                            border:
-                                Border.all(color: c.blue, width: 1.5),
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(color: c.blue, width: 1.5),
                           ),
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
@@ -620,8 +619,7 @@ class _FinanceScreenState extends State<FinanceScreen> {
                               Text(
                                 'Scan',
                                 style: AppTypography.micro(c.blue)
-                                    .copyWith(
-                                        fontWeight: FontWeight.w600),
+                                    .copyWith(fontWeight: FontWeight.w600),
                               ),
                             ],
                           ),
@@ -668,7 +666,11 @@ class _FinanceScreenState extends State<FinanceScreen> {
               // ── Budget indicator ──────────────────────────────────────
               Padding(
                 padding: const EdgeInsets.fromLTRB(
-                    AppSpacing.md, 0, AppSpacing.md, AppSpacing.md),
+                  AppSpacing.md,
+                  0,
+                  AppSpacing.md,
+                  AppSpacing.md,
+                ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -683,8 +685,7 @@ class _FinanceScreenState extends State<FinanceScreen> {
                         children: [
                           // Title row
                           Row(
-                            mainAxisAlignment:
-                                MainAxisAlignment.spaceBetween,
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
                               Text(
                                 'Anggaran Bulan Ini',
@@ -693,41 +694,40 @@ class _FinanceScreenState extends State<FinanceScreen> {
                               Text(
                                 formatRupiah(_budget),
                                 style: AppTypography.caption(c.blue)
-                                    .copyWith(
-                                        fontWeight: FontWeight.w600),
+                                    .copyWith(fontWeight: FontWeight.w600),
                               ),
                             ],
                           ),
                           const SizedBox(height: AppSpacing.sm),
                           // Overall usage bar
                           ClipRRect(
-                            borderRadius:
-                                BorderRadius.circular(AppSpacing.huge),
+                            borderRadius: BorderRadius.circular(
+                              AppSpacing.huge,
+                            ),
                             child: LinearProgressIndicator(
                               value: usagePct.clamp(0.0, 1.0),
                               minHeight: AppSpacing.progressThin,
                               backgroundColor: c.surfaceHigh,
-                              valueColor:
-                                  AlwaysStoppedAnimation<Color>(
-                                      budgetColor),
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                budgetColor,
+                              ),
                             ),
                           ),
                           const SizedBox(height: AppSpacing.xs),
                           // Segmented bar by category
                           ClipRRect(
-                            borderRadius:
-                                BorderRadius.circular(AppSpacing.huge),
+                            borderRadius: BorderRadius.circular(
+                              AppSpacing.huge,
+                            ),
                             child: SizedBox(
                               height: AppSpacing.progressMedium,
                               child: Row(
                                 children: cats
                                     .map(
-                                      (_CategorySlice slice) =>
-                                          Expanded(
+                                      (_CategorySlice slice) => Expanded(
                                         flex: slice.pct,
                                         child: Container(
-                                          margin:
-                                              const EdgeInsets.symmetric(
+                                          margin: const EdgeInsets.symmetric(
                                             horizontal: AppSpacing.xxs,
                                           ),
                                           color: slice.color,
@@ -741,21 +741,18 @@ class _FinanceScreenState extends State<FinanceScreen> {
                           const SizedBox(height: AppSpacing.xs),
                           // Spent / Remaining row
                           Row(
-                            mainAxisAlignment:
-                                MainAxisAlignment.spaceBetween,
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
                               Text.rich(
                                 TextSpan(
-                                  style:
-                                      AppTypography.micro(c.textMuted),
+                                  style: AppTypography.micro(c.textMuted),
                                   children: [
                                     const TextSpan(text: 'Terpakai: '),
                                     TextSpan(
                                       text: formatRupiah(_spent),
-                                      style: AppTypography.micro(c.text)
-                                          .copyWith(
-                                              fontWeight:
-                                                  FontWeight.w700),
+                                      style: AppTypography.micro(
+                                        c.text,
+                                      ).copyWith(fontWeight: FontWeight.w700),
                                     ),
                                   ],
                                 ),
@@ -764,8 +761,7 @@ class _FinanceScreenState extends State<FinanceScreen> {
                                 usagePct > 1.0
                                     ? 'Lebih ${formatRupiah(_spent - _budget)}'
                                     : 'Sisa ${formatRupiah(_budget - _spent)}',
-                                style:
-                                    AppTypography.micro(budgetColor),
+                                style: AppTypography.micro(budgetColor),
                               ),
                             ],
                           ),
@@ -779,8 +775,9 @@ class _FinanceScreenState extends State<FinanceScreen> {
                               ),
                               decoration: BoxDecoration(
                                 color: c.expenseDim,
-                                borderRadius:
-                                    BorderRadius.circular(AppSpacing.sm),
+                                borderRadius: BorderRadius.circular(
+                                  AppSpacing.sm,
+                                ),
                                 border: Border.all(color: c.expense),
                               ),
                               child: Row(
@@ -794,9 +791,9 @@ class _FinanceScreenState extends State<FinanceScreen> {
                                   Expanded(
                                     child: Text(
                                       'Anggaran bulan ini terlampaui ${formatRupiah(_spent - _budget)}',
-                                      style: AppTypography.micro(c.expense)
-                                          .copyWith(
-                                              fontWeight: FontWeight.w600),
+                                      style: AppTypography.micro(
+                                        c.expense,
+                                      ).copyWith(fontWeight: FontWeight.w600),
                                     ),
                                   ),
                                 ],
@@ -823,8 +820,7 @@ class _FinanceScreenState extends State<FinanceScreen> {
                                   const SizedBox(width: AppSpacing.xxs),
                                   Text(
                                     slice.label,
-                                    style: AppTypography.micro(
-                                        c.textMuted),
+                                    style: AppTypography.micro(c.textMuted),
                                   ),
                                 ],
                               );
@@ -840,7 +836,11 @@ class _FinanceScreenState extends State<FinanceScreen> {
               // ── Category breakdown ────────────────────────────────────
               Padding(
                 padding: const EdgeInsets.fromLTRB(
-                    AppSpacing.md, 0, AppSpacing.md, AppSpacing.md),
+                  AppSpacing.md,
+                  0,
+                  AppSpacing.md,
+                  AppSpacing.md,
+                ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -850,36 +850,40 @@ class _FinanceScreenState extends State<FinanceScreen> {
                           .map(
                             (_CategorySlice slice) => Padding(
                               padding: const EdgeInsets.only(
-                                  bottom: AppSpacing.xs),
+                                bottom: AppSpacing.xs,
+                              ),
                               child: PressableScale(
                                 onTap: () {
                                   Navigator.of(context).push(
                                     MaterialPageRoute(
-                                      builder: (_) =>
-                                          CategoryDetailScreen(
+                                      builder: (_) => CategoryDetailScreen(
                                         categoryLabel: slice.label,
                                         categoryColor: slice.color,
-                                        transactions:
-                                            _transactionsForCategory(
-                                                slice.catKey),
+                                        transactions: _transactionsForCategory(
+                                          slice.catKey,
+                                        ),
                                         onTransactionUpdated: (updated) {
                                           setState(() {
                                             final idx = _transactions
-                                                .indexWhere((x) =>
-                                                    x.id == updated.id);
+                                                .indexWhere(
+                                                  (x) => x.id == updated.id,
+                                                );
                                             if (idx != -1) {
                                               _transactions[idx] = updated;
                                             }
                                           });
                                         },
                                         onTransactionDeleted: (id) {
-                                          setState(() => _transactions
-                                              .removeWhere(
-                                                  (x) => x.id == id));
+                                          setState(
+                                            () => _transactions.removeWhere(
+                                              (x) => x.id == id,
+                                            ),
+                                          );
                                         },
                                         onTransactionRestored: (item) {
-                                          setState(() => _transactions
-                                              .insert(0, item));
+                                          setState(
+                                            () => _transactions.insert(0, item),
+                                          );
                                         },
                                       ),
                                     ),
@@ -901,7 +905,11 @@ class _FinanceScreenState extends State<FinanceScreen> {
               // ── Transaction history ───────────────────────────────────
               Padding(
                 padding: const EdgeInsets.fromLTRB(
-                    AppSpacing.md, 0, AppSpacing.md, 0),
+                  AppSpacing.md,
+                  0,
+                  AppSpacing.md,
+                  0,
+                ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -910,8 +918,7 @@ class _FinanceScreenState extends State<FinanceScreen> {
                       const AppEmptyState(
                         icon: Icons.receipt_long_outlined,
                         title: 'Belum ada transaksi',
-                        message:
-                            'Riwayat pengeluaran dan pemasukan akan muncul di sini.',
+                        message: 'Riwayat pengeluaran dan pemasukan akan muncul di sini.',
                       )
                     else
                       Column(
@@ -919,12 +926,11 @@ class _FinanceScreenState extends State<FinanceScreen> {
                             .map(
                               (TransactionItem t) => Padding(
                                 padding: const EdgeInsets.only(
-                                    bottom: AppSpacing.xs),
+                                  bottom: AppSpacing.xs,
+                                ),
                                 child: PressableScale(
-                                  onTap: () =>
-                                      _showTransactionDetail(t),
-                                  semanticLabel:
-                                      'Detail transaksi ${t.label}',
+                                  onTap: () => _showTransactionDetail(t),
+                                  semanticLabel: 'Detail transaksi ${t.label}',
                                   tooltip: 'Lihat detail',
                                   child: _historyRow(c, t),
                                 ),
@@ -979,8 +985,7 @@ class _FinanceScreenState extends State<FinanceScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(slice.label,
-                        style: AppTypography.label(c.text)),
+                    Text(slice.label, style: AppTypography.label(c.text)),
                     Text(
                       formatRupiah(slice.amount),
                       style: AppTypography.label(slice.color)
@@ -990,14 +995,12 @@ class _FinanceScreenState extends State<FinanceScreen> {
                 ),
                 const SizedBox(height: AppSpacing.xs),
                 ClipRRect(
-                  borderRadius:
-                      BorderRadius.circular(AppSpacing.huge),
+                  borderRadius: BorderRadius.circular(AppSpacing.huge),
                   child: LinearProgressIndicator(
                     value: slice.pct / 100,
                     minHeight: AppSpacing.progressThin,
                     backgroundColor: c.surfaceHigh,
-                    valueColor:
-                        AlwaysStoppedAnimation<Color>(slice.color),
+                    valueColor: AlwaysStoppedAnimation<Color>(slice.color),
                   ),
                 ),
                 const SizedBox(height: AppSpacing.xxs),
@@ -1022,12 +1025,7 @@ class _FinanceScreenState extends State<FinanceScreen> {
   Widget _historyRow(AppColors c, TransactionItem t) {
     final bool isExpense = t.amount < 0;
     return AppCard(
-      padding: const EdgeInsets.fromLTRB(
-        AppSpacing.sm,
-        AppSpacing.sm,
-        AppSpacing.fabClearance,
-        AppSpacing.sm,
-      ),
+      padding: const EdgeInsets.all(AppSpacing.sm),
       child: Row(
         children: [
           Container(
@@ -1067,8 +1065,7 @@ class _FinanceScreenState extends State<FinanceScreen> {
             children: [
               Text(
                 '${isExpense ? '-' : '+'}${formatRupiah(t.amount.abs())}',
-                style: AppTypography.label(
-                        isExpense ? c.expense : c.success)
+                style: AppTypography.label(isExpense ? c.expense : c.success)
                     .copyWith(fontWeight: FontWeight.w600),
               ),
               const SizedBox(width: AppSpacing.xxs),
@@ -1121,10 +1118,10 @@ class _TransactionDetailSheetState extends State<_TransactionDetailSheet> {
   @override
   void initState() {
     super.initState();
-    _labelCtrl =
-        TextEditingController(text: widget.transaction.label);
+    _labelCtrl = TextEditingController(text: widget.transaction.label);
     _amountCtrl = TextEditingController(
-        text: widget.transaction.amount.abs().toString());
+      text: widget.transaction.amount.abs().toString(),
+    );
     _selectedCategory = _catLabel(widget.transaction.cat);
   }
 
@@ -1140,23 +1137,26 @@ class _TransactionDetailSheetState extends State<_TransactionDetailSheet> {
       setState(() => _errorMessage = 'Deskripsi wajib diisi.');
       return;
     }
-    final rawAmount =
-        int.tryParse(_amountCtrl.text.replaceAll(RegExp(r'[^0-9]'), ''));
+    final rawAmount = int.tryParse(
+      _amountCtrl.text.replaceAll(RegExp(r'[^0-9]'), ''),
+    );
     if (rawAmount == null || rawAmount <= 0) {
       setState(() => _errorMessage = 'Nominal harus lebih dari Rp0.');
       return;
     }
     if (rawAmount > kMaxTransactionAmount) {
-      setState(() => _errorMessage =
-          'Nominal maksimal ${formatRupiah(kMaxTransactionAmount)}.');
+      setState(
+        () => _errorMessage =
+            'Nominal maksimal ${formatRupiah(kMaxTransactionAmount)}.',
+      );
       return;
     }
     final isExpense = widget.transaction.amount < 0;
     final resolvedCat = isExpense
         ? _catKey(_selectedCategory)
         : (widget.transaction.cat == 'income'
-            ? 'income'
-            : _catKey(_selectedCategory));
+              ? 'income'
+              : _catKey(_selectedCategory));
     final updated = widget.transaction.copyWith(
       label: _labelCtrl.text.trim(),
       amount: isExpense ? -rawAmount : rawAmount,
@@ -1284,7 +1284,8 @@ class _TransactionDetailSheetState extends State<_TransactionDetailSheet> {
                 Text(
                   '${isExpense ? '-' : '+'}${formatRupiah(widget.transaction.amount.abs())}',
                   style: AppTypography.display(
-                      isExpense ? c.expense : c.success),
+                    isExpense ? c.expense : c.success,
+                  ),
                 ),
               ],
             ),
@@ -1295,7 +1296,9 @@ class _TransactionDetailSheetState extends State<_TransactionDetailSheet> {
               children: [
                 Container(
                   padding: const EdgeInsets.symmetric(
-                      horizontal: AppSpacing.sm, vertical: AppSpacing.xxs),
+                    horizontal: AppSpacing.sm,
+                    vertical: AppSpacing.xxs,
+                  ),
                   decoration: BoxDecoration(
                     color: c.surfaceHigh,
                     borderRadius: BorderRadius.circular(AppSpacing.huge),
@@ -1304,11 +1307,16 @@ class _TransactionDetailSheetState extends State<_TransactionDetailSheet> {
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(Icons.label_outline,
-                          size: AppSpacing.sm, color: c.textSub),
+                      Icon(
+                        Icons.label_outline,
+                        size: AppSpacing.sm,
+                        color: c.textSub,
+                      ),
                       const SizedBox(width: AppSpacing.xxs),
-                      Text(_catLabel(widget.transaction.cat),
-                          style: AppTypography.meta(c.textSub)),
+                      Text(
+                        _catLabel(widget.transaction.cat),
+                        style: AppTypography.meta(c.textSub),
+                      ),
                     ],
                   ),
                 ),
@@ -1316,14 +1324,18 @@ class _TransactionDetailSheetState extends State<_TransactionDetailSheet> {
                   const SizedBox(width: AppSpacing.xs),
                   Container(
                     padding: const EdgeInsets.symmetric(
-                        horizontal: AppSpacing.sm, vertical: AppSpacing.xxs),
+                      horizontal: AppSpacing.sm,
+                      vertical: AppSpacing.xxs,
+                    ),
                     decoration: BoxDecoration(
                       color: c.warningDim,
                       borderRadius: BorderRadius.circular(AppSpacing.huge),
                       border: Border.all(color: c.warning),
                     ),
-                    child: Text('konsumtif',
-                        style: AppTypography.micro(c.warning)),
+                    child: Text(
+                      'konsumtif',
+                      style: AppTypography.micro(c.warning),
+                    ),
                   ),
                 ],
               ],
@@ -1378,7 +1390,9 @@ class _TransactionDetailSheetState extends State<_TransactionDetailSheet> {
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 150),
                     padding: const EdgeInsets.symmetric(
-                        horizontal: AppSpacing.sm, vertical: AppSpacing.xs),
+                      horizontal: AppSpacing.sm,
+                      vertical: AppSpacing.xs,
+                    ),
                     decoration: BoxDecoration(
                       color: active
                           ? (isExpense ? c.expenseDim : c.successDim)
@@ -1392,14 +1406,16 @@ class _TransactionDetailSheetState extends State<_TransactionDetailSheet> {
                     ),
                     child: Text(
                       cat,
-                      style: AppTypography.label(
-                        active
-                            ? (isExpense ? c.expense : c.success)
-                            : c.textSub,
-                      ).copyWith(
-                          fontWeight: active
-                              ? FontWeight.w600
-                              : FontWeight.w400),
+                      style:
+                          AppTypography.label(
+                            active
+                                ? (isExpense ? c.expense : c.success)
+                                : c.textSub,
+                          ).copyWith(
+                            fontWeight: active
+                                ? FontWeight.w600
+                                : FontWeight.w400,
+                          ),
                     ),
                   ),
                 );
@@ -1421,11 +1437,16 @@ class _TransactionDetailSheetState extends State<_TransactionDetailSheet> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.receipt_long_outlined,
-                      size: AppSpacing.iconLarge, color: c.textMuted),
+                  Icon(
+                    Icons.receipt_long_outlined,
+                    size: AppSpacing.iconLarge,
+                    color: c.textMuted,
+                  ),
                   const SizedBox(height: AppSpacing.xxs),
-                  Text('Tidak ada foto struk',
-                      style: AppTypography.caption(c.textMuted)),
+                  Text(
+                    'Tidak ada foto struk',
+                    style: AppTypography.caption(c.textMuted),
+                  ),
                 ],
               ),
             ),
@@ -1441,22 +1462,26 @@ class _TransactionDetailSheetState extends State<_TransactionDetailSheet> {
                     tooltip: 'Simpan',
                     child: Container(
                       constraints: const BoxConstraints(
-                          minHeight: AppSpacing.target),
+                        minHeight: AppSpacing.target,
+                      ),
                       alignment: Alignment.center,
                       decoration: BoxDecoration(
                         color: c.blue,
-                        borderRadius:
-                            BorderRadius.circular(AppSpacing.sm),
+                        borderRadius: BorderRadius.circular(AppSpacing.sm),
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.check_rounded,
-                              size: AppSpacing.iconSmall,
-                              color: c.onAccent),
+                          Icon(
+                            Icons.check_rounded,
+                            size: AppSpacing.iconSmall,
+                            color: c.onAccent,
+                          ),
                           const SizedBox(width: AppSpacing.xs),
-                          Text('Simpan',
-                              style: AppTypography.button(c.onAccent)),
+                          Text(
+                            'Simpan',
+                            style: AppTypography.button(c.onAccent),
+                          ),
                         ],
                       ),
                     ),
@@ -1470,23 +1495,24 @@ class _TransactionDetailSheetState extends State<_TransactionDetailSheet> {
                     tooltip: 'Hapus',
                     child: Container(
                       constraints: const BoxConstraints(
-                          minHeight: AppSpacing.target),
+                        minHeight: AppSpacing.target,
+                      ),
                       alignment: Alignment.center,
                       decoration: BoxDecoration(
                         color: c.expenseDim,
-                        borderRadius:
-                            BorderRadius.circular(AppSpacing.sm),
+                        borderRadius: BorderRadius.circular(AppSpacing.sm),
                         border: Border.all(color: c.expense),
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.delete_outline,
-                              size: AppSpacing.iconSmall,
-                              color: c.expense),
+                          Icon(
+                            Icons.delete_outline,
+                            size: AppSpacing.iconSmall,
+                            color: c.expense,
+                          ),
                           const SizedBox(width: AppSpacing.xs),
-                          Text('Hapus',
-                              style: AppTypography.button(c.expense)),
+                          Text('Hapus', style: AppTypography.button(c.expense)),
                         ],
                       ),
                     ),
