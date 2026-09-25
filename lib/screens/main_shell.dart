@@ -151,45 +151,42 @@ class _MainShellState extends State<MainShell> {
             onPageChanged: (index) => setState(() => tab = index),
             children: screens,
           ),
-          if (tab < 3)
+          if (tab == 0)
             Positioned(
               bottom: AppSpacing.xl,
               right: AppSpacing.md,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  if (tab < 2)
-                    PressableScale(
-                      onTap: _openScan,
-                      semanticLabel: 'Scan struk',
-                      tooltip: 'Scan struk',
-                      child: Container(
-                        width: AppSpacing.target,
-                        height: AppSpacing.target,
-                        decoration: BoxDecoration(
-                          color: c.surface,
-                          border: Border.all(color: c.border),
-                          borderRadius: BorderRadius.circular(AppSpacing.sm),
-                          boxShadow: [
-                            BoxShadow(
-                              color: c.shadow,
-                              blurRadius: AppSpacing.md,
-                              offset: const Offset(0, AppSpacing.xxs),
-                            ),
-                          ],
-                        ),
-                        child: Icon(
-                          Icons.document_scanner_outlined,
-                          size: AppSpacing.iconSmall,
-                          color: c.blue,
-                        ),
+                  PressableScale(
+                    onTap: _openScan,
+                    semanticLabel: 'Scan struk',
+                    tooltip: 'Scan struk',
+                    child: Container(
+                      width: AppSpacing.target,
+                      height: AppSpacing.target,
+                      decoration: BoxDecoration(
+                        color: c.surface,
+                        border: Border.all(color: c.border),
+                        borderRadius: BorderRadius.circular(AppSpacing.sm),
+                        boxShadow: [
+                          BoxShadow(
+                            color: c.shadow,
+                            blurRadius: AppSpacing.md,
+                            offset: const Offset(0, AppSpacing.xxs),
+                          ),
+                        ],
+                      ),
+                      child: Icon(
+                        Icons.document_scanner_outlined,
+                        size: AppSpacing.iconSmall,
+                        color: c.blue,
                       ),
                     ),
-                  if (tab < 2) const SizedBox(height: AppSpacing.xs),
+                  ),
+                  const SizedBox(height: AppSpacing.xs),
                   PressableScale(
-                    onTap: tab == 2
-                        ? _openTaskAdd
-                        : () => _openQuickAdd(QuickAddMode.quick),
+                    onTap: () => _openQuickAdd(QuickAddMode.quick),
                     semanticLabel: 'Tambah catatan',
                     tooltip: 'Tambah catatan',
                     child: Container(

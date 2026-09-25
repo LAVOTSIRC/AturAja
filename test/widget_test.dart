@@ -130,18 +130,83 @@ void main() {
 
     await tester.tap(find.text('Tambah Tugas'));
     await tester.pumpAndSettle();
+
+    expect(find.text('Tambah Tugas Baru'), findsOneWidget);
+    expect(find.text('Form Manual'), findsOneWidget);
+    expect(find.text('AI Brain Dump'), findsOneWidget);
+
     final Finder fields = find.byType(TextField);
-    expect(fields, findsNWidgets(3));
-    await tester.enterText(fields.at(0), 'Submit laporan');
-    await tester.enterText(fields.at(1), 'Akademik');
-    await tester.enterText(fields.at(2), 'Besok, 08:00');
-    await tester.tap(find.text('Simpan Tugas'));
+    await tester.enterText(fields.first, 'Submit laporan');
+    tester.testTextInput.hide();
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Tambah Tugas'));
     await tester.pumpAndSettle();
 
     expect(find.text('Tugas berhasil ditambahkan.'), findsOneWidget);
-    await tester.tap(find.text('Tugas'));
+    await tester.tap(find.byTooltip('Tugas'));
     await tester.pumpAndSettle();
     expect(find.text('Submit laporan'), findsOneWidget);
+  });
+
+  testWidgets('Add form switches between Manual and Brain Dump modes', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      ThemeScope(
+        controller: ThemeController(),
+        child: const MaterialApp(home: MainShell()),
+      ),
+    );
+
+    await tester.tap(find.byTooltip('Tugas'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Tambah'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Tambah Tugas Baru'), findsOneWidget);
+    expect(find.text('JUDUL TUGAS *'), findsOneWidget);
+    expect(find.text('AI Brain Dump Tugas'), findsNothing);
+
+    await tester.tap(find.text('AI Brain Dump'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('AI Brain Dump Tugas'), findsOneWidget);
+    expect(find.text('JUDUL TUGAS *'), findsNothing);
+    expect(find.text('Tambah Tugas'), findsNothing);
+
+    await tester.tap(find.text('Form Manual'));
+    await tester.pumpAndSettle();
+    expect(find.text('JUDUL TUGAS *'), findsOneWidget);
+    expect(find.text('AI Brain Dump Tugas'), findsNothing);
+  });
+
+  testWidgets('Edit form keeps the manual layout without mode switcher', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      ThemeScope(
+        controller: ThemeController(),
+        child: const MaterialApp(home: MainShell()),
+      ),
+    );
+
+    await tester.tap(find.byTooltip('Tugas'));
+    await tester.pumpAndSettle();
+
+    final Finder firstTask = find.byTooltip('Buka detail tugas').first;
+    await tester.ensureVisible(firstTask);
+    await tester.pumpAndSettle();
+    await tester.tap(firstTask);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Edit Tugas'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Edit Tugas'), findsOneWidget);
+    expect(find.text('JUDUL TUGAS *'), findsOneWidget);
+    expect(find.text('Form Manual'), findsNothing);
+    expect(find.text('AI Brain Dump'), findsNothing);
   });
 
   testWidgets('FAB actions are contextual across tabs', (
@@ -157,10 +222,15 @@ void main() {
     expect(find.byTooltip('Scan struk'), findsOneWidget);
     expect(find.byTooltip('Tambah catatan'), findsOneWidget);
 
+    await tester.tap(find.byTooltip('Keuangan'));
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('Scan struk'), findsOneWidget);
+    expect(find.byTooltip('Tambah catatan'), findsNothing);
+
     await tester.tap(find.byTooltip('Tugas'));
     await tester.pumpAndSettle();
     expect(find.byTooltip('Scan struk'), findsNothing);
-    expect(find.byTooltip('Tambah catatan'), findsOneWidget);
+    expect(find.byTooltip('Tambah catatan'), findsNothing);
 
     await tester.tap(find.byTooltip('Profil'));
     await tester.pumpAndSettle();
