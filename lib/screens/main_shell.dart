@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 
+import '../data/models.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_typography.dart';
 import '../theme/theme_scope.dart';
 import '../widgets/common.dart';
 import '../widgets/quick_add_modal.dart';
+import '../widgets/task_add_modal.dart';
 import 'finance_screen.dart';
 import 'home_screen.dart';
 import 'profile_screen.dart';
@@ -21,14 +23,48 @@ class MainShell extends StatefulWidget {
 
 class _MainShellState extends State<MainShell> {
   int tab = 0;
+  List<TaskItem> tasks = List<TaskItem>.of(sampleTasks);
+  int nextTaskId = sampleTasks.length + 1;
 
-  void _openQuickAdd({bool startInBrainDump = false}) {
+  void _openQuickAdd(QuickAddMode mode) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: ThemeScope.of(context).colors.transparent,
-      builder: (_) => QuickAddModal(startInBrainDump: startInBrainDump),
+      builder: (_) => QuickAddModal(initialMode: mode),
     );
+  }
+
+  void _openTaskAdd() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: ThemeScope.of(context).colors.transparent,
+      builder: (_) => TaskAddModal(onSubmit: _addTask),
+    );
+  }
+
+  void _addTask(String title, String sub, String deadline) {
+    setState(() {
+      tasks = [
+        ...tasks,
+        TaskItem(id: nextTaskId++, title: title, sub: sub, deadline: deadline),
+      ];
+    });
+    ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+      const SnackBar(content: Text('Tugas berhasil ditambahkan.')),
+    );
+  }
+
+  void _toggleTask(int id) {
+    setState(() {
+      tasks = tasks
+          .map(
+            (TaskItem task) =>
+                task.id == id ? task.copyWith(done: !task.done) : task,
+          )
+          .toList();
+    });
   }
 
   void _openScan() {
@@ -45,12 +81,16 @@ class _MainShellState extends State<MainShell> {
     final AppColors c = ThemeScope.of(context).colors;
     final List<Widget> screens = [
       HomeScreen(
-        onAdd: () => _openQuickAdd(),
+        onAdd: _openQuickAdd,
         onScan: _openScan,
-        onBrainDump: () => _openQuickAdd(startInBrainDump: true),
+        onAddTask: _openTaskAdd,
       ),
       const FinanceScreen(),
-      const TaskScreen(),
+      TaskScreen(
+        tasks: tasks,
+        onAddTask: _openTaskAdd,
+        onToggleTask: _toggleTask,
+      ),
       const ProfileScreen(),
     ];
 
@@ -93,9 +133,10 @@ class _MainShellState extends State<MainShell> {
                 ),
                 const SizedBox(height: AppSpacing.xs),
                 PressableScale(
-                  onTap: _openQuickAdd,
+                  onTap: () => _openQuickAdd(QuickAddMode.quick),
                   semanticLabel: 'Tambah catatan',
                   tooltip: 'Tambah catatan',
+
                   child: Container(
                     width: AppSpacing.fabHeight,
                     height: AppSpacing.fabHeight,

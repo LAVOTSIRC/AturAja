@@ -305,9 +305,11 @@ class FinanceScreen extends StatelessWidget {
   Widget _historyRow(AppColors c, TransactionItem t) {
     final bool isExpense = t.amount < 0;
     return AppCard(
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.sm,
-        vertical: AppSpacing.sm,
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.sm,
+        AppSpacing.sm,
+        AppSpacing.fabClearance,
+        AppSpacing.sm,
       ),
       child: Row(
         children: [
@@ -339,7 +341,7 @@ class FinanceScreen extends StatelessWidget {
                 const SizedBox(height: AppSpacing.xxs),
                 Text(
                   '${t.time} · ${t.cat}',
-                  style: AppTypography.micro(c.textMuted),
+                  style: AppTypography.caption(c.textMuted),
                 ),
               ],
             ),

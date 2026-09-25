@@ -7,32 +7,22 @@ import '../theme/app_typography.dart';
 import '../theme/theme_scope.dart';
 import '../widgets/common.dart';
 
-class TaskScreen extends StatefulWidget {
-  const TaskScreen({super.key});
+class TaskScreen extends StatelessWidget {
+  final List<TaskItem> tasks;
+  final VoidCallback onAddTask;
+  final ValueChanged<int> onToggleTask;
 
-  @override
-  State<TaskScreen> createState() => _TaskScreenState();
-}
-
-class _TaskScreenState extends State<TaskScreen> {
-  late List<TaskItem> list = List.of(sampleTasks);
-
-  void _showMessage(String message) {
-    ScaffoldMessenger.maybeOf(context)
-        ?.showSnackBar(SnackBar(content: Text(message)));
-  }
-
-  void _toggle(int id) {
-    setState(() {
-      list = list
-          .map((TaskItem t) => t.id == id ? t.copyWith(done: !t.done) : t)
-          .toList();
-    });
-  }
+  const TaskScreen({
+    super.key,
+    required this.tasks,
+    required this.onAddTask,
+    required this.onToggleTask,
+  });
 
   @override
   Widget build(BuildContext context) {
     final AppColors c = ThemeScope.of(context).colors;
+    final List<TaskItem> list = tasks;
     final List<TaskItem> pending = list.where((TaskItem t) => !t.done).toList();
     final List<TaskItem> done = list.where((TaskItem t) => t.done).toList();
     final int pct = list.isEmpty
@@ -75,9 +65,7 @@ class _TaskScreenState extends State<TaskScreen> {
                     const ThemeToggleSwitch(),
                     const SizedBox(width: AppSpacing.xs),
                     PressableScale(
-                      onTap: () => _showMessage(
-                        'Penambahan tugas belum tersedia pada mode simulasi.',
-                      ),
+                      onTap: onAddTask,
                       semanticLabel: 'Tambah tugas',
                       tooltip: 'Tambah tugas',
                       child: Container(
@@ -219,7 +207,7 @@ class _TaskScreenState extends State<TaskScreen> {
 
   Widget _pendingTile(AppColors c, TaskItem t) {
     return PressableScale(
-      onTap: () => _toggle(t.id),
+      onTap: () => onToggleTask(t.id),
       semanticLabel: '${t.title}. Belum selesai. Ketuk untuk menandai selesai.',
       tooltip: 'Tandai selesai',
       child: AppCard(
@@ -298,7 +286,7 @@ class _TaskScreenState extends State<TaskScreen> {
 
   Widget _doneTile(AppColors c, TaskItem t) {
     return PressableScale(
-      onTap: () => _toggle(t.id),
+      onTap: () => onToggleTask(t.id),
       selected: true,
       semanticLabel: '${t.title}. Selesai. Ketuk untuk membuka kembali tugas.',
       tooltip: 'Buka kembali tugas',

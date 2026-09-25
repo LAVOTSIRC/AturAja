@@ -14,6 +14,7 @@ class AppSpacing {
   static const double screenBottom = 144;
   static const double quickActionHeight = 76;
   static const double fabHeight = 56;
+  static const double fabClearance = 80;
   static const double avatar = 72;
   static const double sheetHandleWidth = 36;
   static const double sheetHandleHeight = 4;
