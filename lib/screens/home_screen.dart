@@ -8,19 +8,18 @@ import '../theme/theme_scope.dart';
 import '../utils/format.dart';
 import '../utils/icons.dart';
 import '../widgets/common.dart';
-import '../widgets/quick_add_modal.dart';
 import '../widgets/roasting_toast.dart';
 
 class HomeScreen extends StatefulWidget {
-  final ValueChanged<QuickAddMode> onAdd;
   final VoidCallback onScan;
   final VoidCallback onAddTask;
+  final VoidCallback onBrainDump;
 
   const HomeScreen({
     super.key,
-    required this.onAdd,
     required this.onScan,
     required this.onAddTask,
+    required this.onBrainDump,
   });
 
   @override
@@ -41,18 +40,17 @@ class _HomeScreenState extends State<HomeScreen> {
 
   List<_QuickActionData> get quickActions => [
     _QuickActionData(
-      Icons.edit_note_outlined,
-      'Catat',
-      () => widget.onAdd(QuickAddMode.quick),
+      Icons.add_task_outlined,
+      'Tambah Tugas',
+      widget.onAddTask,
       isEmphasized: true,
     ),
     _QuickActionData(Icons.camera_alt_outlined, 'Scan Struk', widget.onScan),
     _QuickActionData(
       Icons.psychology_outlined,
       'Brain Dump',
-      () => widget.onAdd(QuickAddMode.brain),
+      widget.onBrainDump,
     ),
-    _QuickActionData(Icons.add_task_outlined, 'Tambah Tugas', widget.onAddTask),
   ];
 
   void _showTransactionDetail(TransactionItem t) {
@@ -68,7 +66,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     final AppColors c = ThemeScope.of(context).colors;
     final int pct = ((spent / budget) * 100).round();
-    final List<TransactionItem> recent = sampleTransactions.take(4).toList();
+    final List<TransactionItem> recent = transactionStore.take(4).toList();
 
     return Container(
       color: c.bg,
@@ -343,7 +341,8 @@ class _HomeScreenState extends State<HomeScreen> {
                                     ),
                                     child: PressableScale(
                                       onTap: () => _showTransactionDetail(t),
-                                      semanticLabel: 'Detail transaksi ${t.label}',
+                                      semanticLabel:
+                                          'Detail transaksi ${t.label}',
                                       tooltip: 'Lihat detail',
                                       child: _TransactionRow(t: t),
                                     ),
@@ -443,12 +442,7 @@ class _TransactionRow extends StatelessWidget {
     final AppColors c = ThemeScope.of(context).colors;
     final bool isExpense = t.amount < 0;
     return AppCard(
-      padding: const EdgeInsets.fromLTRB(
-        AppSpacing.sm,
-        AppSpacing.sm,
-        AppSpacing.fabClearance,
-        AppSpacing.sm,
-      ),
+      padding: const EdgeInsets.all(AppSpacing.sm),
       child: Row(
         children: [
           Container(
@@ -507,7 +501,11 @@ class _TransactionRow extends StatelessWidget {
                     .copyWith(fontWeight: FontWeight.w600),
               ),
               const SizedBox(width: AppSpacing.xxs),
-              Icon(Icons.chevron_right, size: AppSpacing.sm, color: c.textMuted),
+              Icon(
+                Icons.chevron_right,
+                size: AppSpacing.sm,
+                color: c.textMuted,
+              ),
             ],
           ),
         ],
@@ -585,7 +583,10 @@ class _TransactionDetailSheet extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(transaction.label, style: AppTypography.title(c.text)),
+                      Text(
+                        transaction.label,
+                        style: AppTypography.title(c.text),
+                      ),
                       const SizedBox(height: AppSpacing.xxs),
                       Text(
                         '${transaction.date} · ${transaction.time}',
@@ -596,7 +597,9 @@ class _TransactionDetailSheet extends StatelessWidget {
                 ),
                 Text(
                   '${isExpense ? '-' : '+'}${formatRupiah(transaction.amount)}',
-                  style: AppTypography.display(isExpense ? c.expense : c.success),
+                  style: AppTypography.display(
+                    isExpense ? c.expense : c.success,
+                  ),
                 ),
               ],
             ),
@@ -617,9 +620,16 @@ class _TransactionDetailSheet extends StatelessWidget {
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(Icons.label_outline, size: AppSpacing.sm, color: c.textSub),
+                      Icon(
+                        Icons.label_outline,
+                        size: AppSpacing.sm,
+                        color: c.textSub,
+                      ),
                       const SizedBox(width: AppSpacing.xxs),
-                      Text(transaction.cat, style: AppTypography.meta(c.textSub)),
+                      Text(
+                        transaction.cat,
+                        style: AppTypography.meta(c.textSub),
+                      ),
                     ],
                   ),
                 ),
@@ -635,7 +645,10 @@ class _TransactionDetailSheet extends StatelessWidget {
                       borderRadius: BorderRadius.circular(AppSpacing.huge),
                       border: Border.all(color: c.warning),
                     ),
-                    child: Text('konsumtif', style: AppTypography.micro(c.warning)),
+                    child: Text(
+                      'konsumtif',
+                      style: AppTypography.micro(c.warning),
+                    ),
                   ),
                 ],
               ],
@@ -677,13 +690,17 @@ class _TransactionDetailSheet extends StatelessWidget {
                     onTap: () {
                       Navigator.of(context).pop();
                       ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-                        const SnackBar(content: Text('Fitur edit tersedia di tab Keuangan.')),
+                        const SnackBar(
+                          content: Text('Fitur edit tersedia di tab Keuangan.'),
+                        ),
                       );
                     },
                     semanticLabel: 'Edit transaksi',
                     tooltip: 'Edit',
                     child: Container(
-                      constraints: const BoxConstraints(minHeight: AppSpacing.target),
+                      constraints: const BoxConstraints(
+                        minHeight: AppSpacing.target,
+                      ),
                       alignment: Alignment.center,
                       decoration: BoxDecoration(
                         color: c.blue,
@@ -692,7 +709,11 @@ class _TransactionDetailSheet extends StatelessWidget {
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.edit_outlined, size: AppSpacing.iconSmall, color: c.onAccent),
+                          Icon(
+                            Icons.edit_outlined,
+                            size: AppSpacing.iconSmall,
+                            color: c.onAccent,
+                          ),
                           const SizedBox(width: AppSpacing.xs),
                           Text('Edit', style: AppTypography.button(c.onAccent)),
                         ],
@@ -707,14 +728,19 @@ class _TransactionDetailSheet extends StatelessWidget {
                     semanticLabel: 'Tutup',
                     tooltip: 'Tutup',
                     child: Container(
-                      constraints: const BoxConstraints(minHeight: AppSpacing.target),
+                      constraints: const BoxConstraints(
+                        minHeight: AppSpacing.target,
+                      ),
                       alignment: Alignment.center,
                       decoration: BoxDecoration(
                         color: c.surfaceHigh,
                         borderRadius: BorderRadius.circular(AppSpacing.sm),
                         border: Border.all(color: c.border),
                       ),
-                      child: Text('Tutup', style: AppTypography.button(c.textSub)),
+                      child: Text(
+                        'Tutup',
+                        style: AppTypography.button(c.textSub),
+                      ),
                     ),
                   ),
                 ),
