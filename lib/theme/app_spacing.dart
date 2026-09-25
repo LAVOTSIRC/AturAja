@@ -1,0 +1,36 @@
+class AppSpacing {
+  static const double xxs = 4;
+  static const double xs = 8;
+  static const double sm = 12;
+  static const double md = 16;
+  static const double lg = 20;
+  static const double xl = 24;
+  static const double xxl = 32;
+  static const double xxxl = 40;
+  static const double huge = 48;
+  static const double target = 48;
+  static const double targetCompact = 48;
+  static const double navHeight = 64;
+  static const double screenBottom = 184;
+  static const double quickActionHeight = 76;
+  static const double fabHeight = 56;
+  static const double fabClearance = 80;
+  static const double avatar = 72;
+  static const double sheetHandleWidth = 36;
+  static const double sheetHandleHeight = 4;
+  static const double divider = 4;
+  static const double iconSmall = 20;
+  static const double iconMedium = 24;
+  static const double iconLarge = 40;
+  static const double iconBox = 40;
+  static const double checkbox = 24;
+  static const double switchWidth = 44;
+  static const double switchHeight = 28;
+  static const double scanFrame = 280;
+  static const double scanCorner = 24;
+  static const double progressThin = 4;
+  static const double progressMedium = 8;
+  static const double splashHalo = 200;
+  static const double splashLogo = 120;
+  static const double splashFooter = 120;
+}

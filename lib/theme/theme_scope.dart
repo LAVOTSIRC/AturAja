@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import 'app_colors.dart';
 
 /// Holds the current theme (dark/light) and notifies listeners on toggle.
