@@ -1,21 +1,30 @@
 import 'package:flutter/material.dart';
 
+import '../data/settings_controller.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_typography.dart';
 import '../theme/theme_scope.dart';
+import '../utils/format.dart';
 import '../widgets/common.dart';
+import 'budget_limit_screen.dart';
+import 'cloud_backup_screen.dart';
+import 'notification_settings_screen.dart';
+import 'nlp_simulation_screen.dart';
+import 'privacy_security_screen.dart';
+
+enum _SettingsDestination { notifications, cloud, budget, nlp, privacy }
 
 class _SettingItem {
   final IconData icon;
   final String label;
-  final String sub;
+  final _SettingsDestination? destination;
   final bool destructive;
 
   const _SettingItem(
     this.icon,
     this.label,
-    this.sub, {
+    this.destination, {
     this.destructive = false,
   });
 }
@@ -41,7 +50,9 @@ class _StatItem {
 }
 
 class ProfileScreen extends StatefulWidget {
-  const ProfileScreen({super.key});
+  final SettingsController settings;
+
+  const ProfileScreen({super.key, required this.settings});
 
   static const stats = [
     _StatItem(Icons.task_alt_outlined, '12', 'Tugas Selesai'),
@@ -49,16 +60,32 @@ class ProfileScreen extends StatefulWidget {
     _StatItem(Icons.local_fire_department_outlined, '7 hari', 'Streak'),
   ];
 
-  static const settings = [
-    _SettingItem(Icons.notifications_none, 'Notifikasi & Roasting AI', 'Aktif'),
-    _SettingItem(Icons.cloud_outlined, 'Cadangan Cloud', 'Sinkron 10 mnt lalu'),
+  static const settingItems = [
+    _SettingItem(
+      Icons.notifications_none,
+      'Notifikasi & Roasting AI',
+      _SettingsDestination.notifications,
+    ),
+    _SettingItem(
+      Icons.cloud_outlined,
+      'Cadangan Cloud',
+      _SettingsDestination.cloud,
+    ),
     _SettingItem(
       Icons.credit_card_outlined,
       'Limit Anggaran',
-      'Rp1.200.000/bulan',
+      _SettingsDestination.budget,
     ),
-    _SettingItem(Icons.psychology_outlined, 'Simulasi NLP', 'Model lokal v2.1'),
-    _SettingItem(Icons.lock_outline, 'Privasi & Keamanan', ''),
+    _SettingItem(
+      Icons.psychology_outlined,
+      'Simulasi NLP',
+      _SettingsDestination.nlp,
+    ),
+    _SettingItem(
+      Icons.lock_outline,
+      'Privasi & Keamanan',
+      _SettingsDestination.privacy,
+    ),
   ];
 
   @override
@@ -153,37 +180,33 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  String _settingDescription(_SettingItem item) {
-    switch (item.label) {
-      case 'Notifikasi & Roasting AI':
-        return 'Preferensi notifikasi dan roasting AI dapat diatur pada halaman ini.';
-      case 'Cadangan Cloud':
-        return 'Pilihan sinkronisasi dan cadangan data lokal akan tersedia di sini.';
-      case 'Limit Anggaran':
-        return 'Batas pengeluaran bulanan dapat disesuaikan dari halaman Keuangan.';
-      case 'Simulasi NLP':
-        return 'Pengaturan simulasi pemrosesan bahasa lokal akan tersedia di sini.';
-      case 'Privasi & Keamanan':
-        return 'Kelola izin, data lokal, dan keamanan akun dari halaman ini.';
-      default:
-        return 'Fitur ini sedang disiapkan.';
-    }
-  }
-
   Future<void> _openSetting(_SettingItem item) async {
-    await showDialog<void>(
-      context: context,
-      builder: (BuildContext dialogContext) => AlertDialog(
-        title: Text(item.label),
-        content: Text(_settingDescription(item)),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('Tutup'),
-          ),
-        ],
-      ),
-    );
+    final _SettingsDestination? selected = item.destination;
+    if (selected == null) {
+      return;
+    }
+    final SettingsController settings = widget.settings;
+    final Widget destination;
+    switch (selected) {
+      case _SettingsDestination.notifications:
+        destination = NotificationSettingsScreen(settings: settings);
+      case _SettingsDestination.cloud:
+        destination = CloudBackupScreen(settings: settings);
+      case _SettingsDestination.budget:
+        destination = BudgetLimitScreen(settings: settings);
+      case _SettingsDestination.nlp:
+        destination = NlpSimulationScreen(settings: settings);
+      case _SettingsDestination.privacy:
+        destination = PrivacySecurityScreen(settings: settings);
+    }
+
+    final bool? saved = await Navigator.of(context)
+        .push<bool>(MaterialPageRoute<bool>(builder: (_) => destination));
+    if (selected == _SettingsDestination.budget && saved == true && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Limit anggaran berhasil diperbarui.')),
+      );
+    }
   }
 
   Future<void> _confirmLogout() async {
@@ -223,23 +246,28 @@ class _ProfileScreenState extends State<ProfileScreen> {
       return _buildLoggedOut(c);
     }
 
-    return Container(
-      color: c.bg,
-      child: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.only(bottom: AppSpacing.screenBottom),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildHeader(c),
-              _buildProfileSummary(c),
-              _buildStats(c),
-              const SizedBox(height: AppSpacing.md),
-              _buildSettings(c),
-            ],
+    return AnimatedBuilder(
+      animation: widget.settings,
+      builder: (BuildContext context, Widget? child) {
+        return Container(
+          color: c.bg,
+          child: SafeArea(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.only(bottom: AppSpacing.screenBottom),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildHeader(c),
+                  _buildProfileSummary(c),
+                  _buildStats(c),
+                  const SizedBox(height: AppSpacing.md),
+                  _buildSettings(c),
+                ],
+              ),
+            ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 
@@ -432,6 +460,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  String _settingStatus(_SettingItem item) {
+    final SettingsController settings = widget.settings;
+    return switch (item.destination) {
+      _SettingsDestination.notifications => settings.notificationStatus,
+      _SettingsDestination.cloud => settings.cloudBackupStatus,
+      _SettingsDestination.budget =>
+        '${formatRupiah(settings.monthlyBudgetLimit)}/bulan',
+      _SettingsDestination.nlp => settings.nlpModelStatus,
+      _SettingsDestination.privacy => settings.privacyStatus,
+      null => '',
+    };
+  }
+
   Widget _buildSettings(AppColors c) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
@@ -439,16 +480,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const SectionLabel('Pengaturan'),
-          ...ProfileScreen.settings.map(
-            (_SettingItem item) =>
-                _buildSettingTile(c, item, onTap: () => _openSetting(item)),
-          ),
+          ...ProfileScreen.settingItems.map((_SettingItem item) {
+            final String subtitle = _settingStatus(item);
+            return _buildSettingTile(
+              c,
+              item,
+              subtitle: subtitle,
+              onTap: () => _openSetting(item),
+            );
+          }),
           const SizedBox(height: AppSpacing.md),
           Divider(color: c.border, thickness: 1),
           const SizedBox(height: AppSpacing.xs),
           _buildSettingTile(
             c,
-            const _SettingItem(Icons.logout, 'Keluar', '', destructive: true),
+            const _SettingItem(Icons.logout, 'Keluar', null, destructive: true),
+            subtitle: '',
             onTap: _confirmLogout,
           ),
         ],
@@ -459,15 +506,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Widget _buildSettingTile(
     AppColors c,
     _SettingItem item, {
+    required String subtitle,
     required VoidCallback onTap,
   }) {
     final Color accent = item.destructive ? c.expense : c.blue;
     final Color background = item.destructive
         ? c.expenseDim.withValues(alpha: 0.4)
         : c.cardBg;
-    final String semanticLabel = item.sub.isEmpty
+    final String semanticLabel = subtitle.isEmpty
         ? item.label
-        : '${item.label}. ${item.sub}';
+        : '${item.label}. $subtitle';
 
     return Padding(
       padding: EdgeInsets.only(bottom: item.destructive ? 0 : AppSpacing.xxs),
@@ -510,10 +558,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               item.destructive ? c.expense : c.text,
                             ),
                           ),
-                          if (item.sub.isNotEmpty) ...[
+                          if (subtitle.isNotEmpty) ...[
                             const SizedBox(height: AppSpacing.xxs),
                             Text(
-                              item.sub,
+                              subtitle,
                               style: AppTypography.micro(c.textMuted),
                             ),
                           ],

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../data/models.dart';
+import '../data/settings_controller.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_typography.dart';
@@ -25,6 +26,19 @@ class _MainShellState extends State<MainShell> {
   int tab = 0;
   List<TaskItem> tasks = List<TaskItem>.of(sampleTasks);
   int nextTaskId = sampleTasks.length + 1;
+  late final SettingsController settings;
+
+  @override
+  void initState() {
+    super.initState();
+    settings = SettingsController();
+  }
+
+  @override
+  void dispose() {
+    settings.dispose();
+    super.dispose();
+  }
 
   void _openQuickAdd(QuickAddMode mode) {
     showModalBottomSheet(
@@ -91,7 +105,7 @@ class _MainShellState extends State<MainShell> {
         onAddTask: _openTaskAdd,
         onToggleTask: _toggleTask,
       ),
-      const ProfileScreen(),
+      ProfileScreen(settings: settings),
     ];
 
     return Scaffold(

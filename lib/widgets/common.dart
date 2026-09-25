@@ -422,3 +422,64 @@ class AppProcessingState extends StatelessWidget {
     );
   }
 }
+
+class SettingsDetailScaffold extends StatelessWidget {
+  final String title;
+  final Widget child;
+
+  const SettingsDetailScaffold({
+    super.key,
+    required this.title,
+    required this.child,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final AppColors c = ThemeScope.of(context).colors;
+    return Scaffold(
+      backgroundColor: c.bg,
+      body: SafeArea(
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.md,
+                AppSpacing.md,
+                AppSpacing.md,
+                AppSpacing.sm,
+              ),
+              child: Row(
+                children: [
+                  PressableScale(
+                    onTap: () => Navigator.of(context).pop(),
+                    semanticLabel: 'Kembali',
+                    tooltip: 'Kembali',
+                    child: Container(
+                      width: AppSpacing.target,
+                      height: AppSpacing.target,
+                      decoration: BoxDecoration(
+                        color: c.surface,
+                        border: Border.all(color: c.border),
+                        borderRadius: BorderRadius.circular(AppSpacing.sm),
+                      ),
+                      child: Icon(
+                        Icons.arrow_back,
+                        size: AppSpacing.iconSmall,
+                        color: c.onSurface,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.sm),
+                  Expanded(
+                    child: Text(title, style: AppTypography.titleLarge(c.text)),
+                  ),
+                ],
+              ),
+            ),
+            Expanded(child: child),
+          ],
+        ),
+      ),
+    );
+  }
+}
