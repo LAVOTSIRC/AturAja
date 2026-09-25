@@ -18,6 +18,28 @@ class MainShell extends StatefulWidget {
 
 class _MainShellState extends State<MainShell> {
   int tab = 0;
+  late final PageController _pageController;
+
+  @override
+  void initState() {
+    super.initState();
+    _pageController = PageController(initialPage: tab);
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  void _onTabTapped(int index) {
+    setState(() => tab = index);
+    _pageController.animateToPage(
+      index,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeInOut,
+    );
+  }
 
   void _openQuickAdd() {
     showModalBottomSheet(
@@ -49,7 +71,11 @@ class _MainShellState extends State<MainShell> {
       backgroundColor: c.bg,
       body: Stack(
         children: [
-          IndexedStack(index: tab, children: screens),
+          PageView(
+            controller: _pageController,
+            onPageChanged: (index) => setState(() => tab = index),
+            children: screens,
+          ),
           Positioned(
             bottom: 24,
             right: 16,
@@ -117,7 +143,7 @@ class _MainShellState extends State<MainShell> {
     final activeColor = c.blue;
     return Expanded(
       child: GestureDetector(
-        onTap: () => setState(() => tab = index),
+        onTap: () => _onTabTapped(index),
         behavior: HitTestBehavior.opaque,
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
