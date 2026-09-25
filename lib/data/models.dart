@@ -25,15 +25,16 @@ class TaskItem {
   final DateTime? dueDate;
   final bool done;
 
-  const TaskItem({
+  TaskItem({
     required this.id,
     required this.title,
-    this.categories = const ['Tugas Kuliah'],
+    List<String>? categories,
+    String? sub,
     this.description = '',
     required this.deadline,
     this.dueDate,
     this.done = false,
-  });
+  }) : categories = categories ?? (sub != null && sub.isNotEmpty ? [sub] : const ['Tugas Kuliah']);
 
   /// Formatted category list string for displays
   String get sub => categories.isNotEmpty ? categories.join(', ') : 'Pribadi';
@@ -68,6 +69,7 @@ class TaskItem {
     int? id,
     String? title,
     List<String>? categories,
+    String? sub,
     String? description,
     String? deadline,
     DateTime? dueDate,
@@ -76,7 +78,7 @@ class TaskItem {
       TaskItem(
         id: id ?? this.id,
         title: title ?? this.title,
-        categories: categories ?? this.categories,
+        categories: categories ?? (sub != null ? [sub] : this.categories),
         description: description ?? this.description,
         deadline: deadline ?? this.deadline,
         dueDate: dueDate ?? this.dueDate,

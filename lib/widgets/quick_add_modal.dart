@@ -6,19 +6,19 @@ import '../theme/app_typography.dart';
 import '../theme/theme_scope.dart';
 import 'common.dart';
 
-enum _QuickAddMode { quick, brain }
+enum QuickAddMode { quick, brain }
 
 class QuickAddModal extends StatefulWidget {
-  final bool startInBrainDump;
+  final QuickAddMode initialMode;
 
-  const QuickAddModal({super.key, this.startInBrainDump = false});
+  const QuickAddModal({super.key, this.initialMode = QuickAddMode.quick});
 
   @override
   State<QuickAddModal> createState() => _QuickAddModalState();
 }
 
 class _QuickAddModalState extends State<QuickAddModal> {
-  late _QuickAddMode mode;
+  late QuickAddMode mode;
   final TextEditingController inputController = TextEditingController();
   final TextEditingController brainController = TextEditingController();
   bool isProcessing = false;
@@ -29,7 +29,7 @@ class _QuickAddModalState extends State<QuickAddModal> {
   @override
   void initState() {
     super.initState();
-    mode = widget.startInBrainDump ? _QuickAddMode.brain : _QuickAddMode.quick;
+    mode = widget.initialMode;
   }
 
   @override
@@ -39,7 +39,7 @@ class _QuickAddModalState extends State<QuickAddModal> {
     super.dispose();
   }
 
-  void _setMode(_QuickAddMode nextMode) {
+  void _setMode(QuickAddMode nextMode) {
     if (isProcessing) {
       return;
     }
@@ -147,14 +147,14 @@ class _QuickAddModalState extends State<QuickAddModal> {
                   children: [
                     _modeButton(
                       c,
-                      _QuickAddMode.quick,
+                      QuickAddMode.quick,
                       Icons.edit_note_outlined,
                       'Catat Cepat',
                     ),
                     const SizedBox(width: AppSpacing.xxs),
                     _modeButton(
                       c,
-                      _QuickAddMode.brain,
+                      QuickAddMode.brain,
                       Icons.psychology_outlined,
                       'Brain Dump',
                     ),
@@ -162,7 +162,7 @@ class _QuickAddModalState extends State<QuickAddModal> {
                 ),
               ),
               const SizedBox(height: AppSpacing.md),
-              if (mode == _QuickAddMode.quick) _quickBody(c) else _brainBody(c),
+              if (mode == QuickAddMode.quick) _quickBody(c) else _brainBody(c),
               if (errorMessage != null) ...[
                 const SizedBox(height: AppSpacing.sm),
                 AppErrorMessage(message: errorMessage!),
@@ -196,7 +196,7 @@ class _QuickAddModalState extends State<QuickAddModal> {
 
   Widget _modeButton(
     AppColors c,
-    _QuickAddMode modeValue,
+    QuickAddMode modeValue,
     IconData icon,
     String label,
   ) {

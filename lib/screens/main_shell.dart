@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 
+import '../data/models.dart';
+import '../data/settings_controller.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_typography.dart';
 import '../theme/theme_scope.dart';
 import '../widgets/common.dart';
 import '../widgets/quick_add_modal.dart';
+import '../widgets/task_add_modal.dart';
 import 'finance_screen.dart';
 import 'home_screen.dart';
 import 'profile_screen.dart';
@@ -21,13 +24,54 @@ class MainShell extends StatefulWidget {
 
 class _MainShellState extends State<MainShell> {
   int tab = 0;
+  List<TaskItem> tasks = List<TaskItem>.of(sampleTasks);
+  int nextTaskId = sampleTasks.length + 1;
+  late final SettingsController settings;
 
-  void _openQuickAdd({bool startInBrainDump = false}) {
+  @override
+  void initState() {
+    super.initState();
+    settings = SettingsController();
+  }
+
+  @override
+  void dispose() {
+    settings.dispose();
+    super.dispose();
+  }
+
+  void _openQuickAdd(QuickAddMode mode) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: ThemeScope.of(context).colors.transparent,
-      builder: (_) => QuickAddModal(startInBrainDump: startInBrainDump),
+      builder: (_) => QuickAddModal(initialMode: mode),
+    );
+  }
+
+  void _openTaskAdd() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: ThemeScope.of(context).colors.transparent,
+      builder: (_) => TaskAddModal(onSubmit: _addTask),
+    );
+  }
+
+  void _addTask(String title, String sub, String deadline) {
+    setState(() {
+      tasks = [
+        ...tasks,
+        TaskItem(
+          id: nextTaskId++,
+          title: title,
+          categories: [sub],
+          deadline: deadline,
+        ),
+      ];
+    });
+    ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+      const SnackBar(content: Text('Tugas berhasil ditambahkan.')),
     );
   }
 
@@ -45,13 +89,13 @@ class _MainShellState extends State<MainShell> {
     final AppColors c = ThemeScope.of(context).colors;
     final List<Widget> screens = [
       HomeScreen(
-        onAdd: () => _openQuickAdd(),
+        onAdd: _openQuickAdd,
         onScan: _openScan,
-        onBrainDump: () => _openQuickAdd(startInBrainDump: true),
+        onAddTask: _openTaskAdd,
       ),
       const FinanceScreen(),
       const TaskScreen(),
-      const ProfileScreen(),
+      ProfileScreen(settings: settings),
     ];
 
     return Scaffold(
@@ -59,67 +103,69 @@ class _MainShellState extends State<MainShell> {
       body: Stack(
         children: [
           IndexedStack(index: tab, children: screens),
-          Positioned(
-            bottom: AppSpacing.xl,
-            right: AppSpacing.md,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                PressableScale(
-                  onTap: _openScan,
-                  semanticLabel: 'Scan struk',
-                  tooltip: 'Scan struk',
-                  child: Container(
-                    width: AppSpacing.target,
-                    height: AppSpacing.target,
-                    decoration: BoxDecoration(
-                      color: c.surface,
-                      border: Border.all(color: c.border),
-                      borderRadius: BorderRadius.circular(AppSpacing.sm),
-                      boxShadow: [
-                        BoxShadow(
-                          color: c.shadow,
-                          blurRadius: AppSpacing.md,
-                          offset: const Offset(0, AppSpacing.xxs),
+          if (tab < 3)
+            Positioned(
+              bottom: AppSpacing.xl,
+              right: AppSpacing.md,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  if (tab < 2)
+                    PressableScale(
+                      onTap: _openScan,
+                      semanticLabel: 'Scan struk',
+                      tooltip: 'Scan struk',
+                      child: Container(
+                        width: AppSpacing.target,
+                        height: AppSpacing.target,
+                        decoration: BoxDecoration(
+                          color: c.surface,
+                          border: Border.all(color: c.border),
+                          borderRadius: BorderRadius.circular(AppSpacing.sm),
+                          boxShadow: [
+                            BoxShadow(
+                              color: c.shadow,
+                              blurRadius: AppSpacing.md,
+                              offset: const Offset(0, AppSpacing.xxs),
+                            ),
+                          ],
                         ),
-                      ],
+                        child: Icon(
+                          Icons.document_scanner_outlined,
+                          size: AppSpacing.iconSmall,
+                          color: c.blue,
+                        ),
+                      ),
                     ),
-                    child: Icon(
-                      Icons.document_scanner_outlined,
-                      size: AppSpacing.iconSmall,
-                      color: c.blue,
+                  if (tab < 2) const SizedBox(height: AppSpacing.xs),
+                  PressableScale(
+                    onTap: () => _openQuickAdd(QuickAddMode.quick),
+                    semanticLabel: 'Tambah catatan',
+                    tooltip: 'Tambah catatan',
+                    child: Container(
+                      width: AppSpacing.fabHeight,
+                      height: AppSpacing.fabHeight,
+                      decoration: BoxDecoration(
+                        color: c.blue,
+                        borderRadius: BorderRadius.circular(AppSpacing.md),
+                        boxShadow: [
+                          BoxShadow(
+                            color: c.blue.withValues(alpha: 0.4),
+                            blurRadius: AppSpacing.xl,
+                            offset: const Offset(0, AppSpacing.xxs),
+                          ),
+                        ],
+                      ),
+                      child: Icon(
+                        Icons.add,
+                        size: AppSpacing.iconMedium,
+                        color: c.onAccent,
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(height: AppSpacing.xs),
-                PressableScale(
-                  onTap: _openQuickAdd,
-                  semanticLabel: 'Tambah catatan',
-                  tooltip: 'Tambah catatan',
-                  child: Container(
-                    width: AppSpacing.fabHeight,
-                    height: AppSpacing.fabHeight,
-                    decoration: BoxDecoration(
-                      color: c.blue,
-                      borderRadius: BorderRadius.circular(AppSpacing.md),
-                      boxShadow: [
-                        BoxShadow(
-                          color: c.blue.withValues(alpha: 0.4),
-                          blurRadius: AppSpacing.xl,
-                          offset: const Offset(0, AppSpacing.xxs),
-                        ),
-                      ],
-                    ),
-                    child: Icon(
-                      Icons.add,
-                      size: AppSpacing.iconMedium,
-                      color: c.onAccent,
-                    ),
-                  ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
         ],
       ),
       bottomNavigationBar: Container(

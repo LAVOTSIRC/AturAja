@@ -8,18 +8,19 @@ import '../theme/theme_scope.dart';
 import '../utils/format.dart';
 import '../utils/icons.dart';
 import '../widgets/common.dart';
+import '../widgets/quick_add_modal.dart';
 import '../widgets/roasting_toast.dart';
 
 class HomeScreen extends StatefulWidget {
-  final VoidCallback onAdd;
+  final ValueChanged<QuickAddMode> onAdd;
   final VoidCallback onScan;
-  final VoidCallback? onBrainDump;
+  final VoidCallback onAddTask;
 
   const HomeScreen({
     super.key,
     required this.onAdd,
     required this.onScan,
-    this.onBrainDump,
+    required this.onAddTask,
   });
 
   @override
@@ -38,19 +39,20 @@ class _HomeScreenState extends State<HomeScreen> {
         ?.showSnackBar(SnackBar(content: Text(message)));
   }
 
-  late final quickActions = [
-    _QuickActionData(Icons.edit_note_outlined, 'Catat', widget.onAdd),
+  List<_QuickActionData> get quickActions => [
+    _QuickActionData(
+      Icons.edit_note_outlined,
+      'Catat',
+      () => widget.onAdd(QuickAddMode.quick),
+      isEmphasized: true,
+    ),
     _QuickActionData(Icons.camera_alt_outlined, 'Scan Struk', widget.onScan),
     _QuickActionData(
       Icons.psychology_outlined,
       'Brain Dump',
-      widget.onBrainDump ?? widget.onAdd,
+      () => widget.onAdd(QuickAddMode.brain),
     ),
-    _QuickActionData(
-      Icons.bar_chart_outlined,
-      'Anggaran',
-      () => _showMessage('Ringkasan anggaran sudah tersedia di tab Keuangan.'),
-    ),
+    _QuickActionData(Icons.add_task_outlined, 'Tambah Tugas', widget.onAddTask),
   ];
 
   @override
@@ -85,7 +87,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             children: [
                               Text(
                                 'Selamat pagi',
-                                style: AppTypography.meta(c.textMuted),
+                                style: AppTypography.caption(c.textMuted),
                               ),
                               const SizedBox(height: AppSpacing.xxs),
                               Text(
@@ -295,10 +297,22 @@ class _HomeScreenState extends State<HomeScreen> {
                                     horizontal: AppSpacing.xs,
                                   ),
                                 ),
-                                child: Text(
-                                  'Lihat semua',
-                                  style: AppTypography.meta(c.blue)
-                                      .copyWith(fontWeight: FontWeight.w600),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      'Lihat semua',
+                                      style: AppTypography.caption(
+                                        c.blue,
+                                      ).copyWith(fontWeight: FontWeight.w600),
+                                    ),
+                                    const SizedBox(width: AppSpacing.xxs),
+                                    Icon(
+                                      Icons.chevron_right,
+                                      size: AppSpacing.iconSmall,
+                                      color: c.blue,
+                                    ),
+                                  ],
                                 ),
                               ),
                             ),
@@ -329,6 +343,28 @@ class _HomeScreenState extends State<HomeScreen> {
                 ],
               ),
             ),
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              height: AppSpacing.screenBottom,
+              child: IgnorePointer(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        c.transparent,
+                        c.bg.withValues(alpha: 0.94),
+                        c.bg,
+                      ],
+                      stops: const [0, 0.62, 1],
+                    ),
+                  ),
+                ),
+              ),
+            ),
           ],
         ),
       ),
@@ -350,12 +386,14 @@ class _HomeScreenState extends State<HomeScreen> {
             horizontal: AppSpacing.xxs,
           ),
           decoration: BoxDecoration(
-            color: c.surface,
-            border: Border.all(color: c.border),
+            color: action.emphasized ? c.blue : c.surface,
+            border: Border.all(color: action.emphasized ? c.blue : c.border),
             borderRadius: BorderRadius.circular(AppSpacing.sm),
             boxShadow: [
               BoxShadow(
-                color: c.blue.withValues(alpha: 0.08),
+                color: action.emphasized
+                    ? c.blue.withValues(alpha: 0.24)
+                    : c.blue.withValues(alpha: 0.08),
                 blurRadius: AppSpacing.sm,
                 spreadRadius: -4,
               ),
@@ -364,14 +402,20 @@ class _HomeScreenState extends State<HomeScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(action.icon, size: AppSpacing.iconSmall, color: c.blue),
+              Icon(
+                action.icon,
+                size: AppSpacing.iconSmall,
+                color: action.emphasized ? c.onAccent : c.blue,
+              ),
               const SizedBox(height: AppSpacing.xs),
               Text(
                 action.label,
                 textAlign: TextAlign.center,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
-                style: AppTypography.caption(c.textSub).copyWith(height: 1.2),
+                style: AppTypography.label(
+                  action.emphasized ? c.onAccent : c.textSub,
+                ).copyWith(height: 1.2),
               ),
             ],
           ),
@@ -385,8 +429,16 @@ class _QuickActionData {
   final IconData icon;
   final String label;
   final VoidCallback onTap;
+  final bool? _emphasized;
 
-  const _QuickActionData(this.icon, this.label, this.onTap);
+  bool get emphasized => _emphasized ?? false;
+
+  const _QuickActionData(
+    this.icon,
+    this.label,
+    this.onTap, {
+    bool? isEmphasized,
+  }) : _emphasized = isEmphasized;
 }
 
 class _TransactionRow extends StatelessWidget {
@@ -399,9 +451,11 @@ class _TransactionRow extends StatelessWidget {
     final AppColors c = ThemeScope.of(context).colors;
     final bool isExpense = t.amount < 0;
     return AppCard(
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.sm,
-        vertical: AppSpacing.sm,
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.sm,
+        AppSpacing.sm,
+        AppSpacing.fabClearance,
+        AppSpacing.sm,
       ),
       child: Row(
         children: [
@@ -433,7 +487,7 @@ class _TransactionRow extends StatelessWidget {
                 const SizedBox(height: AppSpacing.xxs),
                 Row(
                   children: [
-                    Text(t.time, style: AppTypography.micro(c.textMuted)),
+                    Text(t.time, style: AppTypography.caption(c.textMuted)),
                     if (t.consumtive) ...[
                       const SizedBox(width: AppSpacing.xs),
                       Pill(

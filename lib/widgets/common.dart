@@ -57,7 +57,8 @@ class SectionLabel extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: AppSpacing.xs),
       child: Text(
         text.toUpperCase(),
-        style: AppTypography.overline(c.textMuted),
+        style: AppTypography.caption(c.textMuted)
+            .copyWith(fontWeight: FontWeight.w700, letterSpacing: 0.6),
       ),
     );
   }
@@ -188,7 +189,7 @@ class ThemeToggleSwitch extends StatelessWidget {
     final bool isDark = controller.isDark;
     return PressableScale(
       onTap: controller.toggle,
-      tooltip: 'Ganti tema',
+      tooltip: isDark ? 'Ganti ke mode terang' : 'Ganti ke mode gelap',
       semanticLabel: isDark ? 'Aktifkan tema terang' : 'Aktifkan tema gelap',
       selected: isDark,
       child: SizedBox(
@@ -212,6 +213,7 @@ class ThemeToggleSwitch extends StatelessWidget {
               child: Container(
                 width: AppSpacing.iconSmall,
                 height: AppSpacing.iconSmall,
+                alignment: Alignment.center,
                 decoration: BoxDecoration(
                   color: isDark ? c.blue : c.onSurface,
                   shape: BoxShape.circle,
@@ -222,6 +224,11 @@ class ThemeToggleSwitch extends StatelessWidget {
                       offset: const Offset(0, AppSpacing.xxs),
                     ),
                   ],
+                ),
+                child: Icon(
+                  isDark ? Icons.light_mode_outlined : Icons.dark_mode_outlined,
+                  size: AppSpacing.sm,
+                  color: isDark ? c.bg : c.surface,
                 ),
               ),
             ),
@@ -252,7 +259,7 @@ class CircleIconButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final AppColors c = ThemeScope.of(context).colors;
     final String accessibleLabel = showDot
-        ? '$semanticLabel. Ada notifikasi baru'
+        ? 'Ada notifikasi baru. $semanticLabel'
         : semanticLabel;
     final String accessibleTooltip = showDot
         ? '$tooltip, notifikasi baru'
@@ -278,8 +285,8 @@ class CircleIconButton extends StatelessWidget {
                 top: AppSpacing.xs,
                 right: AppSpacing.xs,
                 child: Container(
-                  width: AppSpacing.xs,
-                  height: AppSpacing.xs,
+                  width: AppSpacing.sm,
+                  height: AppSpacing.sm,
                   decoration: BoxDecoration(
                     color: c.expense,
                     shape: BoxShape.circle,
@@ -412,6 +419,67 @@ class AppProcessingState extends StatelessWidget {
             ),
             const SizedBox(width: AppSpacing.xs),
             Text(message, style: AppTypography.label(c.textSub)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class SettingsDetailScaffold extends StatelessWidget {
+  final String title;
+  final Widget child;
+
+  const SettingsDetailScaffold({
+    super.key,
+    required this.title,
+    required this.child,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final AppColors c = ThemeScope.of(context).colors;
+    return Scaffold(
+      backgroundColor: c.bg,
+      body: SafeArea(
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.md,
+                AppSpacing.md,
+                AppSpacing.md,
+                AppSpacing.sm,
+              ),
+              child: Row(
+                children: [
+                  PressableScale(
+                    onTap: () => Navigator.of(context).pop(),
+                    semanticLabel: 'Kembali',
+                    tooltip: 'Kembali',
+                    child: Container(
+                      width: AppSpacing.target,
+                      height: AppSpacing.target,
+                      decoration: BoxDecoration(
+                        color: c.surface,
+                        border: Border.all(color: c.border),
+                        borderRadius: BorderRadius.circular(AppSpacing.sm),
+                      ),
+                      child: Icon(
+                        Icons.arrow_back,
+                        size: AppSpacing.iconSmall,
+                        color: c.onSurface,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.sm),
+                  Expanded(
+                    child: Text(title, style: AppTypography.titleLarge(c.text)),
+                  ),
+                ],
+              ),
+            ),
+            Expanded(child: child),
           ],
         ),
       ),
