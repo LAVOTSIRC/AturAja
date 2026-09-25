@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:bruh/main.dart';
 import 'package:bruh/screens/home_screen.dart';
 import 'package:bruh/screens/main_shell.dart';
+import 'package:bruh/screens/profile_screen.dart';
 import 'package:bruh/theme/theme_scope.dart';
 import 'package:bruh/widgets/quick_add_modal.dart';
 
@@ -109,5 +110,132 @@ void main() {
     await tester.tap(find.text('Tugas'));
     await tester.pumpAndSettle();
     expect(find.text('Submit laporan'), findsOneWidget);
+  });
+
+  testWidgets('FAB actions are contextual across tabs', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      ThemeScope(
+        controller: ThemeController(),
+        child: const MaterialApp(home: MainShell()),
+      ),
+    );
+
+    expect(find.byTooltip('Scan struk'), findsOneWidget);
+    expect(find.byTooltip('Tambah catatan'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Tugas'));
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('Scan struk'), findsNothing);
+    expect(find.byTooltip('Tambah catatan'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Profil'));
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('Scan struk'), findsNothing);
+    expect(find.byTooltip('Tambah catatan'), findsNothing);
+  });
+
+  testWidgets('Profile settings rows open functional dialogs', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      ThemeScope(
+        controller: ThemeController(),
+        child: const MaterialApp(home: Scaffold(body: ProfileScreen())),
+      ),
+    );
+
+    const List<String> labels = [
+      'Notifikasi & Roasting AI',
+      'Cadangan Cloud',
+      'Limit Anggaran',
+      'Simulasi NLP',
+      'Privasi & Keamanan',
+    ];
+
+    for (final String label in labels) {
+      final Finder row = find.text(label);
+      await tester.ensureVisible(row);
+      await tester.pumpAndSettle();
+      await tester.tap(row);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Tutup'), findsOneWidget);
+      await tester.tap(find.text('Tutup'));
+      await tester.pumpAndSettle();
+    }
+  });
+
+  testWidgets('Profile edit validates and updates the displayed identity', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      ThemeScope(
+        controller: ThemeController(),
+        child: const MaterialApp(home: Scaffold(body: ProfileScreen())),
+      ),
+    );
+
+    await tester.tap(find.byTooltip('Edit profil'));
+    await tester.pumpAndSettle();
+    final Finder fields = find.byType(TextField);
+    expect(fields, findsNWidgets(3));
+
+    await tester.enterText(fields.at(0), '');
+    await tester.enterText(fields.at(1), 'abc');
+    tester.testTextInput.hide();
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Simpan'));
+    await tester.tap(find.text('Simpan'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Nama tidak boleh kosong.'), findsOneWidget);
+    expect(find.text('NIM harus berupa angka.'), findsOneWidget);
+
+    await tester.enterText(fields.at(0), 'Budi Santoso');
+    await tester.enterText(fields.at(1), '241401099');
+    await tester.enterText(fields.at(2), 'Sistem Informasi');
+    tester.testTextInput.hide();
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Simpan'));
+    await tester.tap(find.text('Simpan'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Budi Santoso'), findsOneWidget);
+    expect(find.text('241401099 · Sistem Informasi'), findsOneWidget);
+    expect(find.text('BS'), findsOneWidget);
+    expect(find.text('Profil berhasil diperbarui.'), findsOneWidget);
+  });
+
+  testWidgets('Profile logout requires confirmation and can be restored', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      ThemeScope(
+        controller: ThemeController(),
+        child: const MaterialApp(home: Scaffold(body: ProfileScreen())),
+      ),
+    );
+
+    await tester.ensureVisible(find.text('Keluar'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Keluar'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Keluar dari AturAja?'), findsOneWidget);
+    expect(
+      find.text('Yakin ingin keluar? Sesi lokal akan diakhiri.'),
+      findsOneWidget,
+    );
+    await tester.tap(find.widgetWithText(TextButton, 'Keluar'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Sesi berakhir'), findsOneWidget);
+    expect(find.text('Anda telah keluar dari akun.'), findsOneWidget);
+
+    await tester.tap(find.text('Masuk lagi'));
+    await tester.pumpAndSettle();
+    expect(find.text('M Zidan Ruriano A.G'), findsOneWidget);
   });
 }

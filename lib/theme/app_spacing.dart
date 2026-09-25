@@ -11,7 +11,7 @@ class AppSpacing {
   static const double target = 48;
   static const double targetCompact = 48;
   static const double navHeight = 64;
-  static const double screenBottom = 144;
+  static const double screenBottom = 184;
   static const double quickActionHeight = 76;
   static const double fabHeight = 56;
   static const double fabClearance = 80;

@@ -99,68 +99,69 @@ class _MainShellState extends State<MainShell> {
       body: Stack(
         children: [
           IndexedStack(index: tab, children: screens),
-          Positioned(
-            bottom: AppSpacing.xl,
-            right: AppSpacing.md,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                PressableScale(
-                  onTap: _openScan,
-                  semanticLabel: 'Scan struk',
-                  tooltip: 'Scan struk',
-                  child: Container(
-                    width: AppSpacing.target,
-                    height: AppSpacing.target,
-                    decoration: BoxDecoration(
-                      color: c.surface,
-                      border: Border.all(color: c.border),
-                      borderRadius: BorderRadius.circular(AppSpacing.sm),
-                      boxShadow: [
-                        BoxShadow(
-                          color: c.shadow,
-                          blurRadius: AppSpacing.md,
-                          offset: const Offset(0, AppSpacing.xxs),
+          if (tab < 3)
+            Positioned(
+              bottom: AppSpacing.xl,
+              right: AppSpacing.md,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  if (tab < 2)
+                    PressableScale(
+                      onTap: _openScan,
+                      semanticLabel: 'Scan struk',
+                      tooltip: 'Scan struk',
+                      child: Container(
+                        width: AppSpacing.target,
+                        height: AppSpacing.target,
+                        decoration: BoxDecoration(
+                          color: c.surface,
+                          border: Border.all(color: c.border),
+                          borderRadius: BorderRadius.circular(AppSpacing.sm),
+                          boxShadow: [
+                            BoxShadow(
+                              color: c.shadow,
+                              blurRadius: AppSpacing.md,
+                              offset: const Offset(0, AppSpacing.xxs),
+                            ),
+                          ],
                         ),
-                      ],
+                        child: Icon(
+                          Icons.document_scanner_outlined,
+                          size: AppSpacing.iconSmall,
+                          color: c.blue,
+                        ),
+                      ),
                     ),
-                    child: Icon(
-                      Icons.document_scanner_outlined,
-                      size: AppSpacing.iconSmall,
-                      color: c.blue,
+                  if (tab < 2) const SizedBox(height: AppSpacing.xs),
+                  PressableScale(
+                    onTap: () => _openQuickAdd(QuickAddMode.quick),
+                    semanticLabel: 'Tambah catatan',
+                    tooltip: 'Tambah catatan',
+                    child: Container(
+                      width: AppSpacing.fabHeight,
+                      height: AppSpacing.fabHeight,
+                      decoration: BoxDecoration(
+                        color: c.blue,
+                        borderRadius: BorderRadius.circular(AppSpacing.md),
+                        boxShadow: [
+                          BoxShadow(
+                            color: c.blue.withValues(alpha: 0.4),
+                            blurRadius: AppSpacing.xl,
+                            offset: const Offset(0, AppSpacing.xxs),
+                          ),
+                        ],
+                      ),
+                      child: Icon(
+                        Icons.add,
+                        size: AppSpacing.iconMedium,
+                        color: c.onAccent,
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(height: AppSpacing.xs),
-                PressableScale(
-                  onTap: () => _openQuickAdd(QuickAddMode.quick),
-                  semanticLabel: 'Tambah catatan',
-                  tooltip: 'Tambah catatan',
-
-                  child: Container(
-                    width: AppSpacing.fabHeight,
-                    height: AppSpacing.fabHeight,
-                    decoration: BoxDecoration(
-                      color: c.blue,
-                      borderRadius: BorderRadius.circular(AppSpacing.md),
-                      boxShadow: [
-                        BoxShadow(
-                          color: c.blue.withValues(alpha: 0.4),
-                          blurRadius: AppSpacing.xl,
-                          offset: const Offset(0, AppSpacing.xxs),
-                        ),
-                      ],
-                    ),
-                    child: Icon(
-                      Icons.add,
-                      size: AppSpacing.iconMedium,
-                      color: c.onAccent,
-                    ),
-                  ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
         ],
       ),
       bottomNavigationBar: Container(
