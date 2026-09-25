@@ -71,7 +71,7 @@ class _MainShellState extends State<MainShell> {
         onScan: _openScan,
         onBrainDump: () => _openQuickAdd(startInBrainDump: true),
       ),
-      const FinanceScreen(),
+      FinanceScreen(onScan: _openScan),
       const TaskScreen(),
       const ProfileScreen(),
     ];
