@@ -315,24 +315,27 @@ class AppEmptyState extends StatelessWidget {
     return Semantics(
       container: true,
       label: '$title. $message',
-      child: AppCard(
-        padding: const EdgeInsets.all(AppSpacing.xl),
-        child: Column(
-          children: [
-            Icon(icon, size: AppSpacing.iconLarge, color: color),
-            const SizedBox(height: AppSpacing.sm),
-            Text(
-              title,
-              textAlign: TextAlign.center,
-              style: AppTypography.label(c.text),
-            ),
-            const SizedBox(height: AppSpacing.xxs),
-            Text(
-              message,
-              textAlign: TextAlign.center,
-              style: AppTypography.meta(c.textMuted),
-            ),
-          ],
+      child: SizedBox(
+        width: double.infinity,
+        child: AppCard(
+          padding: const EdgeInsets.all(AppSpacing.xl),
+          child: Column(
+            children: [
+              Icon(icon, size: AppSpacing.iconLarge, color: color),
+              const SizedBox(height: AppSpacing.sm),
+              Text(
+                title,
+                textAlign: TextAlign.center,
+                style: AppTypography.label(c.text),
+              ),
+              const SizedBox(height: AppSpacing.xxs),
+              Text(
+                message,
+                textAlign: TextAlign.center,
+                style: AppTypography.meta(c.textMuted),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -355,7 +358,7 @@ class AppErrorMessage extends StatelessWidget {
         padding: const EdgeInsets.all(AppSpacing.sm),
         decoration: BoxDecoration(
           color: c.expenseDim,
-          borderRadius: BorderRadius.circular(AppSpacing.sm),
+          borderRadius: BorderRadius.circular(AppSpacing.md),
           border: Border.all(color: c.expense),
         ),
         child: Row(
