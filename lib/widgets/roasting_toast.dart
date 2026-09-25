@@ -1,48 +1,74 @@
 import 'package:flutter/material.dart';
-import '../theme/theme_scope.dart';
 
-/// Playful AI "roasting" notification banner shown at the top of Home.
+import '../theme/app_colors.dart';
+import '../theme/app_spacing.dart';
+import '../theme/app_typography.dart';
+import '../theme/theme_scope.dart';
+import 'common.dart';
+
 class RoastingToast extends StatelessWidget {
   final VoidCallback onClose;
+
   const RoastingToast({super.key, required this.onClose});
 
   @override
   Widget build(BuildContext context) {
-    final c = ThemeScope.of(context).colors;
+    final AppColors c = ThemeScope.of(context).colors;
     return Container(
-      margin: const EdgeInsets.fromLTRB(12, 12, 12, 0),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      margin: const EdgeInsets.fromLTRB(
+        AppSpacing.sm,
+        AppSpacing.sm,
+        AppSpacing.sm,
+        0,
+      ),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.md,
+        vertical: AppSpacing.sm,
+      ),
       decoration: BoxDecoration(
         color: c.roastBg,
-        border: Border.all(color: c.amber.withValues(alpha: 0.35)),
-        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: c.warning.withValues(alpha: 0.5)),
+        borderRadius: BorderRadius.circular(AppSpacing.md),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(Icons.local_fire_department_outlined, size: 20, color: c.amber),
-          const SizedBox(width: 10),
+          Icon(
+            Icons.local_fire_department_outlined,
+            size: AppSpacing.iconSmall,
+            color: c.warning,
+          ),
+          const SizedBox(width: AppSpacing.xs),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   'ROASTING AI',
-                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: c.amber, letterSpacing: 0.8),
+                  style: AppTypography.overline(
+                    c.warning,
+                  ).copyWith(fontWeight: FontWeight.w700, letterSpacing: 0.8),
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: AppSpacing.xxs),
                 Text(
                   'Bro, lu habis duit buat Spotify & kopi tapi Laporan Praktikum belum kelar? Prioritas lu dimana bestie?',
-                  style: TextStyle(fontSize: 12, color: c.textSub, height: 1.5),
+                  style: AppTypography.caption(c.textSub).copyWith(height: 1.5),
                 ),
               ],
             ),
           ),
-          GestureDetector(
+          PressableScale(
             onTap: onClose,
-            child: Padding(
-              padding: const EdgeInsets.all(2),
-              child: Icon(Icons.close, size: 18, color: c.textSub.withValues(alpha: 0.7)),
+            semanticLabel: 'Tutup roasting',
+            tooltip: 'Tutup',
+            child: SizedBox(
+              width: AppSpacing.target,
+              height: AppSpacing.target,
+              child: Icon(
+                Icons.close,
+                size: AppSpacing.iconSmall,
+                color: c.textSub,
+              ),
             ),
           ),
         ],
