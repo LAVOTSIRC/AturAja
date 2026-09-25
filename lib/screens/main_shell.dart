@@ -11,6 +11,7 @@ import '../widgets/quick_add_modal.dart';
 import '../widgets/task_add_modal.dart';
 import 'finance_screen.dart';
 import 'home_screen.dart';
+import 'login_screen.dart';
 import 'profile_screen.dart';
 import 'scan_screen.dart';
 import 'task_screen.dart';
@@ -62,7 +63,12 @@ class _MainShellState extends State<MainShell> {
     setState(() {
       tasks = [
         ...tasks,
-        TaskItem(id: nextTaskId++, title: title, sub: sub, deadline: deadline),
+        TaskItem(
+          id: nextTaskId++,
+          title: title,
+          categories: [sub],
+          deadline: deadline,
+        ),
       ];
     });
     ScaffoldMessenger.maybeOf(context)?.showSnackBar(
@@ -90,6 +96,19 @@ class _MainShellState extends State<MainShell> {
     );
   }
 
+  void _logout() {
+    final NavigatorState navigator = Navigator.of(context);
+    navigator.pushReplacement(
+      MaterialPageRoute(
+        builder: (_) => LoginScreen(
+          onLogin: () => navigator.pushReplacement(
+            MaterialPageRoute(builder: (_) => const MainShell()),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final AppColors c = ThemeScope.of(context).colors;
@@ -105,7 +124,7 @@ class _MainShellState extends State<MainShell> {
         onAddTask: _openTaskAdd,
         onToggleTask: _toggleTask,
       ),
-      ProfileScreen(settings: settings),
+      ProfileScreen(settings: settings, onLogout: _logout),
     ];
 
     return Scaffold(

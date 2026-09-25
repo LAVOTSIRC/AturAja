@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:bruh/data/settings_controller.dart';
 import 'package:bruh/main.dart';
 import 'package:bruh/screens/home_screen.dart';
+import 'package:bruh/screens/login_screen.dart';
 import 'package:bruh/screens/main_shell.dart';
 import 'package:bruh/screens/profile_screen.dart';
 import 'package:bruh/theme/theme_scope.dart';
@@ -14,13 +15,16 @@ import 'package:bruh/widgets/quick_add_modal.dart';
 
 Future<void> pumpProfile(
   WidgetTester tester,
-  SettingsController settings,
-) async {
+  SettingsController settings, {
+  VoidCallback? onLogout,
+}) async {
   await tester.pumpWidget(
     ThemeScope(
       controller: ThemeController(),
       child: MaterialApp(
-        home: Scaffold(body: ProfileScreen(settings: settings)),
+        home: Scaffold(
+          body: ProfileScreen(settings: settings, onLogout: onLogout ?? () {}),
+        ),
       ),
     ),
   );
@@ -431,12 +435,13 @@ void main() {
     expect(find.text('Profil berhasil diperbarui.'), findsOneWidget);
   });
 
-  testWidgets('Profile logout requires confirmation and can be restored', (
+  testWidgets('Profile logout requires confirmation and reports session exit', (
     WidgetTester tester,
   ) async {
     final SettingsController settings = SettingsController();
     addTearDown(settings.dispose);
-    await pumpProfile(tester, settings);
+    bool didLogout = false;
+    await pumpProfile(tester, settings, onLogout: () => didLogout = true);
 
     await tester.ensureVisible(find.text('Keluar'));
     await tester.pumpAndSettle();
@@ -448,14 +453,111 @@ void main() {
       find.text('Yakin ingin keluar? Sesi lokal akan diakhiri.'),
       findsOneWidget,
     );
+    expect(didLogout, isFalse);
+
+    await tester.tap(find.widgetWithText(TextButton, 'Keluar'));
+    await tester.pumpAndSettle();
+    expect(didLogout, isTrue);
+  });
+
+  testWidgets('First launch enters the app automatically', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(MyApp(controller: ThemeController()));
+
+    expect(find.byType(MainShell), findsNothing);
+    expect(find.byType(LoginScreen), findsNothing);
+
+    await tester.pump(const Duration(milliseconds: 2900));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(MainShell), findsOneWidget);
+    expect(find.byType(LoginScreen), findsNothing);
+  });
+
+  testWidgets('Login page validates credentials before continuing', (
+    WidgetTester tester,
+  ) async {
+    bool didLogin = false;
+    await tester.pumpWidget(
+      ThemeScope(
+        controller: ThemeController(),
+        child: MaterialApp(home: LoginScreen(onLogin: () => didLogin = true)),
+      ),
+    );
+
+    expect(find.text('Masuk ke AturAja'), findsOneWidget);
+
+    await tester.ensureVisible(find.byTooltip('Masuk'));
+    await tester.tap(find.byTooltip('Masuk'));
+    await tester.pump();
+    expect(find.text('Email tidak boleh kosong.'), findsOneWidget);
+    expect(find.text('Kata sandi tidak boleh kosong.'), findsOneWidget);
+    expect(didLogin, isFalse);
+
+    final Finder fields = find.byType(TextField);
+    await tester.enterText(fields.at(0), 'bukan-email');
+    await tester.enterText(fields.at(1), '12345');
+    await tester.ensureVisible(find.byTooltip('Masuk'));
+    await tester.tap(find.byTooltip('Masuk'));
+    await tester.pump();
+    expect(find.text('Masukkan format email yang valid.'), findsOneWidget);
+    expect(find.text('Kata sandi minimal 6 karakter.'), findsOneWidget);
+    expect(didLogin, isFalse);
+
+    await tester.enterText(fields.at(0), 'zidan@atmaja.id');
+    await tester.enterText(fields.at(1), 'rahasia123');
+    tester.testTextInput.hide();
+    await tester.ensureVisible(find.byTooltip('Masuk'));
+    await tester.tap(find.byTooltip('Masuk'));
+    await tester.pump();
+    expect(find.byType(CircularProgressIndicator), findsWidgets);
+    expect(didLogin, isFalse);
+
+    await tester.pump(const Duration(milliseconds: 800));
+    expect(didLogin, isTrue);
+  });
+
+  testWidgets('Logout opens login and signing in returns to the app', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      ThemeScope(
+        controller: ThemeController(),
+        child: const MaterialApp(home: MainShell()),
+      ),
+    );
+
+    await tester.tap(find.byTooltip('Profil'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Keluar'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Keluar'));
+    await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(TextButton, 'Keluar'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Sesi berakhir'), findsOneWidget);
-    expect(find.text('Anda telah keluar dari akun.'), findsOneWidget);
+    expect(find.byType(LoginScreen), findsOneWidget);
+    expect(find.byType(MainShell), findsNothing);
 
-    await tester.tap(find.text('Masuk lagi'));
+    await tester.ensureVisible(find.byTooltip('Masuk'));
+    await tester.tap(find.byTooltip('Masuk'));
+    await tester.pump();
+    expect(find.text('Email tidak boleh kosong.'), findsOneWidget);
+
+    final Finder fields = find.byType(TextField);
+    await tester.enterText(fields.at(0), 'zidan@atmaja.id');
+    await tester.enterText(fields.at(1), 'rahasia123');
+    tester.testTextInput.hide();
+    await tester.ensureVisible(find.byTooltip('Masuk'));
+    await tester.tap(find.byTooltip('Masuk'));
+    await tester.pump();
+    expect(find.byType(CircularProgressIndicator), findsWidgets);
+
+    await tester.pump(const Duration(milliseconds: 800));
     await tester.pumpAndSettle();
-    expect(find.text('M Zidan Ruriano A.G'), findsOneWidget);
+
+    expect(find.byType(MainShell), findsOneWidget);
+    expect(find.byType(LoginScreen), findsNothing);
   });
 }

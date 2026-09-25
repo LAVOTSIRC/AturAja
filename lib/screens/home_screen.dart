@@ -343,28 +343,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 ],
               ),
             ),
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: 0,
-              height: AppSpacing.screenBottom,
-              child: IgnorePointer(
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        c.transparent,
-                        c.bg.withValues(alpha: 0.94),
-                        c.bg,
-                      ],
-                      stops: const [0, 0.62, 1],
-                    ),
-                  ),
-                ),
-              ),
-            ),
           ],
         ),
       ),

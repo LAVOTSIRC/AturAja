@@ -41,16 +41,41 @@ IconData categoryIcon(String category) {
 }
 
 class TaskScreen extends StatefulWidget {
-  const TaskScreen({super.key});
+  final List<TaskItem>? tasks;
+  final VoidCallback? onAddTask;
+  final ValueChanged<int>? onToggleTask;
+
+  const TaskScreen({
+    super.key,
+    this.tasks,
+    this.onAddTask,
+    this.onToggleTask,
+  });
 
   @override
   State<TaskScreen> createState() => _TaskScreenState();
 }
 
 class _TaskScreenState extends State<TaskScreen> {
-  late List<TaskItem> list = List.of(sampleTasks);
+  late List<TaskItem> list;
   TaskFilter activeFilter = TaskFilter.all;
   String selectedCategoryFilter = 'Semua';
+
+  @override
+  void initState() {
+    super.initState();
+    list = widget.tasks != null ? List.of(widget.tasks!) : List.of(sampleTasks);
+  }
+
+  @override
+  void didUpdateWidget(TaskScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.tasks != null && widget.tasks != oldWidget.tasks) {
+      setState(() {
+        list = List.of(widget.tasks!);
+      });
+    }
+  }
 
   void _showMessage(String message, {bool isError = false}) {
     final AppColors c = ThemeScope.of(context).colors;
@@ -106,6 +131,7 @@ class _TaskScreenState extends State<TaskScreen> {
         return t;
       }).toList();
     });
+    widget.onToggleTask?.call(id);
   }
 
   void _saveTask(TaskItem task) {
@@ -281,7 +307,7 @@ class _TaskScreenState extends State<TaskScreen> {
                           const ThemeToggleSwitch(),
                           const SizedBox(width: AppSpacing.xs),
                           PressableScale(
-                            onTap: () => _openTaskFormScreen(),
+                            onTap: widget.onAddTask ?? () => _openTaskFormScreen(),
                             semanticLabel: 'Tambah tugas baru',
                             tooltip: 'Tambah tugas baru',
                             child: Container(

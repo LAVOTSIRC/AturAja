@@ -51,8 +51,13 @@ class _StatItem {
 
 class ProfileScreen extends StatefulWidget {
   final SettingsController settings;
+  final VoidCallback onLogout;
 
-  const ProfileScreen({super.key, required this.settings});
+  const ProfileScreen({
+    super.key,
+    required this.settings,
+    required this.onLogout,
+  });
 
   static const stats = [
     _StatItem(Icons.task_alt_outlined, '12', 'Tugas Selesai'),
@@ -97,7 +102,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
   String nim = '241401063';
   String program = 'Ilmu Komputer';
   String avatarLabel = 'ZR';
-  bool loggedOut = false;
 
   String _initialsFromName(String value) {
     final List<String> parts = value
@@ -233,19 +237,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (!mounted || shouldLogout != true) {
       return;
     }
-    setState(() => loggedOut = true);
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Anda telah keluar dari akun.')),
-    );
+    widget.onLogout();
   }
 
   @override
   Widget build(BuildContext context) {
     final AppColors c = ThemeScope.of(context).colors;
-    if (loggedOut) {
-      return _buildLoggedOut(c);
-    }
-
     return AnimatedBuilder(
       animation: widget.settings,
       builder: (BuildContext context, Widget? child) {
@@ -576,61 +573,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ],
                 ),
               ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildLoggedOut(AppColors c) {
-    return Container(
-      color: c.bg,
-      child: SafeArea(
-        child: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(AppSpacing.xl),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  Icons.lock_outline,
-                  size: AppSpacing.iconLarge,
-                  color: c.blue,
-                ),
-                const SizedBox(height: AppSpacing.md),
-                Text('Sesi berakhir', style: AppTypography.titleLarge(c.text)),
-                const SizedBox(height: AppSpacing.xs),
-                Text(
-                  'Silakan masuk kembali untuk melanjutkan.',
-                  textAlign: TextAlign.center,
-                  style: AppTypography.body(c.textSub),
-                ),
-                const SizedBox(height: AppSpacing.lg),
-                PressableScale(
-                  onTap: () => setState(() => loggedOut = false),
-                  semanticLabel: 'Masuk lagi',
-                  tooltip: 'Masuk lagi',
-                  child: Container(
-                    constraints: const BoxConstraints(
-                      minHeight: AppSpacing.target,
-                    ),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: AppSpacing.lg,
-                      vertical: AppSpacing.sm,
-                    ),
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color: c.blue,
-                      borderRadius: BorderRadius.circular(AppSpacing.sm),
-                    ),
-                    child: Text(
-                      'Masuk lagi',
-                      style: AppTypography.button(c.onAccent),
-                    ),
-                  ),
-                ),
-              ],
             ),
           ),
         ),
