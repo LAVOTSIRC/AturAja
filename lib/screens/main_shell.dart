@@ -7,7 +7,7 @@ import '../theme/app_spacing.dart';
 import '../theme/app_typography.dart';
 import '../theme/theme_scope.dart';
 import '../widgets/common.dart';
-import '../widgets/quick_add_modal.dart';
+import 'brain_dump_finance_screen.dart';
 import 'finance_screen.dart';
 import 'home_screen.dart';
 import 'login_screen.dart';
@@ -54,12 +54,23 @@ class _MainShellState extends State<MainShell> {
     }
   }
 
-  void _openQuickAdd(QuickAddMode mode) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: ThemeScope.of(context).colors.transparent,
-      builder: (_) => QuickAddModal(initialMode: mode),
+  Future<void> _openBrainDump() async {
+    final TransactionItem? note = await Navigator.of(context)
+        .push<TransactionItem>(
+          MaterialPageRoute(builder: (_) => const BrainDumpFinanceScreen()),
+        );
+    if (note == null || !mounted) {
+      return;
+    }
+    setState(() {});
+    ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+      SnackBar(
+        content: Text(
+          note.amount >= 0
+              ? 'Catatan keuangan "${note.label}" dicatat.'
+              : 'Catatan pengeluaran "${note.label}" dicatat.',
+        ),
+      ),
     );
   }
 
@@ -128,9 +139,9 @@ class _MainShellState extends State<MainShell> {
     final AppColors c = ThemeScope.of(context).colors;
     final List<Widget> screens = [
       HomeScreen(
-        onAdd: _openQuickAdd,
         onScan: _openScan,
         onAddTask: _openTaskAdd,
+        onBrainDump: _openBrainDump,
       ),
       FinanceScreen(onScan: _openScan),
       TaskScreen(
@@ -144,76 +155,10 @@ class _MainShellState extends State<MainShell> {
 
     return Scaffold(
       backgroundColor: c.shell,
-      body: Stack(
-        children: [
-          PageView(
-            controller: _pageController,
-            onPageChanged: (index) => setState(() => tab = index),
-            children: screens,
-          ),
-          if (tab == 0)
-            Positioned(
-              bottom: AppSpacing.xl,
-              right: AppSpacing.md,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  PressableScale(
-                    onTap: _openScan,
-                    semanticLabel: 'Scan struk',
-                    tooltip: 'Scan struk',
-                    child: Container(
-                      width: AppSpacing.target,
-                      height: AppSpacing.target,
-                      decoration: BoxDecoration(
-                        color: c.surface,
-                        border: Border.all(color: c.border),
-                        borderRadius: BorderRadius.circular(AppSpacing.sm),
-                        boxShadow: [
-                          BoxShadow(
-                            color: c.shadow,
-                            blurRadius: AppSpacing.md,
-                            offset: const Offset(0, AppSpacing.xxs),
-                          ),
-                        ],
-                      ),
-                      child: Icon(
-                        Icons.document_scanner_outlined,
-                        size: AppSpacing.iconSmall,
-                        color: c.blue,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: AppSpacing.xs),
-                  PressableScale(
-                    onTap: () => _openQuickAdd(QuickAddMode.quick),
-                    semanticLabel: 'Tambah catatan',
-                    tooltip: 'Tambah catatan',
-                    child: Container(
-                      width: AppSpacing.fabHeight,
-                      height: AppSpacing.fabHeight,
-                      decoration: BoxDecoration(
-                        color: c.blue,
-                        borderRadius: BorderRadius.circular(AppSpacing.md),
-                        boxShadow: [
-                          BoxShadow(
-                            color: c.blue.withValues(alpha: 0.4),
-                            blurRadius: AppSpacing.xl,
-                            offset: const Offset(0, AppSpacing.xxs),
-                          ),
-                        ],
-                      ),
-                      child: Icon(
-                        Icons.add,
-                        size: AppSpacing.iconMedium,
-                        color: c.onAccent,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-        ],
+      body: PageView(
+        controller: _pageController,
+        onPageChanged: (index) => setState(() => tab = index),
+        children: screens,
       ),
       bottomNavigationBar: Container(
         decoration: BoxDecoration(

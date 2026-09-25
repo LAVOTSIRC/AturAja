@@ -4,8 +4,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:bruh/data/models.dart';
 import 'package:bruh/data/settings_controller.dart';
 import 'package:bruh/main.dart';
+import 'package:bruh/screens/brain_dump_finance_screen.dart';
 import 'package:bruh/screens/home_screen.dart';
 import 'package:bruh/screens/login_screen.dart';
 import 'package:bruh/screens/main_shell.dart';
@@ -56,34 +58,32 @@ void main() {
   testWidgets('Home quick actions invoke matching callbacks', (
     WidgetTester tester,
   ) async {
-    QuickAddMode? selectedMode;
     int scanCount = 0;
     int taskCount = 0;
+    int brainCount = 0;
     await tester.pumpWidget(
       ThemeScope(
         controller: ThemeController(),
         child: MaterialApp(
           home: HomeScreen(
-            onAdd: (QuickAddMode mode) => selectedMode = mode,
             onScan: () => scanCount++,
             onAddTask: () => taskCount++,
+            onBrainDump: () => brainCount++,
           ),
         ),
       ),
     );
 
-    expect(find.text('Catat'), findsOneWidget);
+    expect(find.text('Catat'), findsNothing);
     expect(find.text('Scan Struk'), findsOneWidget);
     expect(find.text('Brain Dump'), findsOneWidget);
     expect(find.text('Tambah Tugas'), findsOneWidget);
     expect(find.text('Anggaran'), findsNothing);
 
-    await tester.tap(find.text('Catat'));
-    expect(selectedMode, QuickAddMode.quick);
     await tester.tap(find.text('Scan Struk'));
     expect(scanCount, 1);
     await tester.tap(find.text('Brain Dump'));
-    expect(selectedMode, QuickAddMode.brain);
+    expect(brainCount, 1);
     await tester.tap(find.text('Tambah Tugas'));
     expect(taskCount, 1);
   });
@@ -209,7 +209,7 @@ void main() {
     expect(find.text('AI Brain Dump'), findsNothing);
   });
 
-  testWidgets('FAB actions are contextual across tabs', (
+  testWidgets('No floating action button remains on any tab', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
@@ -219,23 +219,74 @@ void main() {
       ),
     );
 
-    expect(find.byTooltip('Scan struk'), findsOneWidget);
-    expect(find.byTooltip('Tambah catatan'), findsOneWidget);
+    for (final String tab in ['Beranda', 'Keuangan', 'Tugas', 'Profil']) {
+      await tester.tap(find.byTooltip(tab));
+      await tester.pumpAndSettle();
+      expect(find.byTooltip('Tambah catatan'), findsNothing);
+      expect(find.byType(FloatingActionButton), findsNothing);
+    }
+  });
 
-    await tester.tap(find.byTooltip('Keuangan'));
-    await tester.pumpAndSettle();
-    expect(find.byTooltip('Scan struk'), findsOneWidget);
-    expect(find.byTooltip('Tambah catatan'), findsNothing);
+  testWidgets('Brain Dump finance note processes into a preview then saves', (
+    WidgetTester tester,
+  ) async {
+    final int before = transactionStore.length;
+    await tester.pumpWidget(
+      ThemeScope(
+        controller: ThemeController(),
+        child: const MaterialApp(home: MainShell()),
+      ),
+    );
 
-    await tester.tap(find.byTooltip('Tugas'));
+    await tester.tap(find.text('Brain Dump'));
     await tester.pumpAndSettle();
-    expect(find.byTooltip('Scan struk'), findsNothing);
-    expect(find.byTooltip('Tambah catatan'), findsNothing);
 
-    await tester.tap(find.byTooltip('Profil'));
+    expect(find.text('Brain Dump Keuangan'), findsOneWidget);
+    expect(find.text('AI Brain Dump Catatan Keuangan'), findsOneWidget);
+
+    await tester.tap(find.text('Catatan Pengeluaran'));
     await tester.pumpAndSettle();
-    expect(find.byTooltip('Scan struk'), findsNothing);
-    expect(find.byTooltip('Tambah catatan'), findsNothing);
+    expect(find.text('AI Brain Dump Catatan Pengeluaran'), findsOneWidget);
+
+    await tester.tap(find.text('Belanja sayur 120rb'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Proses Brain Dump'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Periksa hasil AI sebelum disimpan'), findsOneWidget);
+    expect(find.text('120000'), findsOneWidget);
+    expect(find.text('Simpan Catatan Pengeluaran'), findsOneWidget);
+
+    await tester.ensureVisible(find.text('Simpan Catatan Pengeluaran'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Simpan Catatan Pengeluaran'));
+    await tester.pumpAndSettle();
+
+    expect(transactionStore.length, before + 1);
+    expect(transactionStore.first.amount, -120000);
+    expect(transactionStore.first.cat, 'belanja');
+  });
+
+  testWidgets('Brain Dump rejects input without a detectable amount', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      ThemeScope(
+        controller: ThemeController(),
+        child: const MaterialApp(home: BrainDumpFinanceScreen()),
+      ),
+    );
+
+    await tester.enterText(
+      find.byType(TextField).first,
+      'bayar kos bulan depan',
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Proses Brain Dump'));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Nominal belum terdeteksi'), findsOneWidget);
   });
 
   testWidgets('Profile setting rows navigate to five detail screens', (
