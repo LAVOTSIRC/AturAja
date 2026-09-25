@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
+
 import '../data/models.dart';
+import '../theme/app_colors.dart';
+import '../theme/app_spacing.dart';
+import '../theme/app_typography.dart';
 import '../theme/theme_scope.dart';
 import '../utils/format.dart';
 import '../utils/icons.dart';
@@ -10,6 +14,7 @@ class _CategorySlice {
   final int pct;
   final Color color;
   final int amount;
+
   const _CategorySlice(this.label, this.pct, this.color, this.amount);
 }
 
@@ -18,24 +23,29 @@ class FinanceScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = ThemeScope.of(context).colors;
-    final cats = [
+    final AppColors c = ThemeScope.of(context).colors;
+    final List<_CategorySlice> cats = [
       _CategorySlice('Makan & Minum', 45, c.blue, 145000),
-      _CategorySlice('Hiburan', 25, c.red, 83990),
-      _CategorySlice('Transport', 20, c.amber, 65000),
-      _CategorySlice('Lainnya', 10, c.teal, 32000),
+      _CategorySlice('Hiburan', 25, c.expense, 83990),
+      _CategorySlice('Transport', 20, c.warning, 65000),
+      _CategorySlice('Lainnya', 10, c.success, 32000),
     ];
 
     return Container(
       color: c.bg,
       child: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.only(bottom: 100),
+          padding: const EdgeInsets.only(bottom: AppSpacing.screenBottom),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Padding(
-                padding: const EdgeInsets.fromLTRB(16, 18, 16, 8),
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.md,
+                  AppSpacing.lg,
+                  AppSpacing.md,
+                  AppSpacing.xs,
+                ),
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -43,9 +53,15 @@ class FinanceScreen extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('Keuangan', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: c.text)),
-                          const SizedBox(height: 2),
-                          Text('Ringkasan September 2026', style: TextStyle(fontSize: 11, color: c.textMuted)),
+                          Text(
+                            'Keuangan',
+                            style: AppTypography.titleLarge(c.text),
+                          ),
+                          const SizedBox(height: AppSpacing.xxs),
+                          Text(
+                            'Ringkasan September 2026',
+                            style: AppTypography.meta(c.textMuted),
+                          ),
                         ],
                       ),
                     ),
@@ -54,65 +70,110 @@ class FinanceScreen extends StatelessWidget {
                 ),
               ),
               Padding(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.md,
+                  AppSpacing.xs,
+                  AppSpacing.md,
+                  AppSpacing.md,
+                ),
                 child: Row(
                   children: [
-                    Expanded(child: _summaryCard(c, Icons.call_received_outlined, 'Pemasukan', 500000, c.teal)),
-                    const SizedBox(width: 8),
-                    Expanded(child: _summaryCard(c, Icons.call_made_outlined, 'Pengeluaran', 325990, c.red)),
+                    Expanded(
+                      child: _summaryCard(
+                        c,
+                        Icons.call_received_outlined,
+                        'Pemasukan',
+                        500000,
+                        c.success,
+                      ),
+                    ),
+                    const SizedBox(width: AppSpacing.xs),
+                    Expanded(
+                      child: _summaryCard(
+                        c,
+                        Icons.call_made_outlined,
+                        'Pengeluaran',
+                        325990,
+                        c.expense,
+                      ),
+                    ),
                   ],
                 ),
               ),
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const SectionLabel('Indikator Anggaran'),
                     AppCard(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: AppSpacing.md,
+                        vertical: AppSpacing.sm,
+                      ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              Text('Anggaran Bulan Ini', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: c.text)),
-                              Text('Rp1.200.000', style: TextStyle(fontSize: 12, color: c.blue, fontWeight: FontWeight.w600)),
+                              Text(
+                                'Anggaran Bulan Ini',
+                                style: AppTypography.label(c.text),
+                              ),
+                              Text(
+                                'Rp1.200.000',
+                                style: AppTypography.caption(c.blue)
+                                    .copyWith(fontWeight: FontWeight.w600),
+                              ),
                             ],
                           ),
-                          const SizedBox(height: 10),
+                          const SizedBox(height: AppSpacing.sm),
                           ClipRRect(
-                            borderRadius: BorderRadius.circular(99),
+                            borderRadius: BorderRadius.circular(
+                              AppSpacing.huge,
+                            ),
                             child: SizedBox(
-                              height: 8,
+                              height: AppSpacing.progressMedium,
                               child: Row(
                                 children: cats
-                                    .map((slice) => Expanded(
-                                          flex: slice.pct,
-                                          child: Container(
-                                            margin: const EdgeInsets.symmetric(horizontal: 1),
-                                            color: slice.color,
+                                    .map(
+                                      (_CategorySlice slice) => Expanded(
+                                        flex: slice.pct,
+                                        child: Container(
+                                          margin: const EdgeInsets.symmetric(
+                                            horizontal: AppSpacing.xxs,
                                           ),
-                                        ))
+                                          color: slice.color,
+                                        ),
+                                      ),
+                                    )
                                     .toList(),
                               ),
                             ),
                           ),
-                          const SizedBox(height: 8),
+                          const SizedBox(height: AppSpacing.xs),
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
                               Text.rich(
                                 TextSpan(
-                                  style: TextStyle(fontSize: 10, color: c.textMuted),
+                                  style: AppTypography.micro(c.textMuted),
                                   children: [
                                     const TextSpan(text: 'Terpakai: '),
-                                    TextSpan(text: 'Rp325.990', style: TextStyle(color: c.text, fontWeight: FontWeight.w700)),
+                                    TextSpan(
+                                      text: 'Rp325.990',
+                                      style: AppTypography.micro(
+                                        c.text,
+                                      ).copyWith(fontWeight: FontWeight.w700),
+                                    ),
                                   ],
                                 ),
                               ),
-                              Text('Sisa Rp874.010', style: TextStyle(fontSize: 10, color: c.teal)),
+                              Text(
+                                'Sisa Rp874.010',
+                                style: AppTypography.micro(c.success),
+                              ),
                             ],
                           ),
                         ],
@@ -121,39 +182,54 @@ class FinanceScreen extends StatelessWidget {
                   ],
                 ),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: AppSpacing.md),
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const SectionLabel('Breakdown Kategori'),
                     Column(
                       children: cats
-                          .map((slice) => Padding(
-                                padding: const EdgeInsets.only(bottom: 6),
-                                child: _categoryCard(c, slice),
-                              ))
+                          .map(
+                            (_CategorySlice slice) => Padding(
+                              padding: const EdgeInsets.only(
+                                bottom: AppSpacing.xs,
+                              ),
+                              child: _categoryCard(c, slice),
+                            ),
+                          )
                           .toList(),
                     ),
                   ],
                 ),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: AppSpacing.md),
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const SectionLabel('Riwayat Transaksi'),
-                    Column(
-                      children: sampleTransactions
-                          .map((t) => Padding(
-                                padding: const EdgeInsets.only(bottom: 6),
+                    if (sampleTransactions.isEmpty)
+                      const AppEmptyState(
+                        icon: Icons.receipt_long_outlined,
+                        title: 'Belum ada transaksi',
+                        message: 'Riwayat pengeluaran dan pemasukan akan muncul di sini.',
+                      )
+                    else
+                      Column(
+                        children: sampleTransactions
+                            .map(
+                              (TransactionItem t) => Padding(
+                                padding: const EdgeInsets.only(
+                                  bottom: AppSpacing.xs,
+                                ),
                                 child: _historyRow(c, t),
-                              ))
-                          .toList(),
-                    ),
+                              ),
+                            )
+                            .toList(),
+                      ),
                   ],
                 ),
               ),
@@ -164,82 +240,114 @@ class FinanceScreen extends StatelessWidget {
     );
   }
 
-  Widget _summaryCard(dynamic c, IconData icon, String label, int value, Color color) {
+  Widget _summaryCard(
+    AppColors c,
+    IconData icon,
+    String label,
+    int value,
+    Color color,
+  ) {
     return AppCard(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(AppSpacing.sm),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, size: 18, color: color),
-          const SizedBox(height: 8),
-          Text(label, style: TextStyle(fontSize: 10, color: c.textMuted)),
-          const SizedBox(height: 4),
-          Text(formatRupiah(value), style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: color)),
+          Icon(icon, size: AppSpacing.iconSmall, color: color),
+          const SizedBox(height: AppSpacing.xs),
+          Text(label, style: AppTypography.micro(c.textMuted)),
+          const SizedBox(height: AppSpacing.xxs),
+          Text(formatRupiah(value), style: AppTypography.title(color)),
         ],
       ),
     );
   }
 
-  Widget _categoryCard(dynamic c, _CategorySlice slice) {
+  Widget _categoryCard(AppColors c, _CategorySlice slice) {
     return AppCard(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.sm,
+        vertical: AppSpacing.sm,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(slice.label, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: c.text)),
-              Text(formatRupiah(slice.amount), style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: slice.color)),
+              Text(slice.label, style: AppTypography.label(c.text)),
+              Text(
+                formatRupiah(slice.amount),
+                style: AppTypography.label(slice.color)
+                    .copyWith(fontWeight: FontWeight.w600),
+              ),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: AppSpacing.xs),
           ClipRRect(
-            borderRadius: BorderRadius.circular(99),
+            borderRadius: BorderRadius.circular(AppSpacing.huge),
             child: LinearProgressIndicator(
               value: slice.pct / 100,
-              minHeight: 3,
+              minHeight: AppSpacing.progressThin,
               backgroundColor: c.surfaceHigh,
-              valueColor: AlwaysStoppedAnimation(slice.color),
+              valueColor: AlwaysStoppedAnimation<Color>(slice.color),
             ),
           ),
-          const SizedBox(height: 5),
-          Text('${slice.pct}% dari total pengeluaran', style: TextStyle(fontSize: 10, color: c.textMuted)),
+          const SizedBox(height: AppSpacing.xxs),
+          Text(
+            '${slice.pct}% dari total pengeluaran',
+            style: AppTypography.micro(c.textMuted),
+          ),
         ],
       ),
     );
   }
 
-  Widget _historyRow(dynamic c, TransactionItem t) {
-    final isExpense = t.amount < 0;
+  Widget _historyRow(AppColors c, TransactionItem t) {
+    final bool isExpense = t.amount < 0;
     return AppCard(
-      padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 11),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.sm,
+        vertical: AppSpacing.sm,
+      ),
       child: Row(
         children: [
           Container(
-            width: 36,
-            height: 36,
+            width: AppSpacing.iconBox,
+            height: AppSpacing.iconBox,
             decoration: BoxDecoration(
-              color: isExpense ? c.redDim : c.tealDim,
-              borderRadius: BorderRadius.circular(11),
+              color: isExpense ? c.expenseDim : c.successDim,
+              borderRadius: BorderRadius.circular(AppSpacing.sm),
             ),
             alignment: Alignment.center,
-            child: Icon(transactionIcon(t), size: 16, color: isExpense ? c.red : c.teal),
+            child: Icon(
+              transactionIcon(t),
+              size: AppSpacing.iconSmall,
+              color: isExpense ? c.expense : c.success,
+            ),
           ),
-          const SizedBox(width: 11),
+          const SizedBox(width: AppSpacing.sm),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(t.label, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: c.text)),
-                const SizedBox(height: 2),
-                Text('${t.time} · ${t.cat}', style: TextStyle(fontSize: 10, color: c.textMuted)),
+                Text(
+                  t.label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTypography.label(c.text),
+                ),
+                const SizedBox(height: AppSpacing.xxs),
+                Text(
+                  '${t.time} · ${t.cat}',
+                  style: AppTypography.micro(c.textMuted),
+                ),
               ],
             ),
           ),
           Text(
             '${isExpense ? '-' : '+'}${formatRupiah(t.amount)}',
-            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: isExpense ? c.red : c.teal),
+            style: AppTypography.label(isExpense ? c.expense : c.success)
+                .copyWith(fontWeight: FontWeight.w600),
           ),
         ],
       ),

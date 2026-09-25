@@ -1,4 +1,8 @@
 import 'package:flutter/material.dart';
+
+import '../theme/app_colors.dart';
+import '../theme/app_spacing.dart';
+import '../theme/app_typography.dart';
 import '../theme/theme_scope.dart';
 import '../widgets/common.dart';
 
@@ -6,6 +10,7 @@ class _SettingItem {
   final IconData icon;
   final String label;
   final String sub;
+
   const _SettingItem(this.icon, this.label, this.sub);
 }
 
@@ -13,6 +18,7 @@ class _StatItem {
   final IconData icon;
   final String value;
   final String label;
+
   const _StatItem(this.icon, this.value, this.label);
 }
 
@@ -28,63 +34,110 @@ class ProfileScreen extends StatelessWidget {
   static const settings = [
     _SettingItem(Icons.notifications_none, 'Notifikasi & Roasting AI', 'Aktif'),
     _SettingItem(Icons.cloud_outlined, 'Cadangan Cloud', 'Sinkron 10 mnt lalu'),
-    _SettingItem(Icons.credit_card_outlined, 'Limit Anggaran', 'Rp1.200.000/bulan'),
-    _SettingItem(Icons.psychology_outlined, 'Konfigurasi NLP', 'Model Offline v2.1'),
+    _SettingItem(
+      Icons.credit_card_outlined,
+      'Limit Anggaran',
+      'Rp1.200.000/bulan',
+    ),
+    _SettingItem(Icons.psychology_outlined, 'Simulasi NLP', 'Model lokal v2.1'),
     _SettingItem(Icons.lock_outline, 'Privasi & Keamanan', ''),
   ];
 
+  void _showSettingMessage(BuildContext context, _SettingItem item) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('${item.label} belum tersedia pada mode simulasi.'),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final c = ThemeScope.of(context).colors;
+    final AppColors c = ThemeScope.of(context).colors;
 
     return Container(
       color: c.bg,
       child: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.only(bottom: 100),
+          padding: const EdgeInsets.only(bottom: AppSpacing.screenBottom),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Padding(
-                padding: const EdgeInsets.fromLTRB(16, 18, 16, 8),
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.md,
+                  AppSpacing.lg,
+                  AppSpacing.md,
+                  AppSpacing.xs,
+                ),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text('Profil', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: c.text)),
+                    Text('Profil', style: AppTypography.titleLarge(c.text)),
                     const ThemeToggleSwitch(),
                   ],
                 ),
               ),
               Padding(
-                padding: const EdgeInsets.symmetric(vertical: 16),
+                padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
                 child: Center(
                   child: Column(
                     children: [
                       Container(
-                        width: 72,
-                        height: 72,
-                        margin: const EdgeInsets.only(bottom: 12),
+                        width: AppSpacing.avatar,
+                        height: AppSpacing.avatar,
+                        margin: const EdgeInsets.only(bottom: AppSpacing.sm),
                         decoration: BoxDecoration(
                           color: c.surface,
                           border: Border.all(color: c.border),
-                          borderRadius: BorderRadius.circular(22),
+                          borderRadius: BorderRadius.circular(AppSpacing.xl),
                         ),
                         alignment: Alignment.center,
-                        child: Text('ZR', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: c.blue, letterSpacing: -0.5)),
+                        child: Text(
+                          'ZR',
+                          style: AppTypography.display(c.blue)
+                              .copyWith(letterSpacing: -0.5),
+                        ),
                       ),
-                      Text('M Zidan Ruriano A.G', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: c.text)),
-                      const SizedBox(height: 2),
-                      Text('241401063 · Ilmu Komputer', style: TextStyle(fontSize: 11, color: c.textMuted)),
-                      const SizedBox(height: 10),
+                      Text(
+                        'M Zidan Ruriano A.G',
+                        style: AppTypography.title(c.text),
+                      ),
+                      const SizedBox(height: AppSpacing.xxs),
+                      Text(
+                        '241401063 · Ilmu Komputer',
+                        style: AppTypography.meta(c.textMuted),
+                      ),
+                      const SizedBox(height: AppSpacing.xs),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-                        decoration: BoxDecoration(color: c.tealDim, borderRadius: BorderRadius.circular(99)),
+                        constraints: const BoxConstraints(
+                          minHeight: AppSpacing.targetCompact,
+                        ),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: AppSpacing.sm,
+                          vertical: AppSpacing.xs,
+                        ),
+                        decoration: BoxDecoration(
+                          color: c.successDim,
+                          borderRadius: BorderRadius.circular(AppSpacing.huge),
+                        ),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Container(width: 6, height: 6, decoration: BoxDecoration(color: c.teal, shape: BoxShape.circle)),
-                            const SizedBox(width: 6),
-                            Text('Mode Luring Aktif', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: c.teal)),
+                            Container(
+                              width: AppSpacing.xs,
+                              height: AppSpacing.xs,
+                              decoration: BoxDecoration(
+                                color: c.success,
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                            const SizedBox(width: AppSpacing.xs),
+                            Text(
+                              'Mode Luring Aktif',
+                              style: AppTypography.meta(c.success)
+                                  .copyWith(fontWeight: FontWeight.w600),
+                            ),
                           ],
                         ),
                       ),
@@ -93,63 +146,119 @@ class ProfileScreen extends StatelessWidget {
                 ),
               ),
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
                 child: Row(
                   children: stats
-                      .map((s) => Expanded(
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 4),
-                              child: AppCard(
-                                padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
-                                child: Column(
-                                  children: [
-                                    Icon(s.icon, size: 20, color: c.blue),
-                                    const SizedBox(height: 8),
-                                    Text(s.value, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: c.text)),
-                                    const SizedBox(height: 2),
-                                    Text(s.label, textAlign: TextAlign.center, style: TextStyle(fontSize: 10, color: c.textMuted, height: 1.3)),
-                                  ],
-                                ),
+                      .map(
+                        (_StatItem stat) => Expanded(
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: AppSpacing.xxs,
+                            ),
+                            child: AppCard(
+                              padding: const EdgeInsets.symmetric(
+                                vertical: AppSpacing.sm,
+                                horizontal: AppSpacing.xs,
+                              ),
+                              child: Column(
+                                children: [
+                                  Icon(
+                                    stat.icon,
+                                    size: AppSpacing.iconSmall,
+                                    color: c.blue,
+                                  ),
+                                  const SizedBox(height: AppSpacing.xs),
+                                  Text(
+                                    stat.value,
+                                    style: AppTypography.bodyLarge(c.text)
+                                        .copyWith(fontWeight: FontWeight.w700),
+                                  ),
+                                  const SizedBox(height: AppSpacing.xxs),
+                                  Text(
+                                    stat.label,
+                                    textAlign: TextAlign.center,
+                                    style: AppTypography.micro(c.textMuted)
+                                        .copyWith(height: 1.3),
+                                  ),
+                                ],
                               ),
                             ),
-                          ))
+                          ),
+                        ),
+                      )
                       .toList(),
                 ),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: AppSpacing.md),
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const SectionLabel('Pengaturan'),
                     Column(
                       children: settings
-                          .map((item) => Padding(
-                                padding: const EdgeInsets.only(bottom: 4),
+                          .map(
+                            (_SettingItem item) => Padding(
+                              padding: const EdgeInsets.only(
+                                bottom: AppSpacing.xxs,
+                              ),
+                              child: PressableScale(
+                                onTap: () => _showSettingMessage(context, item),
+                                semanticLabel: item.sub.isEmpty
+                                    ? item.label
+                                    : '${item.label}. ${item.sub}',
+                                tooltip: item.label,
+                                excludeSemantics: true,
                                 child: AppCard(
-                                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: AppSpacing.sm,
+                                    vertical: AppSpacing.sm,
+                                  ),
                                   child: Row(
                                     children: [
-                                      Icon(item.icon, size: 19, color: c.blue),
-                                      const SizedBox(width: 12),
+                                      Icon(
+                                        item.icon,
+                                        size: AppSpacing.iconSmall,
+                                        color: c.blue,
+                                      ),
+                                      const SizedBox(width: AppSpacing.sm),
                                       Expanded(
                                         child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
                                           children: [
-                                            Text(item.label, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: c.text)),
+                                            Text(
+                                              item.label,
+                                              style: AppTypography.label(
+                                                c.text,
+                                              ),
+                                            ),
                                             if (item.sub.isNotEmpty) ...[
-                                              const SizedBox(height: 1),
-                                              Text(item.sub, style: TextStyle(fontSize: 10, color: c.textMuted)),
+                                              const SizedBox(
+                                                height: AppSpacing.xxs,
+                                              ),
+                                              Text(
+                                                item.sub,
+                                                style: AppTypography.micro(
+                                                  c.textMuted,
+                                                ),
+                                              ),
                                             ],
                                           ],
                                         ),
                                       ),
-                                      Icon(Icons.chevron_right, size: 16, color: c.textMuted),
+                                      Icon(
+                                        Icons.chevron_right,
+                                        size: AppSpacing.md,
+                                        color: c.textMuted,
+                                      ),
                                     ],
                                   ),
                                 ),
-                              ))
+                              ),
+                            ),
+                          )
                           .toList(),
                     ),
                   ],
