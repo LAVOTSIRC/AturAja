@@ -4,7 +4,9 @@ class TransactionItem {
   final int amount; // negative = expense, positive = income
   final String cat;
   final String time;
+  final String date;
   final bool consumtive;
+  final String? receiptImagePath;
 
   const TransactionItem({
     required this.id,
@@ -12,8 +14,33 @@ class TransactionItem {
     required this.amount,
     required this.cat,
     required this.time,
+    this.date = 'Hari ini',
     this.consumtive = false,
+    this.receiptImagePath,
   });
+
+  TransactionItem copyWith({
+    int? id,
+    String? label,
+    int? amount,
+    String? cat,
+    String? time,
+    String? date,
+    bool? consumtive,
+    String? receiptImagePath,
+    bool clearReceipt = false,
+  }) {
+    return TransactionItem(
+      id: id ?? this.id,
+      label: label ?? this.label,
+      amount: amount ?? this.amount,
+      cat: cat ?? this.cat,
+      time: time ?? this.time,
+      date: date ?? this.date,
+      consumtive: consumtive ?? this.consumtive,
+      receiptImagePath: clearReceipt ? null : (receiptImagePath ?? this.receiptImagePath),
+    );
+  }
 }
 
 class TaskItem {
@@ -86,13 +113,14 @@ class TaskItem {
       );
 }
 
-const List<TransactionItem> sampleTransactions = [
+final List<TransactionItem> sampleTransactions = [
   TransactionItem(
     id: 1,
     label: 'Batagor depan kampus',
     amount: -15000,
     cat: 'food',
     time: '10:42',
+    date: 'Hari ini',
   ),
   TransactionItem(
     id: 2,
@@ -100,6 +128,7 @@ const List<TransactionItem> sampleTransactions = [
     amount: -54990,
     cat: 'entertainment',
     time: '09:00',
+    date: 'Hari ini',
     consumtive: true,
   ),
   TransactionItem(
@@ -108,6 +137,7 @@ const List<TransactionItem> sampleTransactions = [
     amount: 500000,
     cat: 'income',
     time: '08:30',
+    date: 'Hari ini',
   ),
   TransactionItem(
     id: 4,
@@ -115,6 +145,7 @@ const List<TransactionItem> sampleTransactions = [
     amount: -45000,
     cat: 'food',
     time: '13:15',
+    date: 'Kemarin',
     consumtive: true,
   ),
   TransactionItem(
@@ -123,6 +154,7 @@ const List<TransactionItem> sampleTransactions = [
     amount: -29000,
     cat: 'entertainment',
     time: '07:50',
+    date: 'Kemarin',
     consumtive: true,
   ),
 ];

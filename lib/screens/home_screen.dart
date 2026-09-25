@@ -55,6 +55,15 @@ class _HomeScreenState extends State<HomeScreen> {
     _QuickActionData(Icons.add_task_outlined, 'Tambah Tugas', widget.onAddTask),
   ];
 
+  void _showTransactionDetail(TransactionItem t) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _TransactionDetailSheet(transaction: t),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final AppColors c = ThemeScope.of(context).colors;
@@ -332,7 +341,12 @@ class _HomeScreenState extends State<HomeScreen> {
                                     padding: const EdgeInsets.only(
                                       bottom: AppSpacing.xs,
                                     ),
-                                    child: _TransactionRow(t: t),
+                                    child: PressableScale(
+                                      onTap: () => _showTransactionDetail(t),
+                                      semanticLabel: 'Detail transaksi ${t.label}',
+                                      tooltip: 'Lihat detail',
+                                      child: _TransactionRow(t: t),
+                                    ),
                                   ),
                                 )
                                 .toList(),
@@ -492,9 +506,222 @@ class _TransactionRow extends StatelessWidget {
                 style: AppTypography.label(isExpense ? c.expense : c.success)
                     .copyWith(fontWeight: FontWeight.w600),
               ),
+              const SizedBox(width: AppSpacing.xxs),
+              Icon(Icons.chevron_right, size: AppSpacing.sm, color: c.textMuted),
             ],
           ),
         ],
+      ),
+    );
+  }
+}
+
+// ── Transaction detail bottom sheet ────────────────────────────────────────
+
+class _TransactionDetailSheet extends StatelessWidget {
+  final TransactionItem transaction;
+
+  const _TransactionDetailSheet({required this.transaction});
+
+  @override
+  Widget build(BuildContext context) {
+    final AppColors c = ThemeScope.of(context).colors;
+    final bool isExpense = transaction.amount < 0;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: c.surface,
+        borderRadius: const BorderRadius.vertical(
+          top: Radius.circular(AppSpacing.lg),
+        ),
+        border: Border.all(color: c.border),
+      ),
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom + AppSpacing.xxl,
+      ),
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(
+          AppSpacing.md,
+          AppSpacing.lg,
+          AppSpacing.md,
+          0,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Handle
+            Center(
+              child: Container(
+                width: AppSpacing.sheetHandleWidth,
+                height: AppSpacing.sheetHandleHeight,
+                margin: const EdgeInsets.only(bottom: AppSpacing.md),
+                decoration: BoxDecoration(
+                  color: c.surfaceHigh,
+                  borderRadius: BorderRadius.circular(AppSpacing.huge),
+                ),
+              ),
+            ),
+            // Header
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: AppSpacing.iconBox,
+                  height: AppSpacing.iconBox,
+                  decoration: BoxDecoration(
+                    color: isExpense ? c.expenseDim : c.successDim,
+                    borderRadius: BorderRadius.circular(AppSpacing.sm),
+                  ),
+                  alignment: Alignment.center,
+                  child: Icon(
+                    transactionIcon(transaction),
+                    size: AppSpacing.iconSmall,
+                    color: isExpense ? c.expense : c.success,
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.sm),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(transaction.label, style: AppTypography.title(c.text)),
+                      const SizedBox(height: AppSpacing.xxs),
+                      Text(
+                        '${transaction.date} · ${transaction.time}',
+                        style: AppTypography.meta(c.textMuted),
+                      ),
+                    ],
+                  ),
+                ),
+                Text(
+                  '${isExpense ? '-' : '+'}${formatRupiah(transaction.amount)}',
+                  style: AppTypography.display(isExpense ? c.expense : c.success),
+                ),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.md),
+            // Category + consumtive badge
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.sm,
+                    vertical: AppSpacing.xxs,
+                  ),
+                  decoration: BoxDecoration(
+                    color: c.surfaceHigh,
+                    borderRadius: BorderRadius.circular(AppSpacing.huge),
+                    border: Border.all(color: c.border),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.label_outline, size: AppSpacing.sm, color: c.textSub),
+                      const SizedBox(width: AppSpacing.xxs),
+                      Text(transaction.cat, style: AppTypography.meta(c.textSub)),
+                    ],
+                  ),
+                ),
+                if (transaction.consumtive) ...[
+                  const SizedBox(width: AppSpacing.xs),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.sm,
+                      vertical: AppSpacing.xxs,
+                    ),
+                    decoration: BoxDecoration(
+                      color: c.warningDim,
+                      borderRadius: BorderRadius.circular(AppSpacing.huge),
+                      border: Border.all(color: c.warning),
+                    ),
+                    child: Text('konsumtif', style: AppTypography.micro(c.warning)),
+                  ),
+                ],
+              ],
+            ),
+            const SizedBox(height: AppSpacing.md),
+            // Receipt section
+            Text('Foto Struk', style: AppTypography.overline(c.textMuted)),
+            const SizedBox(height: AppSpacing.xs),
+            Container(
+              width: double.infinity,
+              height: 140,
+              decoration: BoxDecoration(
+                color: c.surfaceHigh,
+                borderRadius: BorderRadius.circular(AppSpacing.md),
+                border: Border.all(color: c.border),
+              ),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.receipt_long_outlined,
+                    size: AppSpacing.iconLarge,
+                    color: c.textMuted,
+                  ),
+                  const SizedBox(height: AppSpacing.xs),
+                  Text(
+                    'Tidak ada foto struk',
+                    style: AppTypography.caption(c.textMuted),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            // Edit / Delete
+            Row(
+              children: [
+                Expanded(
+                  child: PressableScale(
+                    onTap: () {
+                      Navigator.of(context).pop();
+                      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+                        const SnackBar(content: Text('Fitur edit tersedia di tab Keuangan.')),
+                      );
+                    },
+                    semanticLabel: 'Edit transaksi',
+                    tooltip: 'Edit',
+                    child: Container(
+                      constraints: const BoxConstraints(minHeight: AppSpacing.target),
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: c.blue,
+                        borderRadius: BorderRadius.circular(AppSpacing.sm),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.edit_outlined, size: AppSpacing.iconSmall, color: c.onAccent),
+                          const SizedBox(width: AppSpacing.xs),
+                          Text('Edit', style: AppTypography.button(c.onAccent)),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.sm),
+                Expanded(
+                  child: PressableScale(
+                    onTap: () => Navigator.of(context).pop(),
+                    semanticLabel: 'Tutup',
+                    tooltip: 'Tutup',
+                    child: Container(
+                      constraints: const BoxConstraints(minHeight: AppSpacing.target),
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: c.surfaceHigh,
+                        borderRadius: BorderRadius.circular(AppSpacing.sm),
+                        border: Border.all(color: c.border),
+                      ),
+                      child: Text('Tutup', style: AppTypography.button(c.textSub)),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }

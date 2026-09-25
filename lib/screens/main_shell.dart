@@ -28,17 +28,31 @@ class _MainShellState extends State<MainShell> {
   List<TaskItem> tasks = List<TaskItem>.of(sampleTasks);
   int nextTaskId = sampleTasks.length + 1;
   late final SettingsController settings;
+  late final PageController _pageController;
 
   @override
   void initState() {
     super.initState();
     settings = SettingsController();
+    _pageController = PageController(initialPage: tab);
   }
 
   @override
   void dispose() {
     settings.dispose();
+    _pageController.dispose();
     super.dispose();
+  }
+
+  void _onTabTapped(int index) {
+    setState(() => tab = index);
+    if (_pageController.hasClients) {
+      _pageController.animateToPage(
+        index,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeInOut,
+      );
+    }
   }
 
   void _openQuickAdd(QuickAddMode mode) {
@@ -118,7 +132,7 @@ class _MainShellState extends State<MainShell> {
         onScan: _openScan,
         onAddTask: _openTaskAdd,
       ),
-      const FinanceScreen(),
+      FinanceScreen(onScan: _openScan),
       TaskScreen(
         tasks: tasks,
         onAddTask: _openTaskAdd,
@@ -131,7 +145,11 @@ class _MainShellState extends State<MainShell> {
       backgroundColor: c.shell,
       body: Stack(
         children: [
-          IndexedStack(index: tab, children: screens),
+          PageView(
+            controller: _pageController,
+            onPageChanged: (index) => setState(() => tab = index),
+            children: screens,
+          ),
           if (tab < 3)
             Positioned(
               bottom: AppSpacing.xl,
@@ -229,7 +247,7 @@ class _MainShellState extends State<MainShell> {
     final bool active = tab == index;
     return Expanded(
       child: PressableScale(
-        onTap: () => setState(() => tab = index),
+        onTap: () => _onTabTapped(index),
         selected: active,
         semanticLabel: label,
         tooltip: label,

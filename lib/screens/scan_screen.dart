@@ -15,7 +15,8 @@ class ScanScreen extends StatefulWidget {
   State<ScanScreen> createState() => _ScanScreenState();
 }
 
-class _ScanScreenState extends State<ScanScreen> {
+class _ScanScreenState extends State<ScanScreen>
+    with SingleTickerProviderStateMixin {
   _ScanStep step = _ScanStep.scan;
   final TextEditingController amountController = TextEditingController(
     text: '28500',
@@ -23,9 +24,26 @@ class _ScanScreenState extends State<ScanScreen> {
   bool isProcessing = false;
   String? errorMessage;
 
+  // Scanning line animation
+  late AnimationController _scanLineController;
+  late Animation<double> _scanLineAnim;
+
+  @override
+  void initState() {
+    super.initState();
+    _scanLineController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 2),
+    )..repeat(reverse: true);
+    _scanLineAnim = Tween<double>(begin: 0, end: 1).animate(
+      CurvedAnimation(parent: _scanLineController, curve: Curves.easeInOut),
+    );
+  }
+
   @override
   void dispose() {
     amountController.dispose();
+    _scanLineController.dispose();
     super.dispose();
   }
 
@@ -36,9 +54,7 @@ class _ScanScreenState extends State<ScanScreen> {
   }
 
   Future<void> _captureReceipt() async {
-    if (isProcessing) {
-      return;
-    }
+    if (isProcessing) return;
     setState(() {
       isProcessing = true;
       errorMessage = null;
@@ -46,17 +62,13 @@ class _ScanScreenState extends State<ScanScreen> {
 
     try {
       await Future<void>.delayed(const Duration(milliseconds: 900));
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
       setState(() {
         isProcessing = false;
         step = _ScanStep.confirm;
       });
     } catch (_) {
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
       setState(() {
         isProcessing = false;
         errorMessage =
@@ -66,9 +78,7 @@ class _ScanScreenState extends State<ScanScreen> {
   }
 
   Future<void> _confirmScan() async {
-    if (isProcessing) {
-      return;
-    }
+    if (isProcessing) return;
     final String rawValue = amountController.text.replaceAll(
       RegExp(r'[^0-9]'),
       '',
@@ -91,17 +101,14 @@ class _ScanScreenState extends State<ScanScreen> {
       if (amountController.text.replaceAll(RegExp(r'[^0-9]'), '') != rawValue) {
         throw StateError('nominal berubah');
       }
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
       Navigator.of(context).pop();
     } catch (_) {
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
       setState(() {
         isProcessing = false;
-        errorMessage = 'Nominal belum bisa diproses. Periksa kembali angka yang dimasukkan.';
+        errorMessage =
+            'Nominal belum bisa diproses. Periksa kembali angka yang dimasukkan.';
       });
     }
   }
@@ -112,11 +119,290 @@ class _ScanScreenState extends State<ScanScreen> {
       isProcessing = false;
       errorMessage = null;
     });
+    if (!_scanLineController.isAnimating) {
+      _scanLineController.repeat(reverse: true);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final AppColors c = ThemeScope.of(context).colors;
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: SafeArea(
+        child: step == _ScanStep.scan
+            ? _cameraViewBody(c)
+            : _confirmBody(c),
+      ),
+    );
+  }
+
+  // ── Camera view (scan step) ──────────────────────────────────────────────
+
+  Widget _cameraViewBody(AppColors c) {
+    return Stack(
+      children: [
+        // Simulated camera background
+        Positioned.fill(
+          child: Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  const Color(0xFF0A0A0A),
+                  const Color(0xFF1A1A1A),
+                  const Color(0xFF0D1520),
+                ],
+              ),
+            ),
+            child: CustomPaint(painter: _NoisePainter()),
+          ),
+        ),
+
+        // Top bar
+        Positioned(
+          top: 0,
+          left: 0,
+          right: 0,
+          child: Container(
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.md,
+              AppSpacing.md,
+              AppSpacing.md,
+              AppSpacing.sm,
+            ),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Colors.black.withValues(alpha: 0.8),
+                  Colors.transparent,
+                ],
+              ),
+            ),
+            child: Row(
+              children: [
+                PressableScale(
+                  onTap: () => Navigator.of(context).pop(),
+                  semanticLabel: 'Tutup pemindaian struk',
+                  tooltip: 'Tutup',
+                  child: Container(
+                    width: AppSpacing.target,
+                    height: AppSpacing.target,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(AppSpacing.sm),
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.3),
+                      ),
+                    ),
+                    child: const Icon(
+                      Icons.close,
+                      size: AppSpacing.iconSmall,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.sm),
+                Text(
+                  'Scan Struk',
+                  style: AppTypography.title(Colors.white),
+                ),
+                const Spacer(),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.sm,
+                    vertical: AppSpacing.xxs,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(AppSpacing.huge),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.3),
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.circle,
+                        size: AppSpacing.xs,
+                        color: Color(0xFF2BD9A8),
+                      ),
+                      const SizedBox(width: AppSpacing.xxs),
+                      Text(
+                        'KAMERA AKTIF',
+                        style: AppTypography.micro(Colors.white)
+                            .copyWith(letterSpacing: 0.8),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+
+        // Viewfinder frame + scan line
+        Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox(
+                width: AppSpacing.scanFrame + 40,
+                height: AppSpacing.scanFrame + 80,
+                child: Stack(
+                  children: [
+                    // Dim overlay outside the frame
+                    Positioned.fill(
+                      child: CustomPaint(
+                        painter: _ViewfinderOverlayPainter(c.success),
+                      ),
+                    ),
+                    // Animated scan line
+                    Positioned.fill(
+                      child: AnimatedBuilder(
+                        animation: _scanLineAnim,
+                        builder: (ctx2, snap) {
+                          return CustomPaint(
+                            painter: _ScanLinePainter(
+                              progress: _scanLineAnim.value,
+                              color: c.success,
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: AppSpacing.lg),
+              Text(
+                'Arahkan kamera ke struk belanja',
+                style: AppTypography.caption(Colors.white.withValues(alpha: 0.8)),
+              ),
+              const SizedBox(height: AppSpacing.xxs),
+              Text(
+                'Pastikan seluruh struk terlihat jelas',
+                style: AppTypography.meta(Colors.white.withValues(alpha: 0.5)),
+              ),
+            ],
+          ),
+        ),
+
+        // Error message
+        if (errorMessage != null)
+          Positioned(
+            left: AppSpacing.md,
+            right: AppSpacing.md,
+            bottom: 140,
+            child: Container(
+              padding: const EdgeInsets.all(AppSpacing.sm),
+              decoration: BoxDecoration(
+                color: Colors.red.withValues(alpha: 0.85),
+                borderRadius: BorderRadius.circular(AppSpacing.sm),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.error_outline, color: Colors.white, size: AppSpacing.iconSmall),
+                  const SizedBox(width: AppSpacing.xs),
+                  Expanded(
+                    child: Text(
+                      errorMessage!,
+                      style: AppTypography.caption(Colors.white),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+        // Bottom controls — shutter button
+        Positioned(
+          bottom: 0,
+          left: 0,
+          right: 0,
+          child: Container(
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.xl,
+              AppSpacing.xl,
+              AppSpacing.xl,
+              AppSpacing.xxxl,
+            ),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.bottomCenter,
+                end: Alignment.topCenter,
+                colors: [
+                  Colors.black.withValues(alpha: 0.85),
+                  Colors.transparent,
+                ],
+              ),
+            ),
+            child: isProcessing
+                ? const Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        CircularProgressIndicator(
+                          color: Colors.white,
+                          strokeWidth: 2,
+                        ),
+                        SizedBox(height: AppSpacing.sm),
+                        Text(
+                          'Memproses struk...',
+                          style: TextStyle(color: Colors.white, fontSize: 13),
+                        ),
+                      ],
+                    ),
+                  )
+                : Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Shutter button
+                      Center(
+                        child: PressableScale(
+                          onTap: _captureReceipt,
+                          semanticLabel: 'Ambil foto struk',
+                          tooltip: 'Ambil foto',
+                          child: Container(
+                            width: 72,
+                            height: 72,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: Colors.white,
+                                width: 3,
+                              ),
+                            ),
+                            padding: const EdgeInsets.all(4),
+                            child: Container(
+                              decoration: const BoxDecoration(
+                                color: Colors.white,
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: AppSpacing.sm),
+                      Text(
+                        'Ambil Foto Struk',
+                        style: AppTypography.meta(Colors.white.withValues(alpha: 0.7)),
+                      ),
+                    ],
+                  ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ── Confirm step body ────────────────────────────────────────────────────
+
+  Widget _confirmBody(AppColors c) {
     return Scaffold(
       backgroundColor: c.bg,
       body: SafeArea(
@@ -151,156 +437,18 @@ class _ScanScreenState extends State<ScanScreen> {
                     ),
                   ),
                   const SizedBox(width: AppSpacing.sm),
-                  Text('Scan Struk', style: AppTypography.title(c.text)),
+                  Text('Konfirmasi Struk', style: AppTypography.title(c.text)),
                 ],
               ),
             ),
-            Expanded(
-              child: step == _ScanStep.scan ? _scanBody(c) : _confirmBody(c),
-            ),
+            Expanded(child: _confirmBodyContent(c)),
           ],
         ),
       ),
     );
   }
 
-  Widget _scanBody(AppColors c) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(
-        AppSpacing.xl,
-        0,
-        AppSpacing.xl,
-        AppSpacing.huge,
-      ),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          AspectRatio(
-            aspectRatio: 1,
-            child: Container(
-              constraints: const BoxConstraints(maxWidth: AppSpacing.scanFrame),
-              decoration: BoxDecoration(
-                color: c.surface,
-                border: Border.all(color: c.border),
-                borderRadius: BorderRadius.circular(AppSpacing.lg),
-              ),
-              child: Stack(
-                alignment: Alignment.center,
-                children: [
-                  Positioned(
-                    top: AppSpacing.sm,
-                    left: AppSpacing.sm,
-                    child: _corner(c, top: true, left: true),
-                  ),
-                  Positioned(
-                    top: AppSpacing.sm,
-                    right: AppSpacing.sm,
-                    child: _corner(c, top: true, left: false),
-                  ),
-                  Positioned(
-                    bottom: AppSpacing.sm,
-                    left: AppSpacing.sm,
-                    child: _corner(c, top: false, left: true),
-                  ),
-                  Positioned(
-                    bottom: AppSpacing.sm,
-                    right: AppSpacing.sm,
-                    child: _corner(c, top: false, left: false),
-                  ),
-                  Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.receipt_long_outlined,
-                        size: AppSpacing.iconLarge,
-                        color: c.blue,
-                      ),
-                      const SizedBox(height: AppSpacing.xs),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: AppSpacing.md,
-                        ),
-                        child: Text(
-                          'Mode simulasi: area kamera akan membaca struk belanja',
-                          textAlign: TextAlign.center,
-                          style: AppTypography.caption(c.textMuted),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: AppSpacing.xl),
-          Text(
-            'Simulasi pembacaan struk lokal untuk membantu konfirmasi nominal sebelum mencatat.',
-            textAlign: TextAlign.center,
-            style: AppTypography.caption(c.textSub).copyWith(height: 1.6),
-          ),
-          const SizedBox(height: AppSpacing.xxl),
-          if (errorMessage != null) ...[
-            AppErrorMessage(message: errorMessage!),
-            const SizedBox(height: AppSpacing.md),
-          ],
-          if (isProcessing)
-            AppProcessingState(
-              message: 'Memproses struk secara lokal...',
-              color: c.success,
-            )
-          else
-            SizedBox(
-              width: double.infinity,
-              child: PressableScale(
-                onTap: _captureReceipt,
-                semanticLabel: 'Simulasikan foto struk',
-                tooltip: 'Proses foto struk',
-                child: Container(
-                  constraints: const BoxConstraints(
-                    minHeight: AppSpacing.target,
-                  ),
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: c.success,
-                    borderRadius: BorderRadius.circular(AppSpacing.sm),
-                  ),
-                  child: Text(
-                    'Simulasikan Foto Struk',
-                    style: AppTypography.button(c.onAccent)
-                        .copyWith(fontWeight: FontWeight.w700),
-                  ),
-                ),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-
-  Widget _corner(AppColors c, {required bool top, required bool left}) {
-    return Container(
-      width: AppSpacing.scanCorner,
-      height: AppSpacing.scanCorner,
-      decoration: BoxDecoration(
-        border: Border(
-          top: top
-              ? BorderSide(color: c.success, width: AppSpacing.xxs)
-              : BorderSide.none,
-          bottom: !top
-              ? BorderSide(color: c.success, width: AppSpacing.xxs)
-              : BorderSide.none,
-          left: left
-              ? BorderSide(color: c.success, width: AppSpacing.xxs)
-              : BorderSide.none,
-          right: !left
-              ? BorderSide(color: c.success, width: AppSpacing.xxs)
-              : BorderSide.none,
-        ),
-      ),
-    );
-  }
-
-  Widget _confirmBody(AppColors c) {
+  Widget _confirmBodyContent(AppColors c) {
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(
         AppSpacing.md,
@@ -338,7 +486,7 @@ class _ScanScreenState extends State<ScanScreen> {
                     ),
                     const SizedBox(width: AppSpacing.xs),
                     Text(
-                      'Simulasi: struk terbaca — keyakinan 94%',
+                      'Struk terbaca — keyakinan 94%',
                       style: AppTypography.meta(c.success)
                           .copyWith(fontWeight: FontWeight.w600),
                     ),
@@ -376,10 +524,7 @@ class _ScanScreenState extends State<ScanScreen> {
                       ),
                       Padding(
                         padding: const EdgeInsets.only(top: AppSpacing.xxs),
-                        child: Container(
-                          height: AppSpacing.xxs,
-                          color: c.border,
-                        ),
+                        child: Container(height: AppSpacing.xxs, color: c.border),
                       ),
                       Padding(
                         padding: const EdgeInsets.only(top: AppSpacing.xxs),
@@ -512,4 +657,131 @@ class _ScanScreenState extends State<ScanScreen> {
       ),
     );
   }
+}
+
+// ── Custom painters ──────────────────────────────────────────────────────────
+
+/// Paints a semi-transparent overlay with a clear rectangular cutout (viewfinder).
+class _ViewfinderOverlayPainter extends CustomPainter {
+  final Color accentColor;
+  _ViewfinderOverlayPainter(this.accentColor);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    const double frameInset = AppSpacing.xl;
+    final Rect outer = Rect.fromLTWH(0, 0, size.width, size.height);
+    final RRect inner = RRect.fromRectAndRadius(
+      Rect.fromLTRB(
+        frameInset,
+        frameInset,
+        size.width - frameInset,
+        size.height - frameInset,
+      ),
+      const Radius.circular(AppSpacing.md),
+    );
+
+    // Dim the area outside the frame
+    final Paint dimPaint = Paint()
+      ..color = Colors.black.withValues(alpha: 0.5);
+    final Path path = Path.combine(
+      PathOperation.difference,
+      Path()..addRect(outer),
+      Path()..addRRect(inner),
+    );
+    canvas.drawPath(path, dimPaint);
+
+    // Draw the frame border
+    final Paint borderPaint = Paint()
+      ..color = accentColor
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2;
+    canvas.drawRRect(inner, borderPaint);
+
+    // Corner accents
+    const double cornerLen = AppSpacing.xl;
+    final Paint cornerPaint = Paint()
+      ..color = accentColor
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 3
+      ..strokeCap = StrokeCap.round;
+
+    final double l = inner.left;
+    final double t = inner.top;
+    final double r = inner.right;
+    final double b = inner.bottom;
+
+    // Top-left
+    canvas.drawLine(Offset(l, t + cornerLen), Offset(l, t), cornerPaint);
+    canvas.drawLine(Offset(l, t), Offset(l + cornerLen, t), cornerPaint);
+    // Top-right
+    canvas.drawLine(Offset(r - cornerLen, t), Offset(r, t), cornerPaint);
+    canvas.drawLine(Offset(r, t), Offset(r, t + cornerLen), cornerPaint);
+    // Bottom-left
+    canvas.drawLine(Offset(l, b - cornerLen), Offset(l, b), cornerPaint);
+    canvas.drawLine(Offset(l, b), Offset(l + cornerLen, b), cornerPaint);
+    // Bottom-right
+    canvas.drawLine(Offset(r - cornerLen, b), Offset(r, b), cornerPaint);
+    canvas.drawLine(Offset(r, b), Offset(r, b - cornerLen), cornerPaint);
+  }
+
+  @override
+  bool shouldRepaint(_ViewfinderOverlayPainter old) =>
+      old.accentColor != accentColor;
+}
+
+/// Paints a horizontal scanning line that moves top-to-bottom inside the frame.
+class _ScanLinePainter extends CustomPainter {
+  final double progress;
+  final Color color;
+
+  _ScanLinePainter({required this.progress, required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    const double frameInset = AppSpacing.xl;
+    final double top = frameInset;
+    final double bottom = size.height - frameInset;
+    final double y = top + (bottom - top) * progress;
+
+    final Paint paint = Paint()
+      ..shader = LinearGradient(
+        begin: Alignment.centerLeft,
+        end: Alignment.centerRight,
+        colors: [
+          color.withValues(alpha: 0),
+          color.withValues(alpha: 0.8),
+          color.withValues(alpha: 0),
+        ],
+      ).createShader(
+        Rect.fromLTRB(frameInset, y, size.width - frameInset, y + 2),
+      )
+      ..strokeWidth = 2
+      ..style = PaintingStyle.stroke;
+
+    canvas.drawLine(
+      Offset(frameInset, y),
+      Offset(size.width - frameInset, y),
+      paint,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_ScanLinePainter old) =>
+      old.progress != progress || old.color != color;
+}
+
+/// Very simple noise/grain texture painter to simulate a camera view.
+class _NoisePainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final Paint paint = Paint()..color = Colors.white.withValues(alpha: 0.015);
+    for (int i = 0; i < 200; i++) {
+      final double x = (i * 137.5) % size.width;
+      final double y = (i * 53.7) % size.height;
+      canvas.drawCircle(Offset(x, y), 1, paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_NoisePainter old) => false;
 }
