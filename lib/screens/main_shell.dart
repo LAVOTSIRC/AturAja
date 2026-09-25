@@ -1,5 +1,10 @@
 import 'package:flutter/material.dart';
+
+import '../theme/app_colors.dart';
+import '../theme/app_spacing.dart';
+import '../theme/app_typography.dart';
 import '../theme/theme_scope.dart';
+import '../widgets/common.dart';
 import '../widgets/quick_add_modal.dart';
 import 'finance_screen.dart';
 import 'home_screen.dart';
@@ -7,8 +12,6 @@ import 'profile_screen.dart';
 import 'scan_screen.dart';
 import 'task_screen.dart';
 
-/// Root shell holding the bottom navigation, floating action buttons and
-/// the four main tabs (Beranda, Keuangan, Tugas, Profil).
 class MainShell extends StatefulWidget {
   const MainShell({super.key});
 
@@ -19,69 +22,99 @@ class MainShell extends StatefulWidget {
 class _MainShellState extends State<MainShell> {
   int tab = 0;
 
-  void _openQuickAdd() {
+  void _openQuickAdd({bool startInBrainDump = false}) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => const QuickAddModal(),
+      backgroundColor: ThemeScope.of(context).colors.transparent,
+      builder: (_) => QuickAddModal(startInBrainDump: startInBrainDump),
     );
   }
 
   void _openScan() {
     Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const ScanScreen(), fullscreenDialog: true),
+      MaterialPageRoute(
+        builder: (_) => const ScanScreen(),
+        fullscreenDialog: true,
+      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    final c = ThemeScope.of(context).colors;
-
-    final screens = [
-      HomeScreen(onAdd: _openQuickAdd, onScan: _openScan),
+    final AppColors c = ThemeScope.of(context).colors;
+    final List<Widget> screens = [
+      HomeScreen(
+        onAdd: () => _openQuickAdd(),
+        onScan: _openScan,
+        onBrainDump: () => _openQuickAdd(startInBrainDump: true),
+      ),
       const FinanceScreen(),
       const TaskScreen(),
       const ProfileScreen(),
     ];
 
     return Scaffold(
-      backgroundColor: c.bg,
+      backgroundColor: c.shell,
       body: Stack(
         children: [
           IndexedStack(index: tab, children: screens),
           Positioned(
-            bottom: 24,
-            right: 16,
+            bottom: AppSpacing.xl,
+            right: AppSpacing.md,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                GestureDetector(
+                PressableScale(
                   onTap: _openScan,
+                  semanticLabel: 'Scan struk',
+                  tooltip: 'Scan struk',
                   child: Container(
-                    width: 42,
-                    height: 42,
+                    width: AppSpacing.target,
+                    height: AppSpacing.target,
                     decoration: BoxDecoration(
                       color: c.surface,
                       border: Border.all(color: c.border),
-                      borderRadius: BorderRadius.circular(14),
-                      boxShadow: const [BoxShadow(color: Color(0x33000000), blurRadius: 16, offset: Offset(0, 4))],
+                      borderRadius: BorderRadius.circular(AppSpacing.sm),
+                      boxShadow: [
+                        BoxShadow(
+                          color: c.shadow,
+                          blurRadius: AppSpacing.md,
+                          offset: const Offset(0, AppSpacing.xxs),
+                        ),
+                      ],
                     ),
-                    child: Icon(Icons.document_scanner_outlined, size: 19, color: c.blue),
+                    child: Icon(
+                      Icons.document_scanner_outlined,
+                      size: AppSpacing.iconSmall,
+                      color: c.blue,
+                    ),
                   ),
                 ),
-                const SizedBox(height: 8),
-                GestureDetector(
+                const SizedBox(height: AppSpacing.xs),
+                PressableScale(
                   onTap: _openQuickAdd,
+                  semanticLabel: 'Tambah catatan',
+                  tooltip: 'Tambah catatan',
                   child: Container(
-                    width: 52,
-                    height: 52,
+                    width: AppSpacing.fabHeight,
+                    height: AppSpacing.fabHeight,
                     decoration: BoxDecoration(
                       color: c.blue,
-                      borderRadius: BorderRadius.circular(16),
-                      boxShadow: [BoxShadow(color: c.blue.withValues(alpha: 0.4), blurRadius: 24, offset: const Offset(0, 4))],
+                      borderRadius: BorderRadius.circular(AppSpacing.md),
+                      boxShadow: [
+                        BoxShadow(
+                          color: c.blue.withValues(alpha: 0.4),
+                          blurRadius: AppSpacing.xl,
+                          offset: const Offset(0, AppSpacing.xxs),
+                        ),
+                      ],
                     ),
-                    child: const Icon(Icons.add, size: 24, color: Colors.black),
+                    child: Icon(
+                      Icons.add,
+                      size: AppSpacing.iconMedium,
+                      color: c.onAccent,
+                    ),
                   ),
                 ),
               ],
@@ -97,11 +130,16 @@ class _MainShellState extends State<MainShell> {
         child: SafeArea(
           top: false,
           child: SizedBox(
-            height: 62,
+            height: AppSpacing.navHeight,
             child: Row(
               children: [
                 _navItem(c, 0, Icons.home_outlined, 'Beranda'),
-                _navItem(c, 1, Icons.account_balance_wallet_outlined, 'Keuangan'),
+                _navItem(
+                  c,
+                  1,
+                  Icons.account_balance_wallet_outlined,
+                  'Keuangan',
+                ),
                 _navItem(c, 2, Icons.task_alt_outlined, 'Tugas'),
                 _navItem(c, 3, Icons.person_outline, 'Profil'),
               ],
@@ -112,20 +150,62 @@ class _MainShellState extends State<MainShell> {
     );
   }
 
-  Widget _navItem(dynamic c, int index, IconData icon, String label) {
-    final active = tab == index;
-    final activeColor = c.blue;
+  Widget _navItem(AppColors c, int index, IconData icon, String label) {
+    final bool active = tab == index;
     return Expanded(
-      child: GestureDetector(
+      child: PressableScale(
         onTap: () => setState(() => tab = index),
-        behavior: HitTestBehavior.opaque,
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, size: 22, color: active ? activeColor : c.textMuted),
-            const SizedBox(height: 4),
-            Text(label, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: active ? activeColor : c.textMuted)),
-          ],
+        selected: active,
+        semanticLabel: label,
+        tooltip: label,
+        excludeSemantics: true,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          constraints: const BoxConstraints(minHeight: AppSpacing.navHeight),
+          margin: const EdgeInsets.symmetric(horizontal: AppSpacing.xs),
+          padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
+          decoration: BoxDecoration(
+            color: active ? c.blueDim : c.transparent,
+            borderRadius: BorderRadius.circular(AppSpacing.huge),
+            border: Border.all(color: active ? c.borderAccent : c.transparent),
+          ),
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              if (active)
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  child: Center(
+                    child: Container(
+                      width: AppSpacing.lg,
+                      height: AppSpacing.xxs,
+                      decoration: BoxDecoration(
+                        color: c.blue,
+                        borderRadius: BorderRadius.circular(AppSpacing.huge),
+                      ),
+                    ),
+                  ),
+                ),
+              Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    icon,
+                    size: AppSpacing.iconMedium,
+                    color: active ? c.blue : c.textMuted,
+                  ),
+                  const SizedBox(height: AppSpacing.xxs),
+                  Text(
+                    label,
+                    style: AppTypography.micro(active ? c.blue : c.textMuted)
+                        .copyWith(fontWeight: FontWeight.w600),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
