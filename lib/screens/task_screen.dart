@@ -8,6 +8,7 @@ import '../theme/theme_scope.dart';
 import '../widgets/common.dart';
 
 enum TaskFilter { all, pending, urgent, done }
+
 enum TaskInputMode { manual, brainDump }
 
 const List<String> availableCategories = [
@@ -44,12 +45,14 @@ class TaskScreen extends StatefulWidget {
   final List<TaskItem>? tasks;
   final VoidCallback? onAddTask;
   final ValueChanged<int>? onToggleTask;
+  final ValueChanged<TaskItem>? onSaveTask;
 
   const TaskScreen({
     super.key,
     this.tasks,
     this.onAddTask,
     this.onToggleTask,
+    this.onSaveTask,
   });
 
   @override
@@ -92,12 +95,7 @@ class _TaskScreenState extends State<TaskScreen> {
               size: AppSpacing.iconSmall,
             ),
             const SizedBox(width: AppSpacing.xs),
-            Expanded(
-              child: Text(
-                message,
-                style: AppTypography.label(c.text),
-              ),
-            ),
+            Expanded(child: Text(message, style: AppTypography.label(c.text))),
           ],
         ),
         behavior: SnackBarBehavior.floating,
@@ -105,10 +103,7 @@ class _TaskScreenState extends State<TaskScreen> {
         elevation: 6,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppSpacing.md),
-          side: BorderSide(
-            color: isError ? c.expense : c.border,
-            width: 1.5,
-          ),
+          side: BorderSide(color: isError ? c.expense : c.border, width: 1.5),
         ),
         margin: const EdgeInsets.all(AppSpacing.md),
         duration: const Duration(seconds: 2),
@@ -145,6 +140,7 @@ class _TaskScreenState extends State<TaskScreen> {
         _showMessage('Tugas baru "${task.title}" berhasil ditambahkan.');
       }
     });
+    widget.onSaveTask?.call(task);
   }
 
   void _deleteTask(int id) {
@@ -185,10 +181,7 @@ class _TaskScreenState extends State<TaskScreen> {
           borderRadius: BorderRadius.circular(AppSpacing.md),
           side: BorderSide(color: c.border),
         ),
-        title: Text(
-          'Hapus Tugas?',
-          style: AppTypography.titleLarge(c.text),
-        ),
+        title: Text('Hapus Tugas?', style: AppTypography.titleLarge(c.text)),
         content: Text(
           'Apakah kamu yakin ingin menghapus tugas "${task.title}"? Tindakan ini tidak dapat dibatalkan.',
           style: AppTypography.body(c.textSub),
@@ -307,7 +300,7 @@ class _TaskScreenState extends State<TaskScreen> {
                           const ThemeToggleSwitch(),
                           const SizedBox(width: AppSpacing.xs),
                           PressableScale(
-                            onTap: widget.onAddTask ?? () => _openTaskFormScreen(),
+                            onTap: _openTaskFormScreen,
                             semanticLabel: 'Tambah tugas baru',
                             tooltip: 'Tambah tugas baru',
                             child: Container(
@@ -320,8 +313,9 @@ class _TaskScreenState extends State<TaskScreen> {
                               alignment: Alignment.center,
                               decoration: BoxDecoration(
                                 color: c.blue,
-                                borderRadius:
-                                    BorderRadius.circular(AppSpacing.sm),
+                                borderRadius: BorderRadius.circular(
+                                  AppSpacing.sm,
+                                ),
                                 boxShadow: [
                                   BoxShadow(
                                     color: c.blue.withValues(alpha: 0.25),
@@ -382,8 +376,9 @@ class _TaskScreenState extends State<TaskScreen> {
                             ),
                             const SizedBox(height: AppSpacing.xs),
                             ClipRRect(
-                              borderRadius:
-                                  BorderRadius.circular(AppSpacing.huge),
+                              borderRadius: BorderRadius.circular(
+                                AppSpacing.huge,
+                              ),
                               child: LinearProgressIndicator(
                                 value: list.isEmpty ? 0 : pct / 100,
                                 minHeight: AppSpacing.progressMedium,
@@ -398,10 +393,10 @@ class _TaskScreenState extends State<TaskScreen> {
                               list.isEmpty
                                   ? 'Belum ada aktivitas tugas — Tambahkan tugas pertamamu!'
                                   : pct == 100
-                                      ? 'Luar biasa! Semua tugas minggu ini tuntas! 🎉'
-                                      : done.isEmpty
-                                          ? 'Belum ada tugas selesai minggu ini. Mari tuntaskan 1 tugas hari ini!'
-                                          : '$pct% — ${pct < 50 ? 'Ayo semangat, selesaikan tugasmu!' : 'Hampir selesai, teruskan!'}',
+                                  ? 'Luar biasa! Semua tugas minggu ini tuntas! 🎉'
+                                  : done.isEmpty
+                                  ? 'Belum ada tugas selesai minggu ini. Mari tuntaskan 1 tugas hari ini!'
+                                  : '$pct% — ${pct < 50 ? 'Ayo semangat, selesaikan tugasmu!' : 'Hampir selesai, teruskan!'}',
                               style: AppTypography.micro(c.textMuted),
                             ),
                           ],
@@ -422,8 +417,9 @@ class _TaskScreenState extends State<TaskScreen> {
 
                     // Task List Area
                     Padding(
-                      padding:
-                          const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: AppSpacing.md,
+                      ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -529,11 +525,7 @@ class _TaskScreenState extends State<TaskScreen> {
             ),
 
             // Vertical Divider Line
-            Container(
-              width: 1.5,
-              height: 24,
-              color: c.border,
-            ),
+            Container(width: 1.5, height: 24, color: c.border),
 
             // 2. Category Dropdown
             Expanded(
@@ -570,8 +562,9 @@ class _TaskScreenState extends State<TaskScreen> {
                         child: Text('Semua Kategori (${list.length})'),
                       ),
                       ...availableCategories.map((cat) {
-                        final count =
-                            list.where((t) => t.categories.contains(cat)).length;
+                        final count = list
+                            .where((t) => t.categories.contains(cat))
+                            .length;
                         return DropdownMenuItem(
                           value: cat,
                           child: Text('$cat ($count)'),
@@ -585,11 +578,7 @@ class _TaskScreenState extends State<TaskScreen> {
 
             // Reset Filter Button if Active
             if (hasActiveFilter) ...[
-              Container(
-                width: 1.5,
-                height: 24,
-                color: c.border,
-              ),
+              Container(width: 1.5, height: 24, color: c.border),
               PressableScale(
                 onTap: () {
                   setState(() {
@@ -668,15 +657,13 @@ class _TaskScreenState extends State<TaskScreen> {
         return const AppEmptyState(
           icon: Icons.task_outlined,
           title: 'Belum ada tugas selesai',
-          message:
-              'Belum ada aktivitas tugas selesai. Selesaikan tugasmu untuk melihatnya di sini.',
+          message: 'Belum ada aktivitas tugas selesai. Selesaikan tugasmu untuk melihatnya di sini.',
         );
       case TaskFilter.all:
         return const AppEmptyState(
           icon: Icons.task_alt_outlined,
           title: 'Belum ada aktivitas tugas',
-          message:
-              'Kamu belum memiliki tugas tersimpan. Klik "+ Tambah" di atas untuk membuat tugas pertamamu!',
+          message: 'Kamu belum memiliki tugas tersimpan. Klik "+ Tambah" di atas untuk membuat tugas pertamamu!',
         );
     }
   }
@@ -733,8 +720,8 @@ class _TaskScreenState extends State<TaskScreen> {
                             color: t.done
                                 ? c.success
                                 : (isOverdue
-                                    ? c.expense
-                                    : (isUrgent ? c.amber : c.textMuted)),
+                                      ? c.expense
+                                      : (isUrgent ? c.amber : c.textMuted)),
                             width: 1.5,
                           ),
                           borderRadius: BorderRadius.circular(AppSpacing.xs),
@@ -777,12 +764,13 @@ class _TaskScreenState extends State<TaskScreen> {
                   children: [
                     Text(
                       t.title,
-                      style: AppTypography.label(
-                        t.done ? c.textSub : c.text,
-                      ).copyWith(
-                        decoration: t.done ? TextDecoration.lineThrough : null,
-                        fontWeight: FontWeight.w600,
-                      ),
+                      style: AppTypography.label(t.done ? c.textSub : c.text)
+                          .copyWith(
+                            decoration: t.done
+                                ? TextDecoration.lineThrough
+                                : null,
+                            fontWeight: FontWeight.w600,
+                          ),
                     ),
                     const SizedBox(height: AppSpacing.xxs),
 
@@ -798,17 +786,14 @@ class _TaskScreenState extends State<TaskScreen> {
                           ),
                           decoration: BoxDecoration(
                             color: c.blueDim,
-                            borderRadius:
-                                BorderRadius.circular(AppSpacing.huge),
+                            borderRadius: BorderRadius.circular(
+                              AppSpacing.huge,
+                            ),
                           ),
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Icon(
-                                categoryIcon(cat),
-                                size: 10,
-                                color: c.blue,
-                              ),
+                              Icon(categoryIcon(cat), size: 10, color: c.blue),
                               const SizedBox(width: 2),
                               Text(
                                 cat,
@@ -832,23 +817,24 @@ class _TaskScreenState extends State<TaskScreen> {
                           color: t.done
                               ? c.textMuted
                               : (isOverdue
-                                  ? c.expense
-                                  : (isUrgent ? c.amber : c.textMuted)),
+                                    ? c.expense
+                                    : (isUrgent ? c.amber : c.textMuted)),
                         ),
                         const SizedBox(width: AppSpacing.xxs),
                         Text(
                           t.deadline,
-                          style: AppTypography.micro(
-                            t.done
-                                ? c.textMuted
-                                : (isOverdue
-                                    ? c.expense
-                                    : (isUrgent ? c.amber : c.textMuted)),
-                          ).copyWith(
-                            fontWeight: !t.done && (isOverdue || isUrgent)
-                                ? FontWeight.w600
-                                : FontWeight.w400,
-                          ),
+                          style:
+                              AppTypography.micro(
+                                t.done
+                                    ? c.textMuted
+                                    : (isOverdue
+                                          ? c.expense
+                                          : (isUrgent ? c.amber : c.textMuted)),
+                              ).copyWith(
+                                fontWeight: !t.done && (isOverdue || isUrgent)
+                                    ? FontWeight.w600
+                                    : FontWeight.w400,
+                              ),
                         ),
                         if (!t.done && isOverdue) ...[
                           const SizedBox(width: AppSpacing.xs),
@@ -935,10 +921,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
           onPressed: () => Navigator.of(context).pop(),
           tooltip: 'Kembali',
         ),
-        title: Text(
-          'Detail Tugas',
-          style: AppTypography.titleLarge(c.text),
-        ),
+        title: Text('Detail Tugas', style: AppTypography.titleLarge(c.text)),
         centerTitle: false,
         actions: [
           IconButton(
@@ -1000,8 +983,9 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                     Text(
                       currentTask.title,
                       style: AppTypography.hero(c.text).copyWith(
-                        decoration:
-                            currentTask.done ? TextDecoration.lineThrough : null,
+                        decoration: currentTask.done
+                            ? TextDecoration.lineThrough
+                            : null,
                       ),
                     ),
                     const SizedBox(height: AppSpacing.sm),
@@ -1028,8 +1012,9 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                                 ),
                                 decoration: BoxDecoration(
                                   color: c.blueDim,
-                                  borderRadius:
-                                      BorderRadius.circular(AppSpacing.huge),
+                                  borderRadius: BorderRadius.circular(
+                                    AppSpacing.huge,
+                                  ),
                                   border: Border.all(color: c.blue),
                                 ),
                                 child: Row(
@@ -1043,9 +1028,9 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                                     const SizedBox(width: AppSpacing.xxs),
                                     Text(
                                       cat,
-                                      style: AppTypography.label(c.blue)
-                                          .copyWith(
-                                              fontWeight: FontWeight.w600),
+                                      style: AppTypography.label(
+                                        c.blue,
+                                      ).copyWith(fontWeight: FontWeight.w600),
                                     ),
                                   ],
                                 ),
@@ -1070,7 +1055,8 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                           Container(
                             padding: const EdgeInsets.all(AppSpacing.xs),
                             decoration: BoxDecoration(
-                              color: !currentTask.done && (isOverdue || isUrgent)
+                              color:
+                                  !currentTask.done && (isOverdue || isUrgent)
                                   ? (isOverdue ? c.expenseDim : c.amberDim)
                                   : c.blueDim,
                               shape: BoxShape.circle,
@@ -1080,7 +1066,8 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                                   ? Icons.warning_amber_rounded
                                   : Icons.access_time_filled_rounded,
                               size: AppSpacing.iconSmall,
-                              color: !currentTask.done && (isOverdue || isUrgent)
+                              color:
+                                  !currentTask.done && (isOverdue || isUrgent)
                                   ? (isOverdue ? c.expense : c.amber)
                                   : c.blue,
                             ),
@@ -1104,9 +1091,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                                     !currentTask.done && (isOverdue || isUrgent)
                                         ? (isOverdue ? c.expense : c.amber)
                                         : c.text,
-                                  ).copyWith(
-                                    fontWeight: FontWeight.w600,
-                                  ),
+                                  ).copyWith(fontWeight: FontWeight.w600),
                                 ),
                               ],
                             ),
@@ -1151,8 +1136,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
               child: PressableScale(
                 onTap: () {
                   setState(() {
-                    currentTask =
-                        currentTask.copyWith(done: !currentTask.done);
+                    currentTask = currentTask.copyWith(done: !currentTask.done);
                   });
                   widget.onToggleDone();
                 },
@@ -1166,8 +1150,9 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                   decoration: BoxDecoration(
                     color: currentTask.done ? c.surfaceHigh : c.teal,
                     borderRadius: BorderRadius.circular(AppSpacing.sm),
-                    border:
-                        currentTask.done ? Border.all(color: c.border) : null,
+                    border: currentTask.done
+                        ? Border.all(color: c.border)
+                        : null,
                   ),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -1205,11 +1190,7 @@ class TaskFormScreen extends StatefulWidget {
   final TaskItem? taskToEdit;
   final ValueChanged<TaskItem> onSave;
 
-  const TaskFormScreen({
-    super.key,
-    this.taskToEdit,
-    required this.onSave,
-  });
+  const TaskFormScreen({super.key, this.taskToEdit, required this.onSave});
 
   @override
   State<TaskFormScreen> createState() => _TaskFormScreenState();
@@ -1389,7 +1370,11 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
         SnackBar(
           content: Row(
             children: [
-              Icon(Icons.auto_awesome_rounded, color: c.blue, size: AppSpacing.iconSmall),
+              Icon(
+                Icons.auto_awesome_rounded,
+                color: c.blue,
+                size: AppSpacing.iconSmall,
+              ),
               const SizedBox(width: AppSpacing.xs),
               Expanded(
                 child: Text(
@@ -1439,8 +1424,9 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
       time.minute,
     );
 
-    final String dayStr =
-        pickedDate.day == now.day ? 'Hari ini' : '${pickedDate.day}/${pickedDate.month}/${pickedDate.year}';
+    final String dayStr = pickedDate.day == now.day
+        ? 'Hari ini'
+        : '${pickedDate.day}/${pickedDate.month}/${pickedDate.year}';
     final String timeStr =
         '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
 
@@ -1637,14 +1623,15 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
                                     children: [
                                       Text(
                                         'AI Brain Dump Tugas',
-                                        style: AppTypography.label(c.text)
-                                            .copyWith(
-                                                fontWeight: FontWeight.w700),
+                                        style: AppTypography.label(
+                                          c.text,
+                                        ).copyWith(fontWeight: FontWeight.w700),
                                       ),
                                       Text(
                                         'Tuliskan tugas secara bebas — AI akan memilah Judul, Kategori, dan Tenggat secara otomatis!',
-                                        style:
-                                            AppTypography.caption(c.textMuted),
+                                        style: AppTypography.caption(
+                                          c.textMuted,
+                                        ),
                                       ),
                                     ],
                                   ),
@@ -1660,8 +1647,7 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
                               style: AppTypography.bodyLarge(c.text),
                               decoration: _cleanInputDecoration(
                                 c,
-                                hintText:
-                                    'Contoh: Besok jam 08:00 ada Quiz Kalkulus untuk Tugas Kuliah dan kumpulkan laporan praktikum...',
+                                hintText: 'Contoh: Besok jam 08:00 ada Quiz Kalkulus untuk Tugas Kuliah dan kumpulkan laporan praktikum...',
                               ),
                             ),
                             const SizedBox(height: AppSpacing.sm),
@@ -1719,8 +1705,9 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
                                 alignment: Alignment.center,
                                 decoration: BoxDecoration(
                                   color: c.blue,
-                                  borderRadius:
-                                      BorderRadius.circular(AppSpacing.md),
+                                  borderRadius: BorderRadius.circular(
+                                    AppSpacing.md,
+                                  ),
                                   boxShadow: [
                                     BoxShadow(
                                       color: c.blue.withValues(alpha: 0.3),
@@ -1837,8 +1824,9 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
                                 padding: const EdgeInsets.all(AppSpacing.sm),
                                 decoration: BoxDecoration(
                                   color: c.surfaceHigh.withValues(alpha: 0.6),
-                                  borderRadius:
-                                      BorderRadius.circular(AppSpacing.md),
+                                  borderRadius: BorderRadius.circular(
+                                    AppSpacing.md,
+                                  ),
                                   border: Border.all(
                                     color: isDropdownExpanded
                                         ? c.blue
@@ -1852,8 +1840,7 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
                                       child: Wrap(
                                         spacing: AppSpacing.xs,
                                         runSpacing: AppSpacing.xxs,
-                                        children:
-                                            selectedCategories.map((cat) {
+                                        children: selectedCategories.map((cat) {
                                           return Container(
                                             padding: const EdgeInsets.symmetric(
                                               horizontal: AppSpacing.xs + 2,
@@ -1863,8 +1850,8 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
                                               color: c.blueDim,
                                               borderRadius:
                                                   BorderRadius.circular(
-                                                AppSpacing.huge,
-                                              ),
+                                                    AppSpacing.huge,
+                                                  ),
                                               border: Border.all(color: c.blue),
                                             ),
                                             child: Row(
@@ -1878,11 +1865,13 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
                                                 const SizedBox(width: 4),
                                                 Text(
                                                   cat,
-                                                  style: AppTypography.caption(
-                                                    c.blue,
-                                                  ).copyWith(
-                                                      fontWeight:
-                                                          FontWeight.w600),
+                                                  style:
+                                                      AppTypography.caption(
+                                                        c.blue,
+                                                      ).copyWith(
+                                                        fontWeight:
+                                                            FontWeight.w600,
+                                                      ),
                                                 ),
                                                 const SizedBox(width: 4),
                                                 GestureDetector(
@@ -1918,14 +1907,15 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
                                 padding: const EdgeInsets.all(AppSpacing.xs),
                                 decoration: BoxDecoration(
                                   color: c.surfaceHigh,
-                                  borderRadius:
-                                      BorderRadius.circular(AppSpacing.md),
+                                  borderRadius: BorderRadius.circular(
+                                    AppSpacing.md,
+                                  ),
                                   border: Border.all(color: c.border),
                                 ),
                                 child: Column(
                                   children: availableCategories.map((cat) {
-                                    final bool isSelected =
-                                        selectedCategories.contains(cat);
+                                    final bool isSelected = selectedCategories
+                                        .contains(cat);
                                     return InkWell(
                                       onTap: () => _toggleCategory(cat),
                                       borderRadius: BorderRadius.circular(
@@ -1945,17 +1935,22 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
                                                   ? c.blue
                                                   : c.textMuted,
                                             ),
-                                            const SizedBox(width: AppSpacing.xs),
+                                            const SizedBox(
+                                              width: AppSpacing.xs,
+                                            ),
                                             Expanded(
                                               child: Text(
                                                 cat,
-                                                style: AppTypography.body(
-                                                  isSelected ? c.text : c.textSub,
-                                                ).copyWith(
-                                                  fontWeight: isSelected
-                                                      ? FontWeight.w600
-                                                      : FontWeight.w400,
-                                                ),
+                                                style:
+                                                    AppTypography.body(
+                                                      isSelected
+                                                          ? c.text
+                                                          : c.textSub,
+                                                    ).copyWith(
+                                                      fontWeight: isSelected
+                                                          ? FontWeight.w600
+                                                          : FontWeight.w400,
+                                                    ),
                                               ),
                                             ),
                                             AnimatedContainer(
@@ -1970,8 +1965,8 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
                                                     : c.transparent,
                                                 borderRadius:
                                                     BorderRadius.circular(
-                                                  AppSpacing.xxs,
-                                                ),
+                                                      AppSpacing.xxs,
+                                                    ),
                                                 border: Border.all(
                                                   color: isSelected
                                                       ? c.blue
@@ -2032,8 +2027,9 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
                                     ),
                                     decoration: BoxDecoration(
                                       color: c.blueDim,
-                                      borderRadius:
-                                          BorderRadius.circular(AppSpacing.md),
+                                      borderRadius: BorderRadius.circular(
+                                        AppSpacing.md,
+                                      ),
                                       border: Border.all(color: c.blue),
                                     ),
                                     child: Row(
@@ -2083,19 +2079,21 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
                                             AppSpacing.huge,
                                           ),
                                           border: Border.all(
-                                            color:
-                                                isSelected ? c.blue : c.border,
+                                            color: isSelected
+                                                ? c.blue
+                                                : c.border,
                                           ),
                                         ),
                                         child: Text(
                                           preset,
-                                          style: AppTypography.caption(
-                                            isSelected ? c.blue : c.textSub,
-                                          ).copyWith(
-                                            fontWeight: isSelected
-                                                ? FontWeight.w600
-                                                : FontWeight.w400,
-                                          ),
+                                          style:
+                                              AppTypography.caption(
+                                                isSelected ? c.blue : c.textSub,
+                                              ).copyWith(
+                                                fontWeight: isSelected
+                                                    ? FontWeight.w600
+                                                    : FontWeight.w400,
+                                              ),
                                         ),
                                       ),
                                     ),
@@ -2110,8 +2108,9 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
                                 padding: const EdgeInsets.all(AppSpacing.sm),
                                 decoration: BoxDecoration(
                                   color: c.expenseDim,
-                                  borderRadius:
-                                      BorderRadius.circular(AppSpacing.md),
+                                  borderRadius: BorderRadius.circular(
+                                    AppSpacing.md,
+                                  ),
                                   border: Border.all(color: c.expense),
                                 ),
                                 child: Row(
@@ -2125,10 +2124,9 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
                                     Expanded(
                                       child: Text(
                                         'Tugas ini otomatis ditandai Mendesak karena tenggat waktu kurang dari 24 jam.',
-                                        style: AppTypography.caption(c.expense)
-                                            .copyWith(
-                                          fontWeight: FontWeight.w600,
-                                        ),
+                                        style: AppTypography.caption(
+                                          c.expense,
+                                        ).copyWith(fontWeight: FontWeight.w600),
                                       ),
                                     ),
                                   ],
@@ -2165,8 +2163,7 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
                               style: AppTypography.bodyLarge(c.text),
                               decoration: _cleanInputDecoration(
                                 c,
-                                hintText:
-                                    'Tuliskan instruksi, catatan penting, atau detail tugas di sini...',
+                                hintText: 'Tuliskan instruksi, catatan penting, atau detail tugas di sini...',
                               ).copyWith(counterText: ''),
                               onChanged: (_) => setState(() {}),
                             ),
@@ -2189,7 +2186,9 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
                 ),
                 child: PressableScale(
                   onTap: _submit,
-                  semanticLabel: isEditing ? 'Simpan perubahan' : 'Tambah tugas',
+                  semanticLabel: isEditing
+                      ? 'Simpan perubahan'
+                      : 'Tambah tugas',
                   child: Container(
                     width: double.infinity,
                     height: AppSpacing.target,
@@ -2255,11 +2254,12 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
               const SizedBox(width: AppSpacing.xxs),
               Text(
                 label,
-                style: AppTypography.label(
-                  isSelected ? c.onAccent : c.textSub,
-                ).copyWith(
-                  fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                ),
+                style: AppTypography.label(isSelected ? c.onAccent : c.textSub)
+                    .copyWith(
+                      fontWeight: isSelected
+                          ? FontWeight.w700
+                          : FontWeight.w500,
+                    ),
               ),
             ],
           ),
@@ -2269,14 +2269,13 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
   }
 
   Widget _formLabel(AppColors c, String text) {
-    return Text(
-      text,
-      style: AppTypography.overline(c.textMuted),
-    );
+    return Text(text, style: AppTypography.overline(c.textMuted));
   }
 
-  InputDecoration _cleanInputDecoration(AppColors c,
-      {required String hintText}) {
+  InputDecoration _cleanInputDecoration(
+    AppColors c, {
+    required String hintText,
+  }) {
     return InputDecoration(
       hintText: hintText,
       hintStyle: AppTypography.body(c.textMuted),

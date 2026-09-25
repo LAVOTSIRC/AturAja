@@ -8,7 +8,6 @@ import '../theme/app_typography.dart';
 import '../theme/theme_scope.dart';
 import '../widgets/common.dart';
 import '../widgets/quick_add_modal.dart';
-import '../widgets/task_add_modal.dart';
 import 'finance_screen.dart';
 import 'home_screen.dart';
 import 'login_screen.dart';
@@ -51,28 +50,29 @@ class _MainShellState extends State<MainShell> {
   }
 
   void _openTaskAdd() {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: ThemeScope.of(context).colors.transparent,
-      builder: (_) => TaskAddModal(onSubmit: _addTask),
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => TaskFormScreen(onSave: _saveTask)),
     );
   }
 
-  void _addTask(String title, String sub, String deadline) {
+  void _saveTask(TaskItem task) {
+    final bool isUpdate = tasks.any((item) => item.id == task.id);
     setState(() {
-      tasks = [
-        ...tasks,
-        TaskItem(
-          id: nextTaskId++,
-          title: title,
-          categories: [sub],
-          deadline: deadline,
-        ),
-      ];
+      final index = tasks.indexWhere((item) => item.id == task.id);
+      if (index >= 0) {
+        tasks = [...tasks]..[index] = task;
+      } else {
+        tasks = [...tasks, task];
+      }
     });
     ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-      const SnackBar(content: Text('Tugas berhasil ditambahkan.')),
+      SnackBar(
+        content: Text(
+          isUpdate
+              ? 'Tugas berhasil diperbarui.'
+              : 'Tugas berhasil ditambahkan.',
+        ),
+      ),
     );
   }
 
@@ -123,6 +123,7 @@ class _MainShellState extends State<MainShell> {
         tasks: tasks,
         onAddTask: _openTaskAdd,
         onToggleTask: _toggleTask,
+        onSaveTask: _saveTask,
       ),
       ProfileScreen(settings: settings, onLogout: _logout),
     ];
@@ -168,7 +169,9 @@ class _MainShellState extends State<MainShell> {
                     ),
                   if (tab < 2) const SizedBox(height: AppSpacing.xs),
                   PressableScale(
-                    onTap: () => _openQuickAdd(QuickAddMode.quick),
+                    onTap: tab == 2
+                        ? _openTaskAdd
+                        : () => _openQuickAdd(QuickAddMode.quick),
                     semanticLabel: 'Tambah catatan',
                     tooltip: 'Tambah catatan',
                     child: Container(
