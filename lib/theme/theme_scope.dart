@@ -1,43 +1,36 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
-import 'app_colors.dart';
+import '../providers/theme_provider.dart';
 
-/// Holds the current theme (dark/light) and notifies listeners on toggle.
-class ThemeController extends ChangeNotifier {
-  bool isDark;
+export '../providers/theme_provider.dart';
 
-  ThemeController({this.isDark = true});
+class ThemeScope extends StatelessWidget {
+  final ThemeController controller;
+  final Widget child;
 
-  AppColors get colors => isDark ? AppColors.dark : AppColors.light;
-
-  void setDark(bool value) {
-    if (isDark == value) {
-      return;
-    }
-    isDark = value;
-    notifyListeners();
-  }
-
-  void toggle() => setDark(!isDark);
-
-  Map<String, dynamic> toJson() => <String, dynamic>{'isDark': isDark};
-
-  void applyJson(Map<String, dynamic> json) {
-    setDark(json['isDark'] as bool? ?? isDark);
-  }
-}
-
-/// Makes [ThemeController] available to the whole widget tree below it.
-class ThemeScope extends InheritedNotifier<ThemeController> {
-  const ThemeScope({
-    super.key,
-    required ThemeController controller,
-    required super.child,
-  }) : super(notifier: controller);
+  const ThemeScope({super.key, required this.controller, required this.child});
 
   static ThemeController of(BuildContext context) {
-    final scope = context.dependOnInheritedWidgetOfExactType<ThemeScope>();
+    final _ThemeNotifier? scope = context
+        .dependOnInheritedWidgetOfExactType<_ThemeNotifier>();
     assert(scope != null, 'No ThemeScope found in context');
     return scope!.notifier!;
   }
+
+  static ThemeController read(BuildContext context) {
+    return Provider.of<ThemeController>(context, listen: false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ChangeNotifierProvider<ThemeController>.value(
+      value: controller,
+      child: _ThemeNotifier(notifier: controller, child: child),
+    );
+  }
+}
+
+class _ThemeNotifier extends InheritedNotifier<ThemeController> {
+  const _ThemeNotifier({required super.notifier, required super.child});
 }
