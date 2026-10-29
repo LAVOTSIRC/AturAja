@@ -47,11 +47,30 @@ class _StatItem {
   const _StatItem(this.icon, this.value, this.label);
 }
 
+String _compactRupiah(int value) {
+  final int absolute = value.abs();
+  final String sign = value < 0 ? '-' : '';
+  if (absolute >= 1000000) {
+    final double millions = absolute / 1000000;
+    final String amount = millions == millions.roundToDouble()
+        ? millions.toStringAsFixed(0)
+        : millions.toStringAsFixed(1);
+    return '$sign${amount}jt';
+  }
+  if (absolute >= 1000) {
+    return '$sign${(absolute / 1000).round()}rb';
+  }
+  return '$value';
+}
+
 class ProfileScreen extends StatefulWidget {
   final SettingsController settings;
   final ProfileData? initialProfile;
   final ValueChanged<ProfileData>? onProfileChanged;
   final VoidCallback onLogout;
+  final int completedTaskCount;
+  final int totalSavings;
+  final int streakDays;
 
   const ProfileScreen({
     super.key,
@@ -59,13 +78,10 @@ class ProfileScreen extends StatefulWidget {
     this.initialProfile,
     this.onProfileChanged,
     required this.onLogout,
+    this.completedTaskCount = 12,
+    this.totalSavings = 874000,
+    this.streakDays = 7,
   });
-
-  static const stats = [
-    _StatItem(Icons.task_alt_outlined, '12', 'Tugas Selesai'),
-    _StatItem(Icons.savings_outlined, '874rb', 'Total Hemat'),
-    _StatItem(Icons.local_fire_department_outlined, '7 hari', 'Streak'),
-  ];
 
   static const settingItems = [
     _SettingItem(
@@ -428,10 +444,27 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Widget _buildStats(AppColors c) {
+    final List<_StatItem> stats = <_StatItem>[
+      _StatItem(
+        Icons.task_alt_outlined,
+        '${widget.completedTaskCount}',
+        'Tugas Selesai',
+      ),
+      _StatItem(
+        Icons.savings_outlined,
+        _compactRupiah(widget.totalSavings),
+        'Total Hemat',
+      ),
+      _StatItem(
+        Icons.local_fire_department_outlined,
+        '${widget.streakDays} hari',
+        'Streak',
+      ),
+    ];
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
       child: Row(
-        children: ProfileScreen.stats
+        children: stats
             .map(
               (_StatItem stat) => Expanded(
                 child: Padding(
