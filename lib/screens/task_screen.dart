@@ -724,6 +724,9 @@ class _TaskScreenState extends State<TaskScreen> {
   Widget _taskTile(AppColors c, TaskItem t) {
     final bool isUrgent = t.urgent;
     final bool isOverdue = t.isOverdue;
+    final List<String> visibleCategories = t.categories.take(2).toList();
+    final int hiddenCategoryCount =
+        t.categories.length - visibleCategories.length;
 
     // Determine status color indicator
     Color statusAccentColor = c.blue;
@@ -838,36 +841,44 @@ class _TaskScreenState extends State<TaskScreen> {
                       Wrap(
                         spacing: AppSpacing.xxs,
                         runSpacing: 2,
-                        children: t.categories.map((cat) {
-                          return Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: AppSpacing.xs - 2,
-                              vertical: 1,
-                            ),
-                            decoration: BoxDecoration(
-                              color: c.blueDim,
-                              borderRadius: BorderRadius.circular(
-                                AppSpacing.huge,
+                        children: <Widget>[
+                          ...visibleCategories.map((cat) {
+                            return Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: AppSpacing.xs - 2,
+                                vertical: 1,
                               ),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  categoryIcon(cat),
-                                  size: 10,
-                                  color: c.blue,
+                              decoration: BoxDecoration(
+                                color: c.blueDim,
+                                borderRadius: BorderRadius.circular(
+                                  AppSpacing.huge,
                                 ),
-                                const SizedBox(width: 2),
-                                Text(
-                                  cat,
-                                  style: AppTypography.micro(c.blue)
-                                      .copyWith(fontWeight: FontWeight.w600),
-                                ),
-                              ],
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    categoryIcon(cat),
+                                    size: 10,
+                                    color: c.blue,
+                                  ),
+                                  const SizedBox(width: 2),
+                                  Text(
+                                    cat,
+                                    style: AppTypography.micro(c.blue)
+                                        .copyWith(fontWeight: FontWeight.w600),
+                                  ),
+                                ],
+                              ),
+                            );
+                          }),
+                          if (hiddenCategoryCount > 0)
+                            Pill(
+                              text: '+$hiddenCategoryCount',
+                              color: c.textMuted,
+                              background: c.surfaceHigh,
                             ),
-                          );
-                        }).toList(),
+                        ],
                       ),
                       const SizedBox(height: AppSpacing.xs),
 
@@ -1015,51 +1026,70 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
           children: [
             Expanded(
               child: SingleChildScrollView(
-                padding: const EdgeInsets.all(AppSpacing.md),
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.md,
+                  AppSpacing.sm,
+                  AppSpacing.md,
+                  AppSpacing.xxl,
+                ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     // Status & Urgent / Overdue Badges
-                    Row(
-                      children: [
-                        Pill(
-                          text: currentTask.done ? 'Selesai' : 'Belum Selesai',
-                          color: currentTask.done ? c.teal : c.blue,
-                          background: currentTask.done ? c.tealDim : c.blueDim,
-                        ),
-                        if (!currentTask.done && isOverdue) ...[
-                          const SizedBox(width: AppSpacing.xs),
-                          Pill(
-                            text: '⚠️ Terlewat (Overdue)',
-                            color: c.expense,
-                            background: c.expenseDim,
+                    AppCard(
+                      padding: const EdgeInsets.all(AppSpacing.lg),
+                      background: c.surface,
+                      borderColor: c.border.withValues(alpha: 0.55),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Wrap(
+                            spacing: AppSpacing.xs,
+                            runSpacing: AppSpacing.xs,
+                            children: [
+                              Pill(
+                                text: currentTask.done
+                                    ? 'Selesai'
+                                    : 'Belum selesai',
+                                color: currentTask.done ? c.teal : c.blue,
+                                background: currentTask.done
+                                    ? c.tealDim
+                                    : c.blueDim,
+                              ),
+                              if (!currentTask.done && isOverdue)
+                                Pill(
+                                  text: 'Terlewat',
+                                  color: c.expense,
+                                  background: c.expenseDim,
+                                )
+                              else if (!currentTask.done && isUrgent)
+                                Pill(
+                                  text: 'Mendesak <24 jam',
+                                  color: c.amber,
+                                  background: c.amberDim,
+                                ),
+                            ],
                           ),
-                        ] else if (!currentTask.done && isUrgent) ...[
-                          const SizedBox(width: AppSpacing.xs),
-                          Pill(
-                            text: '🔥 Mendesak (< 24 Jam)',
-                            color: c.amber,
-                            background: c.amberDim,
+                          const SizedBox(height: AppSpacing.md),
+                          Text(
+                            currentTask.title,
+                            style: AppTypography.hero(c.text).copyWith(
+                              height: 1.15,
+                              decoration: currentTask.done
+                                  ? TextDecoration.lineThrough
+                                  : null,
+                            ),
                           ),
                         ],
-                      ],
-                    ),
-                    const SizedBox(height: AppSpacing.md),
-
-                    // Title
-                    Text(
-                      currentTask.title,
-                      style: AppTypography.hero(c.text).copyWith(
-                        decoration: currentTask.done
-                            ? TextDecoration.lineThrough
-                            : null,
                       ),
                     ),
-                    const SizedBox(height: AppSpacing.sm),
+                    const SizedBox(height: AppSpacing.lg),
 
                     // Categories Card
                     AppCard(
-                      padding: const EdgeInsets.all(AppSpacing.sm),
+                      padding: const EdgeInsets.all(AppSpacing.md),
+                      background: c.surface,
+                      borderColor: c.border.withValues(alpha: 0.55),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -1112,11 +1142,11 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
 
                     // Deadline Card
                     AppCard(
-                      padding: const EdgeInsets.all(AppSpacing.sm),
+                      padding: const EdgeInsets.all(AppSpacing.md),
                       background: c.surface,
                       borderColor: !currentTask.done && (isOverdue || isUrgent)
                           ? (isOverdue ? c.expense : c.amber)
-                          : c.border,
+                          : c.border.withValues(alpha: 0.55),
                       child: Row(
                         children: [
                           Container(
@@ -1632,9 +1662,9 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
                 ),
                 padding: const EdgeInsets.all(AppSpacing.xxs),
                 decoration: BoxDecoration(
-                  color: c.surfaceHigh,
+                  color: c.surface,
                   borderRadius: BorderRadius.circular(AppSpacing.md),
-                  border: Border.all(color: c.border),
+                  border: Border.all(color: c.border.withValues(alpha: 0.55)),
                 ),
                 child: Row(
                   children: [
@@ -1671,6 +1701,8 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
                     if (!isEditing && inputMode == TaskInputMode.brainDump) ...[
                       AppCard(
                         padding: const EdgeInsets.all(AppSpacing.md),
+                        background: c.surface,
+                        borderColor: c.ai.withValues(alpha: 0.55),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -1679,13 +1711,13 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
                                 Container(
                                   padding: const EdgeInsets.all(AppSpacing.xs),
                                   decoration: BoxDecoration(
-                                    color: c.blueDim,
+                                    color: c.aiDim,
                                     shape: BoxShape.circle,
                                   ),
                                   child: Icon(
                                     Icons.auto_awesome_rounded,
                                     size: AppSpacing.iconSmall,
-                                    color: c.blue,
+                                    color: c.ai,
                                   ),
                                 ),
                                 const SizedBox(width: AppSpacing.xs),
@@ -1777,7 +1809,7 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
                                 height: AppSpacing.target,
                                 alignment: Alignment.center,
                                 decoration: BoxDecoration(
-                                  color: c.blue,
+                                  color: c.ai,
                                   borderRadius: BorderRadius.circular(
                                     AppSpacing.md,
                                   ),
@@ -1829,6 +1861,8 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
                       // Input Judul Tugas Card
                       AppCard(
                         padding: const EdgeInsets.all(AppSpacing.md),
+                        background: c.surface,
+                        borderColor: c.border.withValues(alpha: 0.55),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -1866,6 +1900,8 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
                       // Multi-Select Category Dropdown Card
                       AppCard(
                         padding: const EdgeInsets.all(AppSpacing.md),
+                        background: c.surface,
+                        borderColor: c.border.withValues(alpha: 0.55),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -2071,6 +2107,8 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
                       // Input Tenggat Waktu Card
                       AppCard(
                         padding: const EdgeInsets.all(AppSpacing.md),
+                        background: c.surface,
+                        borderColor: c.border.withValues(alpha: 0.55),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -2298,6 +2336,7 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
     required String label,
   }) {
     final bool isSelected = inputMode == mode;
+    final Color accent = mode == TaskInputMode.brainDump ? c.ai : c.blue;
     return Expanded(
       child: PressableScale(
         onTap: () {
@@ -2313,7 +2352,7 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
           height: AppSpacing.targetCompact,
           alignment: Alignment.center,
           decoration: BoxDecoration(
-            color: isSelected ? c.blue : c.transparent,
+            color: isSelected ? accent : c.transparent,
             borderRadius: BorderRadius.circular(AppSpacing.sm),
           ),
           child: Row(
@@ -2322,12 +2361,12 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
               Icon(
                 icon,
                 size: AppSpacing.iconSmall - 2,
-                color: isSelected ? c.onAccent : c.textSub,
+                color: isSelected ? c.onAccent : accent,
               ),
               const SizedBox(width: AppSpacing.xxs),
               Text(
                 label,
-                style: AppTypography.label(isSelected ? c.onAccent : c.textSub)
+                style: AppTypography.label(isSelected ? c.onAccent : accent)
                     .copyWith(
                       fontWeight: isSelected
                           ? FontWeight.w700
