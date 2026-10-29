@@ -55,10 +55,10 @@ void main() {
   });
 
   test(
-    'AppStore persists tasks, transactions, profile, settings, and theme',
+    'AppProvider persists tasks, transactions, profile, settings, and theme',
     () async {
       final MemoryAppStorage storage = MemoryAppStorage();
-      final AppStore store = AppStore(
+      final AppProvider store = AppProvider(
         storage: storage,
         settings: SettingsController(),
         theme: ThemeController(),
@@ -101,7 +101,7 @@ void main() {
       store.setLoggedIn(true);
       await store.save();
 
-      final AppStore restored = AppStore(
+      final AppProvider restored = AppProvider(
         storage: storage,
         settings: SettingsController(),
         theme: ThemeController(),
@@ -130,9 +130,9 @@ void main() {
     },
   );
 
-  test('AppStore keeps seeded data when stored JSON is invalid', () async {
+  test('AppProvider keeps seeded data when stored JSON is invalid', () async {
     final MemoryAppStorage storage = MemoryAppStorage('bukan-json');
-    final AppStore store = AppStore(
+    final AppProvider store = AppProvider(
       storage: storage,
       settings: SettingsController(),
       theme: ThemeController(),
