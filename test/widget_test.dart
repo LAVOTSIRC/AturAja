@@ -353,13 +353,15 @@ void main() {
         )
         .first;
 
-    await tester.drag(homeList, const Offset(0, -280));
+    // Sedikit drift horizontal tidak boleh dianggap sebagai swipe tab.
+    await tester.drag(homeList, const Offset(28, -280));
     await tester.pumpAndSettle();
     final double offset = tester
         .state<ScrollableState>(homeList)
         .position
         .pixels;
     expect(offset, greaterThan(0));
+    expect(find.byType(FinanceScreen).hitTestable(), findsNothing);
 
     await tester.fling(find.byType(HomeScreen), const Offset(-400, 0), 1000);
     await tester.pumpAndSettle();

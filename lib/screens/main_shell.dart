@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -134,6 +135,11 @@ class _SwipeableBranchViewState extends State<_SwipeableBranchView> {
   int _animationToken = 0;
   int? _programmaticTarget;
 
+  double _dragStartPixels = 0;
+  int _dragStartPage = 0;
+  double _dragDelta = 0;
+  bool _isDragging = false;
+
   @override
   void initState() {
     super.initState();
@@ -180,7 +186,76 @@ class _SwipeableBranchViewState extends State<_SwipeableBranchView> {
     }
   }
 
+  void _onDragStart(DragStartDetails details) {
+    final ScrollPosition position = _pageController.position;
+    _animationToken++;
+    _programmaticTarget = null;
+    _isDragging = true;
+    position.jumpTo(position.pixels);
+
+    _dragStartPixels = position.pixels;
+    _dragStartPage = (_pageController.page ?? _currentPage.toDouble()).round();
+    _dragDelta = 0;
+  }
+
+  void _onDragUpdate(DragUpdateDetails details) {
+    if (!_isDragging) {
+      return;
+    }
+
+    _dragDelta += details.delta.dx;
+    final ScrollPosition position = _pageController.position;
+    final double next = (_dragStartPixels - _dragDelta).clamp(
+      position.minScrollExtent,
+      position.maxScrollExtent,
+    );
+    position.jumpTo(next);
+  }
+
+  void _onDragEnd(DragEndDetails details) {
+    if (!_isDragging) {
+      return;
+    }
+
+    _isDragging = false;
+    final ScrollPosition position = _pageController.position;
+    final double viewport = position.viewportDimension;
+    final double velocity = details.primaryVelocity ?? 0;
+    final bool goNext = _dragDelta < -viewport * 0.18 || velocity < -350;
+    final bool goPrevious = _dragDelta > viewport * 0.18 || velocity > 350;
+
+    int target = _dragStartPage;
+    if (goNext) {
+      target++;
+    } else if (goPrevious) {
+      target--;
+    }
+    _settleTo(target);
+  }
+
+  void _onDragCancel() {
+    if (!_isDragging) {
+      return;
+    }
+    _isDragging = false;
+    _settleTo(_dragStartPage);
+  }
+
+  void _settleTo(int target) {
+    final int next = target.clamp(0, widget.children.length - 1);
+    _currentPage = next;
+    if (widget.navigationShell.currentIndex != next) {
+      widget.navigationShell.goBranch(next);
+    }
+    _animateToPage(next);
+  }
+
   void _onPageChanged(int index) {
+    // During a manual drag the route is only updated after the finger is
+    // released. This prevents a half-way page from hijacking vertical scrolls.
+    if (_isDragging) {
+      return;
+    }
     if (_programmaticTarget != null) {
       if (index == _programmaticTarget) {
         _programmaticTarget = null;
@@ -204,19 +279,59 @@ class _SwipeableBranchViewState extends State<_SwipeableBranchView> {
 
   @override
   Widget build(BuildContext context) {
-    return PageView(
-      controller: _pageController,
-      allowImplicitScrolling: true,
-      onPageChanged: _onPageChanged,
-      children: <Widget>[
-        for (int index = 0; index < widget.children.length; index++)
-          _BranchPage(
-            key: ValueKey<int>(index),
-            active: index == widget.navigationShell.currentIndex,
-            child: widget.children[index],
-          ),
-      ],
+    return RawGestureDetector(
+      behavior: HitTestBehavior.opaque,
+      gestures: <Type, GestureRecognizerFactory>{
+        _DeliberateHorizontalDragGestureRecognizer:
+            GestureRecognizerFactoryWithHandlers<
+              _DeliberateHorizontalDragGestureRecognizer
+            >(
+              () =>
+                  _DeliberateHorizontalDragGestureRecognizer(debugOwner: this),
+              (_DeliberateHorizontalDragGestureRecognizer instance) {
+                instance
+                  ..onStart = _onDragStart
+                  ..onUpdate = _onDragUpdate
+                  ..onEnd = _onDragEnd
+                  ..onCancel = _onDragCancel;
+              },
+            ),
+      },
+      child: PageView(
+        controller: _pageController,
+        // Gesture halaman ditangani sendiri agar butuh gerakan horizontal
+        // yang lebih disengaja. Scroll vertikal di dalam halaman tetap bebas.
+        physics: const NeverScrollableScrollPhysics(),
+        allowImplicitScrolling: true,
+        onPageChanged: _onPageChanged,
+        children: <Widget>[
+          for (int index = 0; index < widget.children.length; index++)
+            _BranchPage(
+              key: ValueKey<int>(index),
+              active: index == widget.navigationShell.currentIndex,
+              child: widget.children[index],
+            ),
+        ],
+      ),
     );
+  }
+}
+
+/// Recognizer horizontal dengan ambang lebih tinggi daripada scroll vertikal.
+/// Jadi gerakan vertikal (dengan sedikit drift ke samping) tetap menjadi scroll,
+/// sedangkan swipe ke samping yang disengaja baru memindahkan halaman.
+class _DeliberateHorizontalDragGestureRecognizer
+    extends HorizontalDragGestureRecognizer {
+  _DeliberateHorizontalDragGestureRecognizer({super.debugOwner});
+
+  @override
+  bool hasSufficientGlobalDistanceToAccept(
+    PointerDeviceKind pointerDeviceKind,
+    double? deviceTouchSlop,
+  ) {
+    final double slop =
+        deviceTouchSlop ?? computeHitSlop(pointerDeviceKind, gestureSettings);
+    return globalDistanceMoved.abs() > slop * 2.25;
   }
 }
 
