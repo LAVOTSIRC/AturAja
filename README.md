@@ -45,11 +45,13 @@ Project tidak membutuhkan API key, database, akun cloud, atau file `.env`.
    ```
 
 Saat dibuka, aplikasi menampilkan splash screen AturAja selama sekitar tiga
-detik, kemudian masuk ke `MainShell`. Navigasi utama terdiri dari tab Home,
-Keuangan, Tugas, dan Profil.
+detik. Jika belum ada sesi login, aplikasi menuju halaman login demo; setelah
+login, pengguna masuk ke `MainShell` dengan tab Home, Keuangan, Tugas, dan
+Profil. Tab utama dapat diganti lewat bottom navigation atau dengan swipe ke
+kiri/kanan. Status login disimpan sehingga sesi tetap aktif setelah restart.
 
-> Catatan: screen login tersedia sebagai alur simulasi setelah logout dari
-> Profil, tetapi bukan screen pertama saat aplikasi dijalankan.
+> Login hanya memvalidasi format email dan password minimal enam karakter;
+> tidak ada autentikasi ke server.
 
 ## Command Run
 
@@ -63,6 +65,7 @@ Keuangan, Tugas, dan Profil.
 | `flutter build apk --debug`               | Membuat APK debug.                                             |
 | `flutter build apk --release`             | Membuat APK release dengan signing debug untuk kebutuhan demo. |
 | `dart run tool/generate_splash_icon.dart` | Membuat ulang asset icon splash Android 12+.                   |
+| `dart run flutter_launcher_icons`         | Membuat ulang ikon aplikasi Android dan iOS dari logo AturAja. |
 
 Jika asset splash diubah, jalankan juga generator splash berikut sebelum build:
 
@@ -70,19 +73,16 @@ Jika asset splash diubah, jalankan juga generator splash berikut sebelum build:
 dart run flutter_native_splash:create
 ```
 
-## Persistensi Data
+## Dummy Data
 
-Aplikasi AturAja menggunakan `AppProvider` sebagai *centralized store* yang terintegrasi dengan `SharedPreferences`.
-Seluruh perubahan data tugas (tambah, edit, toggle selesai, dan hapus) serta transaksi, profil, dan pengaturan tersimpan secara otomatis secara lokal dan tetap bertahan saat aplikasi di-restart.
-
-## Dummy Data Awal
-
-Data awal (seeded data) didefinisikan di `lib/data/models.dart`. Saat pertama kali dijalankan, aplikasi akan memuat data awal ini dan menyimpannya ke penyimpanan lokal.
-
+Data demo awal didefinisikan di `lib/data/models.dart`. Setelah aplikasi
+dijalankan pertama kali, perubahan tugas, transaksi, profil, pengaturan, tema,
+dan status login disimpan secara lokal melalui `SharedPreferences` dan tetap
+ada setelah restart.
 
 ### Data keuangan
 
-- Saldo tersisa: `Rp856.000`.
+- Saldo tersisa: `Rp356.010`.
 - Pengeluaran bulan ini: `Rp143.990` dari limit `Rp1.200.000`.
 - Transaksi contoh: Batagor depan kampus, Spotify Premium, Kiriman Orang Tua,
   Grab Food, dan Kopi Kenangan.
@@ -113,12 +113,12 @@ tugas lain dipakai untuk memperagakan status mendesak dan deadline.
 
 ## Skenario Simulasi
 
-### 1. Menambah transaksi cepat
+### 1. Menambah transaksi
 
-1. Buka tab **Home**.
-2. Pilih **Catat** untuk membuka form transaksi cepat.
-3. Masukkan nominal dan deskripsi transaksi, lalu simpan.
-4. Untuk input berbasis kalimat, pilih **Brain Dump**.
+1. Buka tab **Keuangan**.
+2. Pilih **Pemasukan** atau **Pengeluaran**.
+3. Masukkan nominal, kategori, dan deskripsi, lalu simpan.
+4. Untuk input berbasis kalimat, gunakan **Brain Dump** dari Home.
 
 ### 2. Menambah dan menyelesaikan tugas
 
@@ -142,15 +142,20 @@ Kategori**. Parser lokal mengenali kategori berdasarkan kata kunci:
 Fitur ini adalah simulasi pencocokan kata kunci lokal, bukan integrasi model AI
 eksternal.
 
-### 4. Simulasi scan struk
+### 4. Scan struk dengan kamera
 
-1. Dari Home pilih **Scan Struk** atau tombol scan pada bagian bawah layar.
-2. Pilih **Proses foto struk** untuk menjalankan simulasi pemrosesan lokal.
-3. Konfirmasi nominal default `Rp28.500`, atau ubah ke angka positif lain.
-4. Pilih konfirmasi untuk menutup screen scan.
+1. Dari Home pilih **Scan Struk** atau tombol **Scan** di tab Keuangan.
+2. Saat pertama kali digunakan, aplikasi meminta izin kamera. Setelah diizinkan,
+   preview kamera langsung tampil di dalam halaman Scan tanpa membuka aplikasi
+   kamera terpisah.
+3. Arahkan kamera ke struk, lalu tekan tombol shutter. Foto hasil jepretan
+   ditampilkan pada layar konfirmasi. OCR dan rincian struk masih disimulasikan;
+   koreksi nominal jika diperlukan.
+4. Pilih **Konfirmasi & Catat** untuk menyimpan transaksi beserta path foto.
 
-Fitur ini belum menggunakan kamera atau OCR sungguhan; area kamera dan proses
-pembacaan struk hanya mensimulasikan jeda pemrosesan.
+Foto struk disimpan di cache aplikasi, sedangkan data transaksi dan path foto
+disimpan di penyimpanan lokal. Jika izin kamera ditolak permanen, aplikasi
+menyediakan tombol menuju pengaturan izin.
 
 ### 5. Pengaturan Profil
 

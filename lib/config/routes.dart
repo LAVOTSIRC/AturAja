@@ -117,25 +117,9 @@ GoRouter createAppRouter({String initialLocation = AppRoutes.splash}) {
             categoryLabel: args['label'] as String,
             categoryColor: args['color'] as Color,
             transactions: args['transactions'] as List<TransactionItem>,
-            onTransactionUpdated: (TransactionItem updated) {
-              final int index = transactionStore.indexWhere(
-                (TransactionItem item) => item.id == updated.id,
-              );
-              if (index >= 0) {
-                transactionStore[index] = updated;
-                app.transactionsChanged();
-              }
-            },
-            onTransactionDeleted: (int id) {
-              transactionStore.removeWhere(
-                (TransactionItem item) => item.id == id,
-              );
-              app.transactionsChanged();
-            },
-            onTransactionRestored: (TransactionItem restored) {
-              transactionStore.insert(0, restored);
-              app.transactionsChanged();
-            },
+            onTransactionUpdated: app.updateTransaction,
+            onTransactionDeleted: app.deleteTransaction,
+            onTransactionRestored: app.restoreTransaction,
           );
         },
       ),
@@ -179,14 +163,25 @@ GoRouter createAppRouter({String initialLocation = AppRoutes.splash}) {
           );
         },
       ),
-      StatefulShellRoute.indexedStack(
+      StatefulShellRoute(
         builder:
             (
               BuildContext context,
               GoRouterState state,
               StatefulNavigationShell navigationShell,
             ) {
-              return MainShell(navigationShell: navigationShell);
+              return navigationShell;
+            },
+        navigatorContainerBuilder:
+            (
+              BuildContext context,
+              StatefulNavigationShell navigationShell,
+              List<Widget> children,
+            ) {
+              return MainShell(
+                navigationShell: navigationShell,
+                children: children,
+              );
             },
         branches: <StatefulShellBranch>[
           StatefulShellBranch(
@@ -197,7 +192,7 @@ GoRouter createAppRouter({String initialLocation = AppRoutes.splash}) {
                   return Consumer<AppProvider>(
                     builder: (BuildContext context, AppProvider app, _) {
                       return HomeScreen(
-                        onScan: () => context.push(AppRoutes.scan),
+                        onScan: () => _openScan(context),
                         onAddTask: () => context.push(AppRoutes.taskForm),
                         onBrainDump: () => _openBrainDump(context),
                         onViewFinance: () => context.go(AppRoutes.finance),
@@ -216,10 +211,7 @@ GoRouter createAppRouter({String initialLocation = AppRoutes.splash}) {
                 builder: (BuildContext context, GoRouterState state) {
                   return Consumer<AppProvider>(
                     builder: (BuildContext context, AppProvider app, _) {
-                      return FinanceScreen(
-                        onScan: () => context.push(AppRoutes.scan),
-                        onTransactionsChanged: app.transactionsChanged,
-                      );
+                      return FinanceScreen(onScan: () => _openScan(context));
                     },
                   );
                 },
@@ -258,6 +250,10 @@ GoRouter createAppRouter({String initialLocation = AppRoutes.splash}) {
                         settings: app.settings,
                         initialProfile: app.profile,
                         onProfileChanged: app.updateProfile,
+                        completedTaskCount: app.tasks
+                            .where((TaskItem task) => task.done)
+                            .length,
+                        totalSavings: app.balance,
                         onLogout: () {
                           app.setLoggedIn(false);
                           context.go(AppRoutes.login);
@@ -276,20 +272,34 @@ GoRouter createAppRouter({String initialLocation = AppRoutes.splash}) {
 }
 
 Future<void> _openBrainDump(BuildContext context) async {
-  final AppProvider app = context.read<AppProvider>();
   final TransactionItem? note = await context.push<TransactionItem>(
     AppRoutes.brainDump,
   );
   if (note == null || !context.mounted) {
     return;
   }
-  app.transactionsChanged();
   ScaffoldMessenger.maybeOf(context)?.showSnackBar(
     SnackBar(
       content: Text(
         note.amount >= 0
             ? 'Catatan keuangan "${note.label}" dicatat.'
             : 'Catatan pengeluaran "${note.label}" dicatat.',
+      ),
+    ),
+  );
+}
+
+Future<void> _openScan(BuildContext context) async {
+  final TransactionItem? transaction = await context.push<TransactionItem>(
+    AppRoutes.scan,
+  );
+  if (transaction == null || !context.mounted) {
+    return;
+  }
+  ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+    SnackBar(
+      content: Text(
+        'Transaksi "${transaction.label}" dari scan struk berhasil dicatat.',
       ),
     ),
   );

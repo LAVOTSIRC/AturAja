@@ -85,8 +85,7 @@ void main() {
       );
 
       store.addTask(newTask);
-      transactionStore.insert(0, newTransaction);
-      store.transactionsChanged();
+      store.addTransaction(newTransaction);
       store.updateProfile(
         const ProfileData(
           fullName: 'Cristoval Pratama Siahaan',
@@ -129,6 +128,74 @@ void main() {
       expect(restored.isLoggedIn, isTrue);
     },
   );
+
+  test('AppProvider persists transaction changes and task deletion', () async {
+    final MemoryAppStorage storage = MemoryAppStorage();
+    final AppProvider store = AppProvider(
+      storage: storage,
+      settings: SettingsController(),
+      theme: ThemeController(),
+      tasks: sampleTasks,
+      transactions: const <TransactionItem>[],
+      profile: ProfileData.initial,
+      isLoggedIn: false,
+    );
+    addTearDown(store.dispose);
+    await store.load();
+
+    final TaskItem deletedTask = store.tasks.first;
+    store.deleteTask(deletedTask.id);
+
+    const TransactionItem transaction = TransactionItem(
+      id: 888,
+      label: 'Transaksi awal',
+      amount: -15000,
+      cat: 'food',
+      time: '10:00',
+    );
+    store.addTransaction(transaction);
+    store.updateTransaction(
+      transaction.copyWith(label: 'Transaksi setelah edit'),
+    );
+    await store.save();
+
+    final AppProvider restored = AppProvider(
+      storage: storage,
+      settings: SettingsController(),
+      theme: ThemeController(),
+      tasks: const <TaskItem>[],
+      transactions: const <TransactionItem>[],
+      profile: ProfileData.initial,
+      isLoggedIn: false,
+    );
+    addTearDown(restored.dispose);
+    await restored.load();
+
+    expect(
+      restored.tasks.any((TaskItem task) => task.id == deletedTask.id),
+      isFalse,
+    );
+    expect(restored.transactions.single.label, 'Transaksi setelah edit');
+
+    restored.deleteTransaction(transaction.id);
+    expect(restored.transactions, isEmpty);
+    restored.restoreTransaction(transaction);
+    expect(restored.transactions.single.id, transaction.id);
+    await restored.save();
+
+    final AppProvider reloaded = AppProvider(
+      storage: storage,
+      settings: SettingsController(),
+      theme: ThemeController(),
+      tasks: const <TaskItem>[],
+      transactions: const <TransactionItem>[],
+      profile: ProfileData.initial,
+      isLoggedIn: false,
+    );
+    addTearDown(reloaded.dispose);
+    await reloaded.load();
+    expect(reloaded.transactions.single.id, transaction.id);
+  });
 
   test('AppProvider keeps seeded data when stored JSON is invalid', () async {
     final MemoryAppStorage storage = MemoryAppStorage('bukan-json');

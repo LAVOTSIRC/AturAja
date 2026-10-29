@@ -220,7 +220,7 @@ class ProfileData {
   }
 }
 
-final List<TransactionItem> transactionStore = [
+final List<TransactionItem> sampleTransactions = [
   TransactionItem(
     id: 1,
     label: 'Batagor depan kampus',

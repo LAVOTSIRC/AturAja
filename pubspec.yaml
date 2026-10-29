@@ -1,5 +1,5 @@
 name: bruh
-description: "A new Flutter project."
+description: "AturAja - pengelola tugas, keuangan, dan rutinitas mahasiswa."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
@@ -38,6 +38,9 @@ dependencies:
   shared_preferences: ^2.5.6
   provider: ^6.1.5+1
   go_router: ^18.1.1
+  # 13.x requires compileSdk 37; proyek ini masih memakai compileSdk 36.
+  permission_handler: 12.0.0
+  camera: ^0.12.2
 
 dev_dependencies:
   flutter_test:
@@ -51,6 +54,7 @@ dev_dependencies:
   flutter_lints: ^6.0.0
   flutter_native_splash: ^2.4.8
   image: ^4.10.1
+  flutter_launcher_icons: ^0.14.4
 
 # Configuration for the flutter_native_splash package. This generates the
 # native (pre-Flutter-engine) splash screen shown on Android/iOS so the
@@ -73,6 +77,16 @@ flutter_native_splash:
   android: true
   ios: true
   web: false
+
+# Launcher icon memakai logo AturAja yang sama dengan splash screen.
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/images/maketh1.jpg"
+  adaptive_icon_background: "#FFFFFF"
+  adaptive_icon_foreground: "assets/images/maketh1.jpg"
+  min_sdk_android: 21
+  remove_alpha_ios: true
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec

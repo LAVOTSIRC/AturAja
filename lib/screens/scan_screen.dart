@@ -1,5 +1,13 @@
-import 'package:flutter/material.dart';
+import 'dart:async';
+import 'dart:io';
 
+import 'package:camera/camera.dart';
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+
+import '../data/models.dart';
+import '../providers/app_provider.dart';
+import '../services/receipt_camera.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_typography.dart';
@@ -7,6 +15,11 @@ import '../theme/theme_scope.dart';
 import '../widgets/common.dart';
 
 enum _ScanStep { scan, confirm }
+
+String _shortDate(DateTime date) {
+  String twoDigits(int value) => value.toString().padLeft(2, '0');
+  return '${twoDigits(date.day)}/${twoDigits(date.month)}/${date.year}';
+}
 
 class ScanScreen extends StatefulWidget {
   const ScanScreen({super.key});
@@ -16,13 +29,17 @@ class ScanScreen extends StatefulWidget {
 }
 
 class _ScanScreenState extends State<ScanScreen>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   _ScanStep step = _ScanStep.scan;
   final TextEditingController amountController = TextEditingController(
     text: '28500',
   );
   bool isProcessing = false;
+  bool _isCameraInitializing = false;
   String? errorMessage;
+  String? _receiptImagePath;
+  CameraController? _cameraController;
+  int _cameraSession = 0;
 
   // Scanning line animation
   late AnimationController _scanLineController;
@@ -31,6 +48,7 @@ class _ScanScreenState extends State<ScanScreen>
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _scanLineController = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 2),
@@ -38,13 +56,121 @@ class _ScanScreenState extends State<ScanScreen>
     _scanLineAnim = Tween<double>(begin: 0, end: 1).animate(
       CurvedAnimation(parent: _scanLineController, curve: Curves.easeInOut),
     );
+    unawaited(_initializeCamera());
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _cameraSession++;
+    final CameraController? controller = _cameraController;
+    _cameraController = null;
+    if (controller != null) {
+      unawaited(controller.dispose());
+    }
     amountController.dispose();
     _scanLineController.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.detached) {
+      unawaited(_releaseCamera());
+    } else if (state == AppLifecycleState.resumed && step == _ScanStep.scan) {
+      unawaited(_initializeCamera());
+    }
+  }
+
+  Future<void> _initializeCamera() async {
+    if (_isCameraInitializing || _cameraController != null) {
+      return;
+    }
+    final int session = ++_cameraSession;
+    if (mounted) {
+      setState(() {
+        _isCameraInitializing = true;
+        errorMessage = null;
+      });
+    }
+
+    try {
+      final CameraController? controller =
+          await ReceiptCamera.createController();
+      if (!mounted || session != _cameraSession) {
+        if (controller != null) {
+          unawaited(controller.dispose());
+        }
+        return;
+      }
+      setState(() {
+        _cameraController = controller;
+        _isCameraInitializing = false;
+      });
+    } on ReceiptCameraException catch (error) {
+      if (!mounted || session != _cameraSession) {
+        return;
+      }
+      setState(() {
+        _isCameraInitializing = false;
+        errorMessage = error.message;
+      });
+      if (error.permanentlyDenied) {
+        _showCameraSettingsAction();
+      }
+    } catch (_) {
+      if (!mounted || session != _cameraSession) {
+        return;
+      }
+      setState(() {
+        _isCameraInitializing = false;
+        errorMessage =
+            'Kamera gagal dibuka. Pastikan izin kamera aktif lalu coba lagi.';
+      });
+    }
+  }
+
+  Future<void> _releaseCamera() async {
+    _cameraSession++;
+    final CameraController? controller = _cameraController;
+    if (controller == null) {
+      if (mounted && _isCameraInitializing) {
+        setState(() => _isCameraInitializing = false);
+      }
+      return;
+    }
+
+    if (mounted) {
+      setState(() {
+        _cameraController = null;
+        _isCameraInitializing = false;
+      });
+    } else {
+      _cameraController = null;
+      _isCameraInitializing = false;
+    }
+
+    try {
+      await controller.dispose();
+    } catch (_) {
+      // Controller may already be detached by the platform.
+    }
+  }
+
+  void _showCameraSettingsAction() {
+    if (!mounted) {
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Text('Izin kamera diblokir permanen.'),
+        action: SnackBarAction(
+          label: 'Pengaturan',
+          onPressed: ReceiptCamera.openSettings,
+        ),
+      ),
+    );
   }
 
   void _clearError() {
@@ -54,25 +180,55 @@ class _ScanScreenState extends State<ScanScreen>
   }
 
   Future<void> _captureReceipt() async {
-    if (isProcessing) return;
+    if (isProcessing || _isCameraInitializing) return;
+
+    if (_cameraController == null && !ReceiptCamera.isDebugOverrideActive) {
+      setState(() {
+        isProcessing = true;
+        errorMessage = null;
+      });
+      await _initializeCamera();
+      if (!mounted) return;
+      if (_cameraController == null) {
+        setState(() => isProcessing = false);
+        return;
+      }
+    }
+
     setState(() {
       isProcessing = true;
       errorMessage = null;
     });
 
     try {
-      await Future<void>.delayed(const Duration(milliseconds: 900));
+      final String? path = await ReceiptCamera.capture(_cameraController);
+      if (!mounted) return;
+
+      if (path == null) {
+        setState(() => isProcessing = false);
+        return;
+      }
+
+      setState(() {
+        isProcessing = false;
+        _receiptImagePath = path;
+        step = _ScanStep.confirm;
+      });
+      await _releaseCamera();
+    } on ReceiptCameraException catch (error) {
       if (!mounted) return;
       setState(() {
         isProcessing = false;
-        step = _ScanStep.confirm;
+        errorMessage = error.message;
       });
+      if (error.permanentlyDenied) {
+        _showCameraSettingsAction();
+      }
     } catch (_) {
       if (!mounted) return;
       setState(() {
         isProcessing = false;
-        errorMessage =
-            'Pemindaian gagal. Coba lagi dengan pencahayaan yang lebih baik.';
+        errorMessage = 'Kamera gagal mengambil foto. Pastikan izin kamera aktif lalu coba lagi.';
       });
     }
   }
@@ -102,13 +258,25 @@ class _ScanScreenState extends State<ScanScreen>
         throw StateError('nominal berubah');
       }
       if (!mounted) return;
-      Navigator.of(context).pop();
+
+      // OCR masih disimulasikan, tetapi foto struk yang diambil dari kamera
+      // asli ikut disimpan pada transaksi.
+      final TransactionItem transaction = TransactionItem(
+        id: DateTime.now().millisecondsSinceEpoch,
+        label: 'Belanja di Indomaret',
+        amount: -amount,
+        cat: 'belanja',
+        time: TimeOfDay.now().format(context),
+        date: 'Hari ini',
+        receiptImagePath: _receiptImagePath,
+      );
+      context.read<AppProvider>().addTransaction(transaction);
+      Navigator.of(context).pop<TransactionItem>(transaction);
     } catch (_) {
       if (!mounted) return;
       setState(() {
         isProcessing = false;
-        errorMessage =
-            'Nominal belum bisa diproses. Periksa kembali angka yang dimasukkan.';
+        errorMessage = 'Nominal belum bisa diproses. Periksa kembali angka yang dimasukkan.';
       });
     }
   }
@@ -118,10 +286,12 @@ class _ScanScreenState extends State<ScanScreen>
       step = _ScanStep.scan;
       isProcessing = false;
       errorMessage = null;
+      _receiptImagePath = null;
     });
     if (!_scanLineController.isAnimating) {
       _scanLineController.repeat(reverse: true);
     }
+    unawaited(_initializeCamera());
   }
 
   @override
@@ -130,35 +300,97 @@ class _ScanScreenState extends State<ScanScreen>
     return Scaffold(
       backgroundColor: Colors.black,
       body: SafeArea(
-        child: step == _ScanStep.scan
-            ? _cameraViewBody(c)
-            : _confirmBody(c),
+        child: step == _ScanStep.scan ? _cameraViewBody(c) : _confirmBody(c),
       ),
     );
   }
 
   // ── Camera view (scan step) ──────────────────────────────────────────────
 
+  Widget _cameraBackground() {
+    return Container(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Color(0xFF0A0A0A), Color(0xFF1A1A1A), Color(0xFF0D1520)],
+        ),
+      ),
+      child: CustomPaint(painter: _NoisePainter()),
+    );
+  }
+
+  Widget _buildCameraPreview(AppColors c) {
+    final CameraController? controller = _cameraController;
+    if (controller == null || !controller.value.isInitialized) {
+      return Stack(
+        fit: StackFit.expand,
+        children: [
+          _cameraBackground(),
+          if (_isCameraInitializing)
+            const Center(
+              child: CircularProgressIndicator(
+                color: Colors.white,
+                strokeWidth: 2,
+              ),
+            )
+          else
+            Center(
+              child: Icon(
+                Icons.no_photography_outlined,
+                size: AppSpacing.xl,
+                color: c.textMuted,
+              ),
+            ),
+        ],
+      );
+    }
+
+    return LayoutBuilder(
+      builder: (BuildContext context, BoxConstraints constraints) {
+        final Size viewport = constraints.biggest;
+        if (viewport.width <= 0 || viewport.height <= 0) {
+          return CameraPreview(controller);
+        }
+
+        // CameraPreview keeps the sensor aspect ratio inside the available
+        // space. Scale it up until it covers the viewfinder box, cropping the
+        // excess instead of showing black letterbox bars.
+        final double viewportAspect = viewport.width / viewport.height;
+        final double previewAspect = viewport.width > viewport.height
+            ? controller.value.aspectRatio
+            : 1 / controller.value.aspectRatio;
+        final double scale = previewAspect >= viewportAspect
+            ? previewAspect / viewportAspect
+            : viewportAspect / previewAspect;
+
+        return ClipRect(
+          child: Transform.scale(
+            scale: scale,
+            child: Center(child: CameraPreview(controller)),
+          ),
+        );
+      },
+    );
+  }
+
+  String get _cameraStatusLabel {
+    if (_cameraController != null) {
+      return 'KAMERA AKTIF';
+    }
+    if (_isCameraInitializing) {
+      return 'MENYIAPKAN';
+    }
+    if (ReceiptCamera.isDebugOverrideActive) {
+      return 'KAMERA SIAP';
+    }
+    return 'KAMERA OFFLINE';
+  }
+
   Widget _cameraViewBody(AppColors c) {
     return Stack(
       children: [
-        // Simulated camera background
-        Positioned.fill(
-          child: Container(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  const Color(0xFF0A0A0A),
-                  const Color(0xFF1A1A1A),
-                  const Color(0xFF0D1520),
-                ],
-              ),
-            ),
-            child: CustomPaint(painter: _NoisePainter()),
-          ),
-        ),
+        Positioned.fill(child: _cameraBackground()),
 
         // Top bar
         Positioned(
@@ -206,10 +438,7 @@ class _ScanScreenState extends State<ScanScreen>
                   ),
                 ),
                 const SizedBox(width: AppSpacing.sm),
-                Text(
-                  'Scan Struk',
-                  style: AppTypography.title(Colors.white),
-                ),
+                Text('Scan Struk', style: AppTypography.title(Colors.white)),
                 const Spacer(),
                 Container(
                   padding: const EdgeInsets.symmetric(
@@ -226,14 +455,16 @@ class _ScanScreenState extends State<ScanScreen>
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(
+                      Icon(
                         Icons.circle,
                         size: AppSpacing.xs,
-                        color: Color(0xFF2BD9A8),
+                        color: _cameraController != null
+                            ? const Color(0xFF2BD9A8)
+                            : Colors.white54,
                       ),
                       const SizedBox(width: AppSpacing.xxs),
                       Text(
-                        'KAMERA AKTIF',
+                        _cameraStatusLabel,
                         style: AppTypography.micro(Colors.white)
                             .copyWith(letterSpacing: 0.8),
                       ),
@@ -255,6 +486,18 @@ class _ScanScreenState extends State<ScanScreen>
                 height: AppSpacing.scanFrame + 80,
                 child: Stack(
                   children: [
+                    // Camera preview is confined to the center viewfinder
+                    // cutout; the rest of the screen stays dark.
+                    Positioned(
+                      left: AppSpacing.xl,
+                      top: AppSpacing.xl,
+                      right: AppSpacing.xl,
+                      bottom: AppSpacing.xl,
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(AppSpacing.md),
+                        child: _buildCameraPreview(c),
+                      ),
+                    ),
                     // Dim overlay outside the frame
                     Positioned.fill(
                       child: CustomPaint(
@@ -280,8 +523,10 @@ class _ScanScreenState extends State<ScanScreen>
               ),
               const SizedBox(height: AppSpacing.lg),
               Text(
-                'Arahkan kamera ke struk belanja',
-                style: AppTypography.caption(Colors.white.withValues(alpha: 0.8)),
+                'Ketuk tombol untuk memotret struk',
+                style: AppTypography.caption(
+                  Colors.white.withValues(alpha: 0.8),
+                ),
               ),
               const SizedBox(height: AppSpacing.xxs),
               Text(
@@ -306,7 +551,11 @@ class _ScanScreenState extends State<ScanScreen>
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.error_outline, color: Colors.white, size: AppSpacing.iconSmall),
+                  const Icon(
+                    Icons.error_outline,
+                    color: Colors.white,
+                    size: AppSpacing.iconSmall,
+                  ),
                   const SizedBox(width: AppSpacing.xs),
                   Expanded(
                     child: Text(
@@ -341,19 +590,24 @@ class _ScanScreenState extends State<ScanScreen>
                 ],
               ),
             ),
-            child: isProcessing
-                ? const Center(
+            child: isProcessing || _isCameraInitializing
+                ? Center(
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        CircularProgressIndicator(
+                        const CircularProgressIndicator(
                           color: Colors.white,
                           strokeWidth: 2,
                         ),
-                        SizedBox(height: AppSpacing.sm),
+                        const SizedBox(height: AppSpacing.sm),
                         Text(
-                          'Memproses struk...',
-                          style: TextStyle(color: Colors.white, fontSize: 13),
+                          _isCameraInitializing
+                              ? 'Menyiapkan kamera...'
+                              : 'Memproses struk...',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 13,
+                          ),
                         ),
                       ],
                     ),
@@ -372,10 +626,7 @@ class _ScanScreenState extends State<ScanScreen>
                             height: 72,
                             decoration: BoxDecoration(
                               shape: BoxShape.circle,
-                              border: Border.all(
-                                color: Colors.white,
-                                width: 3,
-                              ),
+                              border: Border.all(color: Colors.white, width: 3),
                             ),
                             padding: const EdgeInsets.all(4),
                             child: Container(
@@ -390,7 +641,9 @@ class _ScanScreenState extends State<ScanScreen>
                       const SizedBox(height: AppSpacing.sm),
                       Text(
                         'Ambil Foto Struk',
-                        style: AppTypography.meta(Colors.white.withValues(alpha: 0.7)),
+                        style: AppTypography.meta(
+                          Colors.white.withValues(alpha: 0.7),
+                        ),
                       ),
                     ],
                   ),
@@ -459,6 +712,29 @@ class _ScanScreenState extends State<ScanScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (_receiptImagePath != null &&
+              File(_receiptImagePath!).existsSync()) ...[
+            ClipRRect(
+              borderRadius: BorderRadius.circular(AppSpacing.md),
+              child: Image.file(
+                File(_receiptImagePath!),
+                width: double.infinity,
+                height: 170,
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) => Container(
+                  height: 170,
+                  color: c.surfaceHigh,
+                  alignment: Alignment.center,
+                  child: Icon(
+                    Icons.receipt_long_outlined,
+                    size: AppSpacing.xl,
+                    color: c.textMuted,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: AppSpacing.sm),
+          ],
           AppCard(
             padding: const EdgeInsets.fromLTRB(
               AppSpacing.md,
@@ -486,7 +762,7 @@ class _ScanScreenState extends State<ScanScreen>
                     ),
                     const SizedBox(width: AppSpacing.xs),
                     Text(
-                      'Struk terbaca — keyakinan 94%',
+                      'Foto struk berhasil diambil',
                       style: AppTypography.meta(c.success)
                           .copyWith(fontWeight: FontWeight.w600),
                     ),
@@ -507,7 +783,7 @@ class _ScanScreenState extends State<ScanScreen>
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'INDOMARET · 13/09/2026',
+                        'INDOMARET · ${_shortDate(DateTime.now())}',
                         style: AppTypography.mono(c.textSub),
                       ),
                       Text(
@@ -524,7 +800,10 @@ class _ScanScreenState extends State<ScanScreen>
                       ),
                       Padding(
                         padding: const EdgeInsets.only(top: AppSpacing.xxs),
-                        child: Container(height: AppSpacing.xxs, color: c.border),
+                        child: Container(
+                          height: AppSpacing.xxs,
+                          color: c.border,
+                        ),
                       ),
                       Padding(
                         padding: const EdgeInsets.only(top: AppSpacing.xxs),
@@ -583,6 +862,11 @@ class _ScanScreenState extends State<ScanScreen>
             ),
           ),
           const SizedBox(height: AppSpacing.sm),
+          Text(
+            'Hasil OCR masih disimulasikan. Foto asli tetap disimpan bersama transaksi.',
+            style: AppTypography.micro(c.textMuted),
+          ),
+          const SizedBox(height: AppSpacing.xs),
           Text(
             'Koreksi nominal jika perlu',
             style: AppTypography.meta(c.textMuted),
@@ -681,8 +965,7 @@ class _ViewfinderOverlayPainter extends CustomPainter {
     );
 
     // Dim the area outside the frame
-    final Paint dimPaint = Paint()
-      ..color = Colors.black.withValues(alpha: 0.5);
+    final Paint dimPaint = Paint()..color = Colors.black.withValues(alpha: 0.5);
     final Path path = Path.combine(
       PathOperation.difference,
       Path()..addRect(outer),
@@ -744,17 +1027,18 @@ class _ScanLinePainter extends CustomPainter {
     final double y = top + (bottom - top) * progress;
 
     final Paint paint = Paint()
-      ..shader = LinearGradient(
-        begin: Alignment.centerLeft,
-        end: Alignment.centerRight,
-        colors: [
-          color.withValues(alpha: 0),
-          color.withValues(alpha: 0.8),
-          color.withValues(alpha: 0),
-        ],
-      ).createShader(
-        Rect.fromLTRB(frameInset, y, size.width - frameInset, y + 2),
-      )
+      ..shader =
+          LinearGradient(
+            begin: Alignment.centerLeft,
+            end: Alignment.centerRight,
+            colors: [
+              color.withValues(alpha: 0),
+              color.withValues(alpha: 0.8),
+              color.withValues(alpha: 0),
+            ],
+          ).createShader(
+            Rect.fromLTRB(frameInset, y, size.width - frameInset, y + 2),
+          )
       ..strokeWidth = 2
       ..style = PaintingStyle.stroke;
 

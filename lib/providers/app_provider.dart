@@ -15,6 +15,7 @@ class AppProvider extends ChangeNotifier {
   final ThemeController theme;
 
   List<TaskItem> tasks;
+  List<TransactionItem> _transactions;
   ProfileData profile;
   bool isLoggedIn;
 
@@ -26,15 +27,20 @@ class AppProvider extends ChangeNotifier {
     required this.settings,
     required this.theme,
     required List<TaskItem> tasks,
+    List<TransactionItem>? transactions,
     required this.profile,
     required this.isLoggedIn,
-  }) : tasks = List<TaskItem>.of(tasks) {
+  }) : tasks = List<TaskItem>.of(tasks),
+       _transactions = List<TransactionItem>.of(
+         transactions ?? sampleTransactions,
+       ) {
     settings.addListener(_onDependencyChanged);
     theme.addListener(_onDependencyChanged);
   }
 
   factory AppProvider.inMemory({
     List<TaskItem>? tasks,
+    List<TransactionItem>? transactions,
     ProfileData? profile,
     bool isLoggedIn = false,
   }) {
@@ -43,6 +49,7 @@ class AppProvider extends ChangeNotifier {
       settings: SettingsController(),
       theme: ThemeController(),
       tasks: tasks ?? sampleTasks,
+      transactions: transactions,
       profile: profile ?? ProfileData.initial,
       isLoggedIn: isLoggedIn,
     );
@@ -62,16 +69,17 @@ class AppProvider extends ChangeNotifier {
     return provider;
   }
 
-  List<TransactionItem> get transactions => transactionStore;
+  List<TransactionItem> get transactions =>
+      List<TransactionItem>.unmodifiable(_transactions);
 
   List<TransactionItem> get recentTransactions =>
-      transactionStore.take(4).toList();
+      _transactions.take(4).toList();
 
-  int get totalIncome => transactionStore
+  int get totalIncome => _transactions
       .where((TransactionItem item) => item.amount > 0)
       .fold(0, (int sum, TransactionItem item) => sum + item.amount);
 
-  int get totalExpense => transactionStore
+  int get totalExpense => _transactions
       .where((TransactionItem item) => item.amount < 0)
       .fold(0, (int sum, TransactionItem item) => sum + item.amount.abs());
 
@@ -137,16 +145,13 @@ class AppProvider extends ChangeNotifier {
 
       final dynamic rawTransactions = data['transactions'];
       if (rawTransactions is List) {
-        final List<TransactionItem> loadedTransactions = rawTransactions
+        _transactions = rawTransactions
             .whereType<Map>()
             .map(
               (Map item) =>
                   TransactionItem.fromJson(Map<String, dynamic>.from(item)),
             )
             .toList();
-        transactionStore
-          ..clear()
-          ..addAll(loadedTransactions);
       }
 
       final dynamic rawProfile = data['profile'];
@@ -176,7 +181,7 @@ class AppProvider extends ChangeNotifier {
   Map<String, dynamic> toJson() => <String, dynamic>{
     'version': 1,
     'tasks': tasks.map((TaskItem task) => task.toJson()).toList(),
-    'transactions': transactionStore
+    'transactions': _transactions
         .map((TransactionItem transaction) => transaction.toJson())
         .toList(),
     'profile': profile.toJson(),
@@ -231,6 +236,48 @@ class AppProvider extends ChangeNotifier {
     _changed();
   }
 
+  void addTransaction(TransactionItem transaction) {
+    _transactions = <TransactionItem>[transaction, ..._transactions];
+    _changed();
+  }
+
+  void updateTransaction(TransactionItem transaction) {
+    final int index = _transactions.indexWhere(
+      (TransactionItem item) => item.id == transaction.id,
+    );
+    if (index < 0) {
+      return;
+    }
+    final List<TransactionItem> next = List<TransactionItem>.of(_transactions);
+    next[index] = transaction;
+    _transactions = next;
+    _changed();
+  }
+
+  void deleteTransaction(int id) {
+    final List<TransactionItem> next = _transactions
+        .where((TransactionItem item) => item.id != id)
+        .toList();
+    if (next.length == _transactions.length) {
+      return;
+    }
+    _transactions = next;
+    _changed();
+  }
+
+  void restoreTransaction(TransactionItem transaction, {int? index}) {
+    if (_transactions.any(
+      (TransactionItem item) => item.id == transaction.id,
+    )) {
+      return;
+    }
+    final List<TransactionItem> next = List<TransactionItem>.of(_transactions);
+    final int insertIndex = (index ?? 0).clamp(0, next.length);
+    next.insert(insertIndex, transaction);
+    _transactions = next;
+    _changed();
+  }
+
   void updateProfile(ProfileData value) {
     profile = value;
     _changed();
@@ -241,10 +288,6 @@ class AppProvider extends ChangeNotifier {
       return;
     }
     isLoggedIn = value;
-    _changed();
-  }
-
-  void transactionsChanged() {
     _changed();
   }
 
