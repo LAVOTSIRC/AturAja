@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../data/models.dart';
 import '../data/settings_controller.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
@@ -51,11 +52,15 @@ class _StatItem {
 
 class ProfileScreen extends StatefulWidget {
   final SettingsController settings;
+  final ProfileData? initialProfile;
+  final ValueChanged<ProfileData>? onProfileChanged;
   final VoidCallback onLogout;
 
   const ProfileScreen({
     super.key,
     required this.settings,
+    this.initialProfile,
+    this.onProfileChanged,
     required this.onLogout,
   });
 
@@ -98,10 +103,31 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  String fullName = 'M Zidan Ruriano A.G';
-  String nim = '241401063';
-  String program = 'Ilmu Komputer';
-  String avatarLabel = 'ZR';
+  late String fullName;
+  late String nim;
+  late String program;
+  late String avatarLabel;
+
+  @override
+  void initState() {
+    super.initState();
+    final ProfileData profile = widget.initialProfile ?? ProfileData.initial;
+    fullName = profile.fullName;
+    nim = profile.nim;
+    program = profile.program;
+    avatarLabel = profile.avatarLabel;
+  }
+
+  void _notifyProfileChanged() {
+    widget.onProfileChanged?.call(
+      ProfileData(
+        fullName: fullName,
+        nim: nim,
+        program: program,
+        avatarLabel: avatarLabel,
+      ),
+    );
+  }
 
   String _initialsFromName(String value) {
     final List<String> parts = value
@@ -150,6 +176,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
     if (choice == 'default') {
       setState(() => avatarLabel = _initialsFromName(fullName));
+      _notifyProfileChanged();
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('Avatar bawaan digunakan.')));
@@ -179,6 +206,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       program = draft.program;
       avatarLabel = _initialsFromName(draft.fullName);
     });
+    _notifyProfileChanged();
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Profil berhasil diperbarui.')),
     );
