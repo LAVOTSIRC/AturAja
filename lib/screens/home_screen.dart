@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../data/models.dart';
+import '../providers/app_provider.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_typography.dart';
 import '../theme/theme_scope.dart';
 import '../utils/format.dart';
 import '../utils/icons.dart';
+import '../utils/responsive.dart';
 import '../widgets/common.dart';
 import '../widgets/roasting_toast.dart';
 
@@ -14,12 +17,16 @@ class HomeScreen extends StatefulWidget {
   final VoidCallback onScan;
   final VoidCallback onAddTask;
   final VoidCallback onBrainDump;
+  final VoidCallback? onViewFinance;
+  final VoidCallback? onViewTasks;
 
   const HomeScreen({
     super.key,
     required this.onScan,
     required this.onAddTask,
     required this.onBrainDump,
+    this.onViewFinance,
+    this.onViewTasks,
   });
 
   @override
@@ -28,10 +35,6 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   bool showRoast = false;
-
-  static const int balance = 856000;
-  static const int spent = 143990;
-  static const int budget = 1200000;
 
   void _showMessage(String message) {
     ScaffoldMessenger.maybeOf(context)
@@ -64,9 +67,14 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final AppProvider app = context.watch<AppProvider>();
     final AppColors c = ThemeScope.of(context).colors;
-    final int pct = ((spent / budget) * 100).round();
-    final List<TransactionItem> recent = transactionStore.take(4).toList();
+    final int budget = app.budgetLimit;
+    final int spent = app.totalExpense;
+    final int pct = budget <= 0 ? 0 : ((spent / budget) * 100).round();
+    final List<TransactionItem> recent = app.recentTransactions;
+    final EdgeInsets pagePadding = Responsive.pagePadding(context);
+    final List<TaskItem> urgentTasks = app.urgentTasks;
 
     return Container(
       color: c.bg,
@@ -79,10 +87,10 @@ class _HomeScreenState extends State<HomeScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Padding(
-                    padding: const EdgeInsets.fromLTRB(
-                      AppSpacing.md,
+                    padding: EdgeInsets.fromLTRB(
+                      pagePadding.left,
                       AppSpacing.lg,
-                      AppSpacing.md,
+                      pagePadding.right,
                       AppSpacing.xs,
                     ),
                     child: Row(
@@ -98,7 +106,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               ),
                               const SizedBox(height: AppSpacing.xxs),
                               Text(
-                                'Zidan Ruriano',
+                                app.profile.fullName,
                                 style: AppTypography.title(c.text),
                               ),
                             ],
@@ -144,7 +152,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         Padding(
                           padding: const EdgeInsets.only(bottom: AppSpacing.md),
                           child: Text(
-                            formatRupiah(balance),
+                            formatRupiah(app.balance),
                             style: AppTypography.hero(c.text),
                           ),
                         ),
@@ -176,7 +184,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         ClipRRect(
                           borderRadius: BorderRadius.circular(AppSpacing.huge),
                           child: LinearProgressIndicator(
-                            value: pct / 100,
+                            value: (pct / 100).clamp(0.0, 1.0),
                             minHeight: AppSpacing.progressThin,
                             backgroundColor: c.surfaceHigh,
                             valueColor: AlwaysStoppedAnimation<Color>(
@@ -230,48 +238,64 @@ class _HomeScreenState extends State<HomeScreen> {
                       AppSpacing.md,
                       0,
                     ),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: AppSpacing.md,
-                        vertical: AppSpacing.sm,
-                      ),
-                      decoration: BoxDecoration(
-                        color: c.urgentBg,
-                        borderRadius: BorderRadius.circular(AppSpacing.md),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.report_problem_outlined,
-                            size: AppSpacing.iconSmall,
-                            color: c.onAlert,
-                          ),
-                          const SizedBox(width: AppSpacing.xs),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  '2 tugas deadline hari ini',
-                                  style: AppTypography.caption(c.onAlert)
-                                      .copyWith(fontWeight: FontWeight.w600),
-                                ),
-                                const SizedBox(height: AppSpacing.xxs),
-                                Text(
-                                  'Laporan Algoritma · Quiz Kalkulus',
-                                  style: AppTypography.meta(c.onAlert).copyWith(
-                                    color: c.onAlert.withValues(alpha: 0.9),
-                                  ),
-                                ),
-                              ],
+                    child: GestureDetector(
+                      onTap: widget.onViewTasks,
+                      behavior: HitTestBehavior.opaque,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: AppSpacing.md,
+                          vertical: AppSpacing.sm,
+                        ),
+                        decoration: BoxDecoration(
+                          color: c.urgentBg,
+                          borderRadius: BorderRadius.circular(AppSpacing.md),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.report_problem_outlined,
+                              size: AppSpacing.iconSmall,
+                              color: c.onAlert,
                             ),
-                          ),
-                          Icon(
-                            Icons.chevron_right,
-                            size: AppSpacing.iconSmall,
-                            color: c.onAlert,
-                          ),
-                        ],
+                            const SizedBox(width: AppSpacing.xs),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    urgentTasks.isEmpty
+                                        ? 'Tidak ada deadline mendesak'
+                                        : '${urgentTasks.length} tugas deadline mendesak',
+                                    style: AppTypography.caption(c.onAlert)
+                                        .copyWith(fontWeight: FontWeight.w600),
+                                  ),
+                                  const SizedBox(height: AppSpacing.xxs),
+                                  Text(
+                                    urgentTasks.isEmpty
+                                        ? 'Semua tugas masih terkendali.'
+                                        : urgentTasks
+                                              .take(2)
+                                              .map(
+                                                (TaskItem task) => task.title,
+                                              )
+                                              .join(' · '),
+                                    style: AppTypography.meta(c.onAlert)
+                                        .copyWith(
+                                          color: c.onAlert.withValues(
+                                            alpha: 0.9,
+                                          ),
+                                        ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Icon(
+                              Icons.chevron_right,
+                              size: AppSpacing.iconSmall,
+                              color: c.onAlert,
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
@@ -292,9 +316,11 @@ class _HomeScreenState extends State<HomeScreen> {
                             SizedBox(
                               height: AppSpacing.target,
                               child: TextButton(
-                                onPressed: () => _showMessage(
-                                  'Riwayat lengkap akan segera tersedia.',
-                                ),
+                                onPressed:
+                                    widget.onViewFinance ??
+                                    () => _showMessage(
+                                      'Riwayat lengkap akan segera tersedia.',
+                                    ),
                                 style: TextButton.styleFrom(
                                   minimumSize: const Size(
                                     AppSpacing.target,

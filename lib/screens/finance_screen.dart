@@ -68,8 +68,13 @@ class _CategorySlice {
 
 class FinanceScreen extends StatefulWidget {
   final VoidCallback onScan;
+  final VoidCallback? onTransactionsChanged;
 
-  const FinanceScreen({super.key, required this.onScan});
+  const FinanceScreen({
+    super.key,
+    required this.onScan,
+    this.onTransactionsChanged,
+  });
 
   @override
   State<FinanceScreen> createState() => _FinanceScreenState();
@@ -85,6 +90,10 @@ class _FinanceScreenState extends State<FinanceScreen> {
   void initState() {
     super.initState();
     _transactions = transactionStore;
+  }
+
+  void _notifyTransactionsChanged() {
+    widget.onTransactionsChanged?.call();
   }
 
   List<TransactionItem> _transactionsForCategory(String catKey) {
@@ -322,6 +331,7 @@ class _FinanceScreenState extends State<FinanceScreen> {
                             setState(() {
                               _transactions.insert(0, newTransaction);
                             });
+                            _notifyTransactionsChanged();
                             Navigator.of(ctx).pop();
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
@@ -391,6 +401,7 @@ class _FinanceScreenState extends State<FinanceScreen> {
             final idx = _transactions.indexWhere((x) => x.id == updated.id);
             if (idx != -1) _transactions[idx] = updated;
           });
+          _notifyTransactionsChanged();
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text('Perubahan pada "${updated.label}" disimpan'),
@@ -401,6 +412,7 @@ class _FinanceScreenState extends State<FinanceScreen> {
         onDelete: () {
           final removedIndex = _transactions.indexWhere((x) => x.id == t.id);
           setState(() => _transactions.removeWhere((x) => x.id == t.id));
+          _notifyTransactionsChanged();
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text('"${t.label}" dihapus dari riwayat'),
@@ -414,6 +426,7 @@ class _FinanceScreenState extends State<FinanceScreen> {
                     );
                     _transactions.insert(insertIndex, t);
                   });
+                  _notifyTransactionsChanged();
                 },
               ),
               duration: const Duration(seconds: 4),
@@ -872,6 +885,7 @@ class _FinanceScreenState extends State<FinanceScreen> {
                                               _transactions[idx] = updated;
                                             }
                                           });
+                                          _notifyTransactionsChanged();
                                         },
                                         onTransactionDeleted: (id) {
                                           setState(
@@ -879,11 +893,13 @@ class _FinanceScreenState extends State<FinanceScreen> {
                                               (x) => x.id == id,
                                             ),
                                           );
+                                          _notifyTransactionsChanged();
                                         },
                                         onTransactionRestored: (item) {
                                           setState(
                                             () => _transactions.insert(0, item),
                                           );
+                                          _notifyTransactionsChanged();
                                         },
                                       ),
                                     ),

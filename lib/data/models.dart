@@ -43,6 +43,30 @@ class TransactionItem {
           : (receiptImagePath ?? this.receiptImagePath),
     );
   }
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+    'id': id,
+    'label': label,
+    'amount': amount,
+    'cat': cat,
+    'time': time,
+    'date': date,
+    'consumtive': consumtive,
+    'receiptImagePath': receiptImagePath,
+  };
+
+  factory TransactionItem.fromJson(Map<String, dynamic> json) {
+    return TransactionItem(
+      id: (json['id'] as num).toInt(),
+      label: json['label'] as String? ?? '',
+      amount: (json['amount'] as num?)?.toInt() ?? 0,
+      cat: json['cat'] as String? ?? 'other',
+      time: json['time'] as String? ?? '00:00',
+      date: json['date'] as String? ?? 'Hari ini',
+      consumtive: json['consumtive'] as bool? ?? false,
+      receiptImagePath: json['receiptImagePath'] as String?,
+    );
+  }
 }
 
 class TaskItem {
@@ -114,6 +138,86 @@ class TaskItem {
     dueDate: dueDate ?? this.dueDate,
     done: done ?? this.done,
   );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+    'id': id,
+    'title': title,
+    'categories': categories,
+    'description': description,
+    'deadline': deadline,
+    'dueDate': dueDate?.toIso8601String(),
+    'done': done,
+  };
+
+  factory TaskItem.fromJson(Map<String, dynamic> json) {
+    final List<String> categories =
+        (json['categories'] as List<dynamic>?)
+            ?.map((dynamic item) => item.toString())
+            .toList() ??
+        const <String>['Pribadi'];
+    return TaskItem(
+      id: (json['id'] as num).toInt(),
+      title: json['title'] as String? ?? '',
+      categories: categories,
+      description: json['description'] as String? ?? '',
+      deadline: json['deadline'] as String? ?? '',
+      dueDate: json['dueDate'] == null
+          ? null
+          : DateTime.tryParse(json['dueDate'] as String),
+      done: json['done'] as bool? ?? false,
+    );
+  }
+}
+
+class ProfileData {
+  final String fullName;
+  final String nim;
+  final String program;
+  final String avatarLabel;
+
+  const ProfileData({
+    required this.fullName,
+    required this.nim,
+    required this.program,
+    required this.avatarLabel,
+  });
+
+  static const ProfileData initial = ProfileData(
+    fullName: 'M Zidan Ruriano A.G',
+    nim: '241401063',
+    program: 'Ilmu Komputer',
+    avatarLabel: 'ZR',
+  );
+
+  ProfileData copyWith({
+    String? fullName,
+    String? nim,
+    String? program,
+    String? avatarLabel,
+  }) {
+    return ProfileData(
+      fullName: fullName ?? this.fullName,
+      nim: nim ?? this.nim,
+      program: program ?? this.program,
+      avatarLabel: avatarLabel ?? this.avatarLabel,
+    );
+  }
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+    'fullName': fullName,
+    'nim': nim,
+    'program': program,
+    'avatarLabel': avatarLabel,
+  };
+
+  factory ProfileData.fromJson(Map<String, dynamic> json) {
+    return ProfileData(
+      fullName: json['fullName'] as String? ?? initial.fullName,
+      nim: json['nim'] as String? ?? initial.nim,
+      program: json['program'] as String? ?? initial.program,
+      avatarLabel: json['avatarLabel'] as String? ?? initial.avatarLabel,
+    );
+  }
 }
 
 final List<TransactionItem> transactionStore = [

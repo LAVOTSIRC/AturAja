@@ -3,10 +3,13 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:provider/provider.dart';
 
 import 'package:bruh/data/models.dart';
 import 'package:bruh/data/settings_controller.dart';
 import 'package:bruh/main.dart';
+import 'package:bruh/providers/app_provider.dart';
+import 'package:bruh/theme/app_colors.dart';
 import 'package:bruh/screens/brain_dump_finance_screen.dart';
 import 'package:bruh/screens/home_screen.dart';
 import 'package:bruh/screens/login_screen.dart';
@@ -14,6 +17,30 @@ import 'package:bruh/screens/main_shell.dart';
 import 'package:bruh/screens/profile_screen.dart';
 import 'package:bruh/theme/theme_scope.dart';
 import 'package:bruh/widgets/quick_add_modal.dart';
+
+Future<AppProvider> pumpApp(
+  WidgetTester tester, {
+  String initialLocation = '/home',
+  bool isLoggedIn = true,
+  bool settle = true,
+}) async {
+  final AppProvider app = AppProvider.inMemory(isLoggedIn: isLoggedIn);
+  addTearDown(app.dispose);
+  await tester.pumpWidget(
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider<AppProvider>.value(value: app),
+        ChangeNotifierProvider<ThemeController>.value(value: app.theme),
+        ChangeNotifierProvider<SettingsController>.value(value: app.settings),
+      ],
+      child: MyApp(initialLocation: initialLocation),
+    ),
+  );
+  if (settle) {
+    await tester.pumpAndSettle();
+  }
+  return app;
+}
 
 Future<void> pumpProfile(
   WidgetTester tester,
@@ -49,7 +76,12 @@ void main() {
   testWidgets('Splash screen shows the AturAja logo text', (
     WidgetTester tester,
   ) async {
-    await tester.pumpWidget(MyApp(controller: ThemeController()));
+    await pumpApp(
+      tester,
+      initialLocation: '/splash',
+      isLoggedIn: false,
+      settle: false,
+    );
 
     expect(find.textContaining('Atur'), findsWidgets);
     expect(find.textContaining('Aja'), findsWidgets);
@@ -61,14 +93,19 @@ void main() {
     int scanCount = 0;
     int taskCount = 0;
     int brainCount = 0;
+    final AppProvider app = AppProvider.inMemory();
+    addTearDown(app.dispose);
     await tester.pumpWidget(
-      ThemeScope(
-        controller: ThemeController(),
-        child: MaterialApp(
-          home: HomeScreen(
-            onScan: () => scanCount++,
-            onAddTask: () => taskCount++,
-            onBrainDump: () => brainCount++,
+      MultiProvider(
+        providers: [ChangeNotifierProvider<AppProvider>.value(value: app)],
+        child: ThemeScope(
+          controller: app.theme,
+          child: MaterialApp(
+            home: HomeScreen(
+              onScan: () => scanCount++,
+              onAddTask: () => taskCount++,
+              onBrainDump: () => brainCount++,
+            ),
           ),
         ),
       ),
@@ -86,6 +123,58 @@ void main() {
     expect(brainCount, 1);
     await tester.tap(find.text('Tambah Tugas'));
     expect(taskCount, 1);
+  });
+
+  testWidgets('Theme toggle repaints the bottom navigation shell', (
+    WidgetTester tester,
+  ) async {
+    final AppProvider app = await pumpApp(tester);
+    final Finder shellScaffold = find
+        .descendant(of: find.byType(MainShell), matching: find.byType(Scaffold))
+        .first;
+
+    expect(
+      tester.widget<Scaffold>(shellScaffold).backgroundColor,
+      AppColors.dark.shell,
+    );
+
+    await tester.tap(find.byTooltip('Ganti ke mode terang'));
+    await tester.pumpAndSettle();
+
+    expect(app.theme.isDark, isFalse);
+    expect(
+      tester.widget<Scaffold>(shellScaffold).backgroundColor,
+      AppColors.light.shell,
+    );
+  });
+
+  testWidgets('Theme toggle repaints the login surface', (
+    WidgetTester tester,
+  ) async {
+    final AppProvider app = await pumpApp(
+      tester,
+      initialLocation: '/login',
+      isLoggedIn: false,
+    );
+    final Finder loginScaffold = find
+        .descendant(
+          of: find.byType(LoginScreen),
+          matching: find.byType(Scaffold),
+        )
+        .first;
+
+    expect(
+      tester.widget<Scaffold>(loginScaffold).backgroundColor,
+      AppColors.dark.bg,
+    );
+
+    app.theme.toggle();
+    await tester.pumpAndSettle();
+
+    expect(
+      tester.widget<Scaffold>(loginScaffold).backgroundColor,
+      AppColors.light.bg,
+    );
   });
 
   testWidgets('QuickAddModal defaults to quick mode', (
@@ -121,12 +210,7 @@ void main() {
   testWidgets('Quick add task updates the shared task list', (
     WidgetTester tester,
   ) async {
-    await tester.pumpWidget(
-      ThemeScope(
-        controller: ThemeController(),
-        child: const MaterialApp(home: MainShell()),
-      ),
-    );
+    await pumpApp(tester);
 
     await tester.tap(find.text('Tambah Tugas'));
     await tester.pumpAndSettle();
@@ -152,12 +236,7 @@ void main() {
   testWidgets('Add form switches between Manual and Brain Dump modes', (
     WidgetTester tester,
   ) async {
-    await tester.pumpWidget(
-      ThemeScope(
-        controller: ThemeController(),
-        child: const MaterialApp(home: MainShell()),
-      ),
-    );
+    await pumpApp(tester);
 
     await tester.tap(find.byTooltip('Tugas'));
     await tester.pumpAndSettle();
@@ -184,12 +263,7 @@ void main() {
   testWidgets('Edit form keeps the manual layout without mode switcher', (
     WidgetTester tester,
   ) async {
-    await tester.pumpWidget(
-      ThemeScope(
-        controller: ThemeController(),
-        child: const MaterialApp(home: MainShell()),
-      ),
-    );
+    await pumpApp(tester);
 
     await tester.tap(find.byTooltip('Tugas'));
     await tester.pumpAndSettle();
@@ -212,12 +286,7 @@ void main() {
   testWidgets('No floating action button remains on any tab', (
     WidgetTester tester,
   ) async {
-    await tester.pumpWidget(
-      ThemeScope(
-        controller: ThemeController(),
-        child: const MaterialApp(home: MainShell()),
-      ),
-    );
+    await pumpApp(tester);
 
     for (final String tab in ['Beranda', 'Keuangan', 'Tugas', 'Profil']) {
       await tester.tap(find.byTooltip(tab));
@@ -231,12 +300,7 @@ void main() {
     WidgetTester tester,
   ) async {
     final int before = transactionStore.length;
-    await tester.pumpWidget(
-      ThemeScope(
-        controller: ThemeController(),
-        child: const MaterialApp(home: MainShell()),
-      ),
-    );
+    await pumpApp(tester);
 
     await tester.tap(find.text('Brain Dump'));
     await tester.pumpAndSettle();
@@ -292,12 +356,7 @@ void main() {
   testWidgets('Profile setting rows navigate to five detail screens', (
     WidgetTester tester,
   ) async {
-    await tester.pumpWidget(
-      ThemeScope(
-        controller: ThemeController(),
-        child: const MaterialApp(home: MainShell()),
-      ),
-    );
+    await pumpApp(tester);
     await tester.tap(find.byTooltip('Profil'));
     await tester.pumpAndSettle();
 
@@ -320,12 +379,7 @@ void main() {
   testWidgets('Notification toggle updates the Profile preview', (
     WidgetTester tester,
   ) async {
-    await tester.pumpWidget(
-      ThemeScope(
-        controller: ThemeController(),
-        child: const MaterialApp(home: MainShell()),
-      ),
-    );
+    await pumpApp(tester);
     await tester.tap(find.byTooltip('Profil'));
     await tester.pumpAndSettle();
     await openProfileSetting(tester, 'Notifikasi & Roasting AI');
@@ -341,12 +395,7 @@ void main() {
   testWidgets('Cloud sync shows progress and updates the Profile preview', (
     WidgetTester tester,
   ) async {
-    await tester.pumpWidget(
-      ThemeScope(
-        controller: ThemeController(),
-        child: const MaterialApp(home: MainShell()),
-      ),
-    );
+    await pumpApp(tester);
     await tester.tap(find.byTooltip('Profil'));
     await tester.pumpAndSettle();
     await openProfileSetting(tester, 'Cadangan Cloud');
@@ -363,18 +412,13 @@ void main() {
     expect(find.text('Baru saja'), findsOneWidget);
     expect(find.text('Cadangan cloud berhasil disinkronkan.'), findsOneWidget);
     await returnFromSetting(tester);
-    expect(find.text('Baru saja · Manual'), findsOneWidget);
+    expect(find.text('Baru saja | Manual'), findsOneWidget);
   });
 
   testWidgets('Budget limit validates and saves only after confirmation', (
     WidgetTester tester,
   ) async {
-    await tester.pumpWidget(
-      ThemeScope(
-        controller: ThemeController(),
-        child: const MaterialApp(home: MainShell()),
-      ),
-    );
+    await pumpApp(tester);
     await tester.tap(find.byTooltip('Profil'));
     await tester.pumpAndSettle();
     await openProfileSetting(tester, 'Limit Anggaran');
@@ -420,12 +464,7 @@ void main() {
   testWidgets('NLP simulation detects tasks, schedules, and expenses', (
     WidgetTester tester,
   ) async {
-    await tester.pumpWidget(
-      ThemeScope(
-        controller: ThemeController(),
-        child: const MaterialApp(home: MainShell()),
-      ),
-    );
+    await pumpApp(tester);
     await tester.tap(find.byTooltip('Profil'));
     await tester.pumpAndSettle();
     await openProfileSetting(tester, 'Simulasi NLP');
@@ -456,12 +495,7 @@ void main() {
   testWidgets('Privacy actions protect destructive and sensitive operations', (
     WidgetTester tester,
   ) async {
-    await tester.pumpWidget(
-      ThemeScope(
-        controller: ThemeController(),
-        child: const MaterialApp(home: MainShell()),
-      ),
-    );
+    await pumpApp(tester);
     await tester.tap(find.byTooltip('Profil'));
     await tester.pumpAndSettle();
 
@@ -581,10 +615,15 @@ void main() {
     expect(didLogout, isTrue);
   });
 
-  testWidgets('First launch enters the app automatically', (
+  testWidgets('Splash opens login when there is no session', (
     WidgetTester tester,
   ) async {
-    await tester.pumpWidget(MyApp(controller: ThemeController()));
+    await pumpApp(
+      tester,
+      initialLocation: '/splash',
+      isLoggedIn: false,
+      settle: false,
+    );
 
     expect(find.byType(MainShell), findsNothing);
     expect(find.byType(LoginScreen), findsNothing);
@@ -592,8 +631,8 @@ void main() {
     await tester.pump(const Duration(milliseconds: 2900));
     await tester.pumpAndSettle();
 
-    expect(find.byType(MainShell), findsOneWidget);
-    expect(find.byType(LoginScreen), findsNothing);
+    expect(find.byType(LoginScreen), findsOneWidget);
+    expect(find.byType(MainShell), findsNothing);
   });
 
   testWidgets('Login page validates credentials before continuing', (
@@ -642,12 +681,7 @@ void main() {
   testWidgets('Logout opens login and signing in returns to the app', (
     WidgetTester tester,
   ) async {
-    await tester.pumpWidget(
-      ThemeScope(
-        controller: ThemeController(),
-        child: const MaterialApp(home: MainShell()),
-      ),
-    );
+    await pumpApp(tester);
 
     await tester.tap(find.byTooltip('Profil'));
     await tester.pumpAndSettle();
