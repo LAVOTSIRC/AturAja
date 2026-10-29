@@ -70,10 +70,15 @@ Jika asset splash diubah, jalankan juga generator splash berikut sebelum build:
 dart run flutter_native_splash:create
 ```
 
-## Dummy Data
+## Persistensi Data
 
-Semua data demo didefinisikan di `lib/data/models.dart` dan state akan kembali
-ke kondisi awal ketika aplikasi dimulai ulang.
+Aplikasi AturAja menggunakan `AppProvider` sebagai *centralized store* yang terintegrasi dengan `SharedPreferences`.
+Seluruh perubahan data tugas (tambah, edit, toggle selesai, dan hapus) serta transaksi, profil, dan pengaturan tersimpan secara otomatis secara lokal dan tetap bertahan saat aplikasi di-restart.
+
+## Dummy Data Awal
+
+Data awal (seeded data) didefinisikan di `lib/data/models.dart`. Saat pertama kali dijalankan, aplikasi akan memuat data awal ini dan menyimpannya ke penyimpanan lokal.
+
 
 ### Data keuangan
 

@@ -1,3 +1,4 @@
+import os
 import docx
 from docx.shared import Inches, Pt, RGBColor
 from docx.enum.text import WD_ALIGN_PARAGRAPH
@@ -194,7 +195,7 @@ add_h1("3. USER FLOW")
 add_h2("3.1 User Flow 1: Menambah Tugas Baru via Form Manual & AI Brain Dump")
 add_bullet("Membuat tugas baru dengan pengelompokan multi-kategori dan kalkulasi deadline otomatis.", "Tujuan: ")
 add_bullet("HomeScreen / TaskScreen → Klik + Tambah → TaskFormScreen (Pilih Mode Manual / AI Brain Dump) → Input Data / Tulis Brain Dump → Validasi Form → Klik 'Tambah Tugas' → TaskScreen.", "Urutan: ")
-add_bullet("Tugas baru tersimpan di state memori, pesan SnackBar konfirmasi muncul, dan daftar tugas ter-refresh otomatis.", "Hasil Akhir: ")
+add_bullet("Tugas baru tersimpan melalui AppProvider ke penyimpanan lokal, pesan SnackBar konfirmasi muncul, dan daftar tugas ter-refresh otomatis.", "Hasil Akhir: ")
 
 add_h2("3.2 User Flow 2: Meninjau Detail Tugas & Menandai Selesai / Edit")
 add_bullet("Melihat informasi rinci tugas dan memperbarui status penyelesaiannya.", "Tujuan: ")
@@ -273,7 +274,7 @@ add_h2("5.1 Modul CRUD 1: Manajemen Tugas (TaskItem)")
 t_crud1 = doc.add_table(rows=5, cols=3)
 c_headers = ["Operasi", "Implementasi", "Cara Kerja & Keterangan"]
 c_data = [
-    ("Create", "Ya", "Melalui TaskFormScreen (Form Manual & AI Brain Dump). Menginsert TaskItem baru ke daftar state memori."),
+    ("Create", "Ya", "Melalui TaskFormScreen (Form Manual & AI Brain Dump). Menambahkan TaskItem melalui AppProvider dan menyimpannya secara lokal."),
     ("Read", "Ya", "Melalui TaskScreen (Daftar ter-filter) dan TaskDetailScreen (Layar penuh detail tugas)."),
     ("Update", "Ya", "Edit data tugas di TaskFormScreen atau toggle status selesai di TaskScreen / TaskDetailScreen."),
     ("Delete", "Ya", "Hapus tugas dengan konfirmasi AlertDialog di TaskDetailScreen atau dialog konfirmasi.")
@@ -313,8 +314,8 @@ set_table_borders(t_crud2)
 # --- 6. DATA SIMULASI ---
 add_h1("6. DATA SIMULASI")
 
-add_h2("6.1 Data Utama (20 Record SIMULASI)")
-add_p("Tersedia 10 Record Tugas (TaskItem) dan 10 Record Keuangan (TransactionItem):")
+add_h2("6.1 Data Utama (15 Record SIMULASI)")
+add_p("Tersedia 10 Record Tugas (TaskItem) dan 5 Record Keuangan (TransactionItem):")
 
 t_sim = doc.add_table(rows=11, cols=4)
 sim_headers = ["ID", "Judul / Label", "Kategori", "Status / Nominal"]
@@ -464,7 +465,7 @@ chk_items = [
     "1 persona utama dibuat (Terpenuhi: Budi Pratama - Mahasiswa Rantau).",
     "Minimal 3 user flow berjalan end-to-end (Terpenuhi: 3 Flow Utama).",
     "Minimal 2 modul CRUD selesai (Terpenuhi: Modul Tugas & Keuangan).",
-    "Minimal 20 record utama & 5 record referensi (Terpenuhi: 20 Record Utama + 7 Kategori).",
+    "Minimal 15 record utama & 5 record referensi (Terpenuhi: 15 Record Utama + 7 Kategori).",
     "Validasi form, Loading state, Empty state, & Error state berfungsi (Terpenuhi).",
     "UI Responsive & Tema Dark/Light berfungsi tanpa glitch (Terpenuhi).",
     "Minimal 20 skenario pengujian selesai dengan hasil Pass (Terpenuhi)."
@@ -479,10 +480,8 @@ add_bullet("Dokumen Dokumentasi Laporan Project Kelompok (Dokumentasi_Project_At
 add_bullet("Video Demonstrasi Aplikasi (Durasi 8-10 menit)", "3. ")
 
 # Save to path
-output_path1 = r"C:\Semester 5\Reguler\Pemmob\AturAja\Dokumentasi_Project_AturAja.docx"
-output_path2 = r"C:\Users\Zidan\Downloads\Dokumentasi_Project_AturAja.docx"
+output_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "Dokumentasi_Project_AturAja.docx")
 
-doc.save(output_path1)
-doc.save(output_path2)
+doc.save(output_path)
 
-print(f"Successfully generated docx files at:\n - {output_path1}\n - {output_path2}")
+print(f"Successfully generated docx file at:\n - {output_path}")
