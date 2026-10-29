@@ -214,4 +214,108 @@ void main() {
     expect(store.tasks, isNotEmpty);
     expect(store.profile.fullName, ProfileData.initial.fullName);
   });
+
+  test(
+    'AppProvider supports task CRUD, nextTaskId, toggle, delete, and getters',
+    () {
+      final AppProvider store = AppProvider.inMemory(tasks: <TaskItem>[]);
+      addTearDown(store.dispose);
+
+      expect(store.nextTaskId, 1);
+
+      final DateTime now = DateTime.now();
+      final TaskItem task1 = TaskItem(
+        id: store.nextTaskId,
+        title: 'Tugas Hari Ini',
+        categories: const <String>['Tugas Kuliah'],
+        deadline: 'Hari ini, 23:59',
+        dueDate: DateTime(now.year, now.month, now.day, 23, 59),
+      );
+      store.addTask(task1);
+
+      expect(store.tasks.length, 1);
+      expect(store.nextTaskId, 2);
+      expect(store.todayTasks.length, 1);
+      expect(store.todayTaskCount, 1);
+
+      // Toggle task
+      store.toggleTask(1);
+      expect(store.tasks.first.done, isTrue);
+      expect(store.todayTasks.length, 0); // Done tasks excluded from todayTasks
+
+      // Toggle back
+      store.toggleTask(1);
+      expect(store.tasks.first.done, isFalse);
+
+      // Upsert task (update)
+      final TaskItem updatedTask1 = task1.copyWith(
+        title: 'Tugas Hari Ini Updated',
+      );
+      store.upsertTask(updatedTask1);
+      expect(store.tasks.length, 1);
+      expect(store.tasks.first.title, 'Tugas Hari Ini Updated');
+
+      // Delete task
+      store.deleteTask(1);
+      expect(store.tasks.length, 0);
+      expect(store.todayTasks.length, 0);
+    },
+  );
+
+  test('AppProvider restores task mutations after reload', () async {
+    final MemoryAppStorage storage = MemoryAppStorage();
+    final AppProvider store = AppProvider(
+      storage: storage,
+      settings: SettingsController(),
+      theme: ThemeController(),
+      tasks: <TaskItem>[],
+      profile: ProfileData.initial,
+      isLoggedIn: false,
+    );
+    addTearDown(store.dispose);
+    await store.load();
+
+    final TaskItem task = TaskItem(
+      id: store.nextTaskId,
+      title: 'Tugas yang disimpan',
+      categories: const <String>['Tugas Kuliah'],
+      deadline: 'Besok',
+      dueDate: DateTime(2026, 10, 30, 8),
+    );
+    store.addTask(task);
+    store.toggleTask(task.id);
+    store.upsertTask(store.tasks.single.copyWith(title: 'Tugas yang diedit'));
+    await store.save();
+
+    final AppProvider restored = AppProvider(
+      storage: storage,
+      settings: SettingsController(),
+      theme: ThemeController(),
+      tasks: <TaskItem>[],
+      profile: ProfileData.initial,
+      isLoggedIn: false,
+    );
+    addTearDown(restored.dispose);
+    await restored.load();
+
+    expect(restored.tasks.single.title, 'Tugas yang diedit');
+    expect(restored.tasks.single.done, isTrue);
+    expect(restored.tasks.single.dueDate, task.dueDate);
+
+    restored.deleteTask(task.id);
+    await restored.save();
+
+    final AppProvider afterDelete = AppProvider(
+      storage: storage,
+      settings: SettingsController(),
+      theme: ThemeController(),
+      tasks: <TaskItem>[],
+      profile: ProfileData.initial,
+      isLoggedIn: false,
+    );
+    addTearDown(afterDelete.dispose);
+    await afterDelete.load();
+
+    expect(afterDelete.tasks, isEmpty);
+  });
 }
