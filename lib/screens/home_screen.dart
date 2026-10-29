@@ -14,12 +14,14 @@ class HomeScreen extends StatefulWidget {
   final VoidCallback onScan;
   final VoidCallback onAddTask;
   final VoidCallback onBrainDump;
+  final String userName;
 
   const HomeScreen({
     super.key,
     required this.onScan,
     required this.onAddTask,
     required this.onBrainDump,
+    this.userName = 'Zidan Ruriano',
   });
 
   @override
@@ -98,7 +100,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               ),
                               const SizedBox(height: AppSpacing.xxs),
                               Text(
-                                'Zidan Ruriano',
+                                widget.userName,
                                 style: AppTypography.title(c.text),
                               ),
                             ],
