@@ -307,26 +307,26 @@ class _ScanScreenState extends State<ScanScreen>
 
   // ── Camera view (scan step) ──────────────────────────────────────────────
 
+  Widget _cameraBackground() {
+    return Container(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Color(0xFF0A0A0A), Color(0xFF1A1A1A), Color(0xFF0D1520)],
+        ),
+      ),
+      child: CustomPaint(painter: _NoisePainter()),
+    );
+  }
+
   Widget _buildCameraPreview(AppColors c) {
     final CameraController? controller = _cameraController;
     if (controller == null || !controller.value.isInitialized) {
       return Stack(
         fit: StackFit.expand,
         children: [
-          Container(
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  Color(0xFF0A0A0A),
-                  Color(0xFF1A1A1A),
-                  Color(0xFF0D1520),
-                ],
-              ),
-            ),
-            child: CustomPaint(painter: _NoisePainter()),
-          ),
+          _cameraBackground(),
           if (_isCameraInitializing)
             const Center(
               child: CircularProgressIndicator(
@@ -346,23 +346,31 @@ class _ScanScreenState extends State<ScanScreen>
       );
     }
 
-    // CameraPreview keeps the sensor aspect ratio inside the available space.
-    // Scale it up until it covers the whole viewfinder, cropping the excess
-    // instead of showing black letterbox bars.
-    final Size screenSize = MediaQuery.sizeOf(context);
-    final double screenAspect = screenSize.width / screenSize.height;
-    final double previewAspect = screenSize.width > screenSize.height
-        ? controller.value.aspectRatio
-        : 1 / controller.value.aspectRatio;
-    final double scale = previewAspect >= screenAspect
-        ? previewAspect / screenAspect
-        : screenAspect / previewAspect;
+    return LayoutBuilder(
+      builder: (BuildContext context, BoxConstraints constraints) {
+        final Size viewport = constraints.biggest;
+        if (viewport.width <= 0 || viewport.height <= 0) {
+          return CameraPreview(controller);
+        }
 
-    return ClipRect(
-      child: Transform.scale(
-        scale: scale,
-        child: Center(child: CameraPreview(controller)),
-      ),
+        // CameraPreview keeps the sensor aspect ratio inside the available
+        // space. Scale it up until it covers the viewfinder box, cropping the
+        // excess instead of showing black letterbox bars.
+        final double viewportAspect = viewport.width / viewport.height;
+        final double previewAspect = viewport.width > viewport.height
+            ? controller.value.aspectRatio
+            : 1 / controller.value.aspectRatio;
+        final double scale = previewAspect >= viewportAspect
+            ? previewAspect / viewportAspect
+            : viewportAspect / previewAspect;
+
+        return ClipRect(
+          child: Transform.scale(
+            scale: scale,
+            child: Center(child: CameraPreview(controller)),
+          ),
+        );
+      },
     );
   }
 
@@ -382,7 +390,7 @@ class _ScanScreenState extends State<ScanScreen>
   Widget _cameraViewBody(AppColors c) {
     return Stack(
       children: [
-        Positioned.fill(child: _buildCameraPreview(c)),
+        Positioned.fill(child: _cameraBackground()),
 
         // Top bar
         Positioned(
@@ -478,6 +486,18 @@ class _ScanScreenState extends State<ScanScreen>
                 height: AppSpacing.scanFrame + 80,
                 child: Stack(
                   children: [
+                    // Camera preview is confined to the center viewfinder
+                    // cutout; the rest of the screen stays dark.
+                    Positioned(
+                      left: AppSpacing.xl,
+                      top: AppSpacing.xl,
+                      right: AppSpacing.xl,
+                      bottom: AppSpacing.xl,
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(AppSpacing.md),
+                        child: _buildCameraPreview(c),
+                      ),
+                    ),
                     // Dim overlay outside the frame
                     Positioned.fill(
                       child: CustomPaint(

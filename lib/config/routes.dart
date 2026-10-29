@@ -162,14 +162,25 @@ GoRouter createAppRouter({String initialLocation = AppRoutes.splash}) {
           );
         },
       ),
-      StatefulShellRoute.indexedStack(
+      StatefulShellRoute(
         builder:
             (
               BuildContext context,
               GoRouterState state,
               StatefulNavigationShell navigationShell,
             ) {
-              return MainShell(navigationShell: navigationShell);
+              return navigationShell;
+            },
+        navigatorContainerBuilder:
+            (
+              BuildContext context,
+              StatefulNavigationShell navigationShell,
+              List<Widget> children,
+            ) {
+              return MainShell(
+                navigationShell: navigationShell,
+                children: children,
+              );
             },
         branches: <StatefulShellBranch>[
           StatefulShellBranch(
