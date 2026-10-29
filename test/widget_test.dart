@@ -11,10 +11,12 @@ import 'package:bruh/main.dart';
 import 'package:bruh/providers/app_provider.dart';
 import 'package:bruh/theme/app_colors.dart';
 import 'package:bruh/screens/brain_dump_finance_screen.dart';
+import 'package:bruh/screens/finance_screen.dart';
 import 'package:bruh/screens/home_screen.dart';
 import 'package:bruh/screens/login_screen.dart';
 import 'package:bruh/screens/main_shell.dart';
 import 'package:bruh/screens/profile_screen.dart';
+import 'package:bruh/screens/task_screen.dart';
 import 'package:bruh/services/receipt_camera.dart';
 import 'package:bruh/theme/theme_scope.dart';
 import 'package:bruh/widgets/quick_add_modal.dart';
@@ -299,6 +301,77 @@ void main() {
       expect(find.byTooltip('Tambah catatan'), findsNothing);
       expect(find.byType(FloatingActionButton), findsNothing);
     }
+  });
+
+  testWidgets('Horizontal swipe moves between the main tabs', (
+    WidgetTester tester,
+  ) async {
+    await pumpApp(tester);
+    expect(find.byType(HomeScreen), findsOneWidget);
+
+    await tester.fling(find.byType(HomeScreen), const Offset(-400, 0), 1000);
+    await tester.pumpAndSettle();
+    expect(find.byType(FinanceScreen), findsOneWidget);
+
+    await tester.fling(find.byType(FinanceScreen), const Offset(-400, 0), 1000);
+    await tester.pumpAndSettle();
+    expect(find.byType(TaskScreen), findsOneWidget);
+
+    await tester.fling(find.byType(TaskScreen), const Offset(-400, 0), 1000);
+    await tester.pumpAndSettle();
+    expect(find.byType(ProfileScreen), findsOneWidget);
+
+    await tester.fling(find.byType(ProfileScreen), const Offset(400, 0), 1000);
+    await tester.pumpAndSettle();
+    expect(find.byType(TaskScreen), findsOneWidget);
+  });
+
+  testWidgets('Horizontal swipe does not leave the first or last tab', (
+    WidgetTester tester,
+  ) async {
+    await pumpApp(tester);
+
+    await tester.drag(find.byType(HomeScreen), const Offset(320, 0));
+    await tester.pumpAndSettle();
+    expect(find.byType(HomeScreen), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Profil'));
+    await tester.pumpAndSettle();
+    await tester.drag(find.byType(ProfileScreen), const Offset(-320, 0));
+    await tester.pumpAndSettle();
+    expect(find.byType(ProfileScreen), findsOneWidget);
+  });
+
+  testWidgets('Swipe keeps the scroll position of a tab alive', (
+    WidgetTester tester,
+  ) async {
+    await pumpApp(tester);
+    final Finder homeList = find
+        .descendant(
+          of: find.byType(HomeScreen),
+          matching: find.byType(Scrollable),
+        )
+        .first;
+
+    // Sedikit drift horizontal tidak boleh dianggap sebagai swipe tab.
+    await tester.drag(homeList, const Offset(28, -280));
+    await tester.pumpAndSettle();
+    final double offset = tester
+        .state<ScrollableState>(homeList)
+        .position
+        .pixels;
+    expect(offset, greaterThan(0));
+    expect(find.byType(FinanceScreen).hitTestable(), findsNothing);
+
+    await tester.fling(find.byType(HomeScreen), const Offset(-400, 0), 1000);
+    await tester.pumpAndSettle();
+    await tester.fling(find.byType(FinanceScreen), const Offset(400, 0), 1000);
+    await tester.pumpAndSettle();
+
+    expect(
+      tester.state<ScrollableState>(homeList).position.pixels,
+      closeTo(offset, 0.1),
+    );
   });
 
   testWidgets('Deleting a task removes it from the shared task list', (

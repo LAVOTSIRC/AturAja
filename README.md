@@ -47,7 +47,8 @@ Project tidak membutuhkan API key, database, akun cloud, atau file `.env`.
 Saat dibuka, aplikasi menampilkan splash screen AturAja selama sekitar tiga
 detik. Jika belum ada sesi login, aplikasi menuju halaman login demo; setelah
 login, pengguna masuk ke `MainShell` dengan tab Home, Keuangan, Tugas, dan
-Profil. Status login disimpan sehingga sesi tetap aktif setelah restart.
+Profil. Tab utama dapat diganti lewat bottom navigation atau dengan swipe ke
+kiri/kanan. Status login disimpan sehingga sesi tetap aktif setelah restart.
 
 > Login hanya memvalidasi format email dan password minimal enam karakter;
 > tidak ada autentikasi ke server.
@@ -64,6 +65,7 @@ Profil. Status login disimpan sehingga sesi tetap aktif setelah restart.
 | `flutter build apk --debug`               | Membuat APK debug.                                             |
 | `flutter build apk --release`             | Membuat APK release dengan signing debug untuk kebutuhan demo. |
 | `dart run tool/generate_splash_icon.dart` | Membuat ulang asset icon splash Android 12+.                   |
+| `dart run flutter_launcher_icons`         | Membuat ulang ikon aplikasi Android dan iOS dari logo AturAja. |
 
 Jika asset splash diubah, jalankan juga generator splash berikut sebelum build:
 
