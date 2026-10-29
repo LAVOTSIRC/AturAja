@@ -1,18 +1,18 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+import 'package:provider/provider.dart';
 
-import '../data/app_store.dart';
+import '../config/routes.dart';
+import '../providers/app_provider.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_typography.dart';
 import '../theme/theme_scope.dart';
-import 'main_shell.dart';
 
 class SplashScreen extends StatefulWidget {
-  final AppStore? store;
-
-  const SplashScreen({super.key, this.store});
+  const SplashScreen({super.key});
 
   @override
   State<SplashScreen> createState() => _SplashScreenState();
@@ -57,10 +57,9 @@ class _SplashScreenState extends State<SplashScreen>
 
     _controller.forward();
     _controller.addStatusListener((AnimationStatus status) {
-      if (status == AnimationStatus.completed) {
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => MainShell(store: widget.store)),
-        );
+      if (status == AnimationStatus.completed && mounted) {
+        final bool isLoggedIn = context.read<AppProvider>().isLoggedIn;
+        context.go(isLoggedIn ? AppRoutes.home : AppRoutes.login);
       }
     });
   }
