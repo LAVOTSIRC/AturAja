@@ -134,6 +134,41 @@ class SettingsController extends ChangeNotifier {
     notifyListeners();
   }
 
+  Map<String, dynamic> toJson() => <String, dynamic>{
+    'deadlineNotificationsEnabled': deadlineNotificationsEnabled,
+    'budgetAlertsEnabled': budgetAlertsEnabled,
+    'roastingAiEnabled': roastingAiEnabled,
+    'autoBackupEnabled': autoBackupEnabled,
+    'monthlyBudgetLimit': monthlyBudgetLimit,
+    'biometricLockEnabled': biometricLockEnabled,
+    'pinWasUpdated': pinWasUpdated,
+    'accountDeletionRequested': accountDeletionRequested,
+    'lastSyncedAt': lastSyncedAt?.toIso8601String(),
+  };
+
+  void applyJson(Map<String, dynamic> json) {
+    deadlineNotificationsEnabled =
+        json['deadlineNotificationsEnabled'] as bool? ??
+        deadlineNotificationsEnabled;
+    budgetAlertsEnabled =
+        json['budgetAlertsEnabled'] as bool? ?? budgetAlertsEnabled;
+    roastingAiEnabled = json['roastingAiEnabled'] as bool? ?? roastingAiEnabled;
+    autoBackupEnabled = json['autoBackupEnabled'] as bool? ?? autoBackupEnabled;
+    monthlyBudgetLimit =
+        (json['monthlyBudgetLimit'] as num?)?.toInt() ?? monthlyBudgetLimit;
+    biometricLockEnabled =
+        json['biometricLockEnabled'] as bool? ?? biometricLockEnabled;
+    pinWasUpdated = json['pinWasUpdated'] as bool? ?? pinWasUpdated;
+    accountDeletionRequested =
+        json['accountDeletionRequested'] as bool? ?? accountDeletionRequested;
+    final String? syncedAt = json['lastSyncedAt'] as String?;
+    if (syncedAt != null) {
+      lastSyncedAt = DateTime.tryParse(syncedAt) ?? lastSyncedAt;
+    }
+    isCloudSyncing = false;
+    notifyListeners();
+  }
+
   @override
   void dispose() {
     _isDisposed = true;
