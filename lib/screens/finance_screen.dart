@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
 
 import '../data/models.dart';
+import '../providers/app_provider.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_typography.dart';
@@ -21,6 +23,8 @@ String _catLabel(String cat) {
       return 'Hiburan';
     case 'transport':
       return 'Transport';
+    case 'belanja':
+      return 'Belanja';
     case 'income':
       return 'Pemasukan';
     default:
@@ -46,6 +50,24 @@ String _catKey(String displayName) {
 /// Maximum nominal allowed per transaction, to keep entries realistic.
 const int kMaxTransactionAmount = 999999999;
 
+String _monthLabel(DateTime date) {
+  const List<String> months = <String>[
+    'Januari',
+    'Februari',
+    'Maret',
+    'April',
+    'Mei',
+    'Juni',
+    'Juli',
+    'Agustus',
+    'September',
+    'Oktober',
+    'November',
+    'Desember',
+  ];
+  return '${months[date.month - 1]} ${date.year}';
+}
+
 // ── Data model ───────────────────────────────────────────────────────────────
 
 class _CategorySlice {
@@ -68,47 +90,31 @@ class _CategorySlice {
 
 class FinanceScreen extends StatefulWidget {
   final VoidCallback onScan;
-  final VoidCallback? onTransactionsChanged;
 
-  const FinanceScreen({
-    super.key,
-    required this.onScan,
-    this.onTransactionsChanged,
-  });
+  const FinanceScreen({super.key, required this.onScan});
 
   @override
   State<FinanceScreen> createState() => _FinanceScreenState();
 }
 
 class _FinanceScreenState extends State<FinanceScreen> {
-  late List<TransactionItem> _transactions;
-
-  static const int _budget = 1200000;
-  static const int _spent = 325990;
-
-  @override
-  void initState() {
-    super.initState();
-    _transactions = transactionStore;
-  }
-
-  void _notifyTransactionsChanged() {
-    widget.onTransactionsChanged?.call();
-  }
-
-  List<TransactionItem> _transactionsForCategory(String catKey) {
+  List<TransactionItem> _transactionsForCategory(
+    List<TransactionItem> transactions,
+    String catKey,
+  ) {
     if (catKey == 'other') {
-      return _transactions
+      return transactions
           .where(
             (t) =>
                 t.cat != 'food' &&
                 t.cat != 'entertainment' &&
                 t.cat != 'transport' &&
+                t.cat != 'belanja' &&
                 t.cat != 'income',
           )
           .toList();
     }
-    return _transactions.where((t) => t.cat == catKey).toList();
+    return transactions.where((t) => t.cat == catKey).toList();
   }
 
   void _showAddIncomeModal() => _showAddTransactionModal(isIncome: true);
@@ -328,10 +334,9 @@ class _FinanceScreenState extends State<FinanceScreen> {
                               date: 'Hari ini',
                             );
                             HapticFeedback.lightImpact();
-                            setState(() {
-                              _transactions.insert(0, newTransaction);
-                            });
-                            _notifyTransactionsChanged();
+                            context.read<AppProvider>().addTransaction(
+                              newTransaction,
+                            );
                             Navigator.of(ctx).pop();
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
@@ -390,6 +395,7 @@ class _FinanceScreenState extends State<FinanceScreen> {
   }
 
   void _showTransactionDetail(TransactionItem t) {
+    final AppProvider app = context.read<AppProvider>();
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -397,11 +403,7 @@ class _FinanceScreenState extends State<FinanceScreen> {
       builder: (_) => _TransactionDetailSheet(
         transaction: t,
         onEdit: (updated) {
-          setState(() {
-            final idx = _transactions.indexWhere((x) => x.id == updated.id);
-            if (idx != -1) _transactions[idx] = updated;
-          });
-          _notifyTransactionsChanged();
+          app.updateTransaction(updated);
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text('Perubahan pada "${updated.label}" disimpan'),
@@ -410,23 +412,17 @@ class _FinanceScreenState extends State<FinanceScreen> {
           );
         },
         onDelete: () {
-          final removedIndex = _transactions.indexWhere((x) => x.id == t.id);
-          setState(() => _transactions.removeWhere((x) => x.id == t.id));
-          _notifyTransactionsChanged();
+          final int removedIndex = app.transactions.indexWhere(
+            (x) => x.id == t.id,
+          );
+          app.deleteTransaction(t.id);
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text('"${t.label}" dihapus dari riwayat'),
               action: SnackBarAction(
                 label: 'Urungkan',
                 onPressed: () {
-                  setState(() {
-                    final insertIndex = removedIndex.clamp(
-                      0,
-                      _transactions.length,
-                    );
-                    _transactions.insert(insertIndex, t);
-                  });
-                  _notifyTransactionsChanged();
+                  app.restoreTransaction(t, index: removedIndex);
                 },
               ),
               duration: const Duration(seconds: 4),
@@ -440,22 +436,79 @@ class _FinanceScreenState extends State<FinanceScreen> {
   @override
   Widget build(BuildContext context) {
     final AppColors c = ThemeScope.of(context).colors;
+    final AppProvider app = context.watch<AppProvider>();
+    final List<TransactionItem> transactions = app.transactions;
 
-    final List<_CategorySlice> cats = [
-      _CategorySlice('Makan & Minum', 45, c.blue, 145000, 'food'),
-      _CategorySlice('Hiburan', 25, c.expense, 83990, 'entertainment'),
-      _CategorySlice('Transport', 20, c.warning, 65000, 'transport'),
-      _CategorySlice('Lainnya', 10, c.success, 32000, 'other'),
-    ];
-
-    final int totalIncome = _transactions
+    final int totalIncome = transactions
         .where((t) => t.amount > 0)
         .fold(0, (sum, t) => sum + t.amount);
-    final int totalExpense = _transactions
+    final int totalExpense = transactions
         .where((t) => t.amount < 0)
         .fold(0, (sum, t) => sum + t.amount.abs());
 
-    final double usagePct = _spent / _budget;
+    // Hitung breakdown pengeluaran per kategori dari transaksi asli, bukan
+    // angka statis, supaya selalu sinkron dengan riwayat transaksi.
+    final Map<String, int> categoryTotals = {
+      'food': 0,
+      'entertainment': 0,
+      'transport': 0,
+      'belanja': 0,
+      'other': 0,
+    };
+    for (final TransactionItem t in transactions) {
+      if (t.amount >= 0) continue;
+      final String key = switch (t.cat) {
+        'food' => 'food',
+        'entertainment' => 'entertainment',
+        'transport' => 'transport',
+        'belanja' => 'belanja',
+        _ => 'other',
+      };
+      categoryTotals[key] = (categoryTotals[key] ?? 0) + t.amount.abs();
+    }
+    int pctOf(int amount) =>
+        totalExpense == 0 ? 0 : ((amount / totalExpense) * 100).round();
+
+    final List<_CategorySlice> cats = [
+      _CategorySlice(
+        'Makan & Minum',
+        pctOf(categoryTotals['food']!),
+        c.blue,
+        categoryTotals['food']!,
+        'food',
+      ),
+      _CategorySlice(
+        'Hiburan',
+        pctOf(categoryTotals['entertainment']!),
+        c.expense,
+        categoryTotals['entertainment']!,
+        'entertainment',
+      ),
+      _CategorySlice(
+        'Transport',
+        pctOf(categoryTotals['transport']!),
+        c.warning,
+        categoryTotals['transport']!,
+        'transport',
+      ),
+      _CategorySlice(
+        'Belanja',
+        pctOf(categoryTotals['belanja']!),
+        c.teal,
+        categoryTotals['belanja']!,
+        'belanja',
+      ),
+      _CategorySlice(
+        'Lainnya',
+        pctOf(categoryTotals['other']!),
+        c.success,
+        categoryTotals['other']!,
+        'other',
+      ),
+    ];
+
+    final int budget = app.budgetLimit;
+    final double usagePct = budget <= 0 ? 0 : totalExpense / budget;
     final Color budgetColor = usagePct < 0.70
         ? c.success
         : usagePct < 0.90
@@ -494,7 +547,7 @@ class _FinanceScreenState extends State<FinanceScreen> {
                           ),
                           const SizedBox(height: AppSpacing.xxs),
                           Text(
-                            'Ringkasan September 2026',
+                            'Ringkasan ${_monthLabel(DateTime.now())}',
                             style: AppTypography.meta(c.textMuted),
                           ),
                         ],
@@ -658,7 +711,7 @@ class _FinanceScreenState extends State<FinanceScreen> {
                         c,
                         Icons.call_received_outlined,
                         'Pemasukan',
-                        totalIncome > 0 ? totalIncome : 500000,
+                        totalIncome,
                         c.success,
                       ),
                     ),
@@ -668,7 +721,7 @@ class _FinanceScreenState extends State<FinanceScreen> {
                         c,
                         Icons.call_made_outlined,
                         'Pengeluaran',
-                        totalExpense > 0 ? totalExpense : 325990,
+                        totalExpense,
                         c.expense,
                       ),
                     ),
@@ -705,7 +758,7 @@ class _FinanceScreenState extends State<FinanceScreen> {
                                 style: AppTypography.label(c.text),
                               ),
                               Text(
-                                formatRupiah(_budget),
+                                formatRupiah(budget),
                                 style: AppTypography.caption(c.blue)
                                     .copyWith(fontWeight: FontWeight.w600),
                               ),
@@ -727,28 +780,34 @@ class _FinanceScreenState extends State<FinanceScreen> {
                             ),
                           ),
                           const SizedBox(height: AppSpacing.xs),
-                          // Segmented bar by category
+                          // Segmented bar by category (skip categories with
+                          // 0% so Expanded never receives a zero flex factor)
                           ClipRRect(
                             borderRadius: BorderRadius.circular(
                               AppSpacing.huge,
                             ),
                             child: SizedBox(
                               height: AppSpacing.progressMedium,
-                              child: Row(
-                                children: cats
-                                    .map(
-                                      (_CategorySlice slice) => Expanded(
-                                        flex: slice.pct,
-                                        child: Container(
-                                          margin: const EdgeInsets.symmetric(
-                                            horizontal: AppSpacing.xxs,
-                                          ),
-                                          color: slice.color,
-                                        ),
-                                      ),
-                                    )
-                                    .toList(),
-                              ),
+                              child: totalExpense == 0
+                                  ? Container(color: c.surfaceHigh)
+                                  : Row(
+                                      children: cats
+                                          .where((slice) => slice.pct > 0)
+                                          .map(
+                                            (_CategorySlice slice) => Expanded(
+                                              flex: slice.pct,
+                                              child: Container(
+                                                margin:
+                                                    const EdgeInsets.symmetric(
+                                                      horizontal:
+                                                          AppSpacing.xxs,
+                                                    ),
+                                                color: slice.color,
+                                              ),
+                                            ),
+                                          )
+                                          .toList(),
+                                    ),
                             ),
                           ),
                           const SizedBox(height: AppSpacing.xs),
@@ -762,7 +821,7 @@ class _FinanceScreenState extends State<FinanceScreen> {
                                   children: [
                                     const TextSpan(text: 'Terpakai: '),
                                     TextSpan(
-                                      text: formatRupiah(_spent),
+                                      text: formatRupiah(totalExpense),
                                       style: AppTypography.micro(
                                         c.text,
                                       ).copyWith(fontWeight: FontWeight.w700),
@@ -772,8 +831,8 @@ class _FinanceScreenState extends State<FinanceScreen> {
                               ),
                               Text(
                                 usagePct > 1.0
-                                    ? 'Lebih ${formatRupiah(_spent - _budget)}'
-                                    : 'Sisa ${formatRupiah(_budget - _spent)}',
+                                    ? 'Lebih ${formatRupiah(totalExpense - budget)}'
+                                    : 'Sisa ${formatRupiah(budget - totalExpense)}',
                                 style: AppTypography.micro(budgetColor),
                               ),
                             ],
@@ -803,7 +862,7 @@ class _FinanceScreenState extends State<FinanceScreen> {
                                   const SizedBox(width: AppSpacing.xs),
                                   Expanded(
                                     child: Text(
-                                      'Anggaran bulan ini terlampaui ${formatRupiah(_spent - _budget)}',
+                                      'Anggaran bulan ini terlampaui ${formatRupiah(totalExpense - budget)}',
                                       style: AppTypography.micro(
                                         c.expense,
                                       ).copyWith(fontWeight: FontWeight.w600),
@@ -873,34 +932,15 @@ class _FinanceScreenState extends State<FinanceScreen> {
                                         categoryLabel: slice.label,
                                         categoryColor: slice.color,
                                         transactions: _transactionsForCategory(
+                                          transactions,
                                           slice.catKey,
                                         ),
-                                        onTransactionUpdated: (updated) {
-                                          setState(() {
-                                            final idx = _transactions
-                                                .indexWhere(
-                                                  (x) => x.id == updated.id,
-                                                );
-                                            if (idx != -1) {
-                                              _transactions[idx] = updated;
-                                            }
-                                          });
-                                          _notifyTransactionsChanged();
-                                        },
-                                        onTransactionDeleted: (id) {
-                                          setState(
-                                            () => _transactions.removeWhere(
-                                              (x) => x.id == id,
-                                            ),
-                                          );
-                                          _notifyTransactionsChanged();
-                                        },
-                                        onTransactionRestored: (item) {
-                                          setState(
-                                            () => _transactions.insert(0, item),
-                                          );
-                                          _notifyTransactionsChanged();
-                                        },
+                                        onTransactionUpdated:
+                                            app.updateTransaction,
+                                        onTransactionDeleted:
+                                            app.deleteTransaction,
+                                        onTransactionRestored:
+                                            app.restoreTransaction,
                                       ),
                                     ),
                                   );
@@ -930,7 +970,7 @@ class _FinanceScreenState extends State<FinanceScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const SectionLabel('Riwayat Transaksi'),
-                    if (_transactions.isEmpty)
+                    if (transactions.isEmpty)
                       const AppEmptyState(
                         icon: Icons.receipt_long_outlined,
                         title: 'Belum ada transaksi',
@@ -938,7 +978,7 @@ class _FinanceScreenState extends State<FinanceScreen> {
                       )
                     else
                       Column(
-                        children: _transactions
+                        children: transactions
                             .map(
                               (TransactionItem t) => Padding(
                                 padding: const EdgeInsets.only(

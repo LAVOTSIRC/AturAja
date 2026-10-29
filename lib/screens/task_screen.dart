@@ -46,6 +46,7 @@ class TaskScreen extends StatefulWidget {
   final VoidCallback? onAddTask;
   final ValueChanged<int>? onToggleTask;
   final ValueChanged<TaskItem>? onSaveTask;
+  final ValueChanged<int>? onDeleteTask;
 
   const TaskScreen({
     super.key,
@@ -53,6 +54,7 @@ class TaskScreen extends StatefulWidget {
     this.onAddTask,
     this.onToggleTask,
     this.onSaveTask,
+    this.onDeleteTask,
   });
 
   @override
@@ -144,10 +146,15 @@ class _TaskScreenState extends State<TaskScreen> {
   }
 
   void _deleteTask(int id) {
-    final task = list.firstWhere((t) => t.id == id, orElse: () => list.first);
+    final int index = list.indexWhere((TaskItem t) => t.id == id);
+    if (index < 0) {
+      return;
+    }
+    final TaskItem task = list[index];
     setState(() {
-      list.removeWhere((t) => t.id == id);
+      list.removeAt(index);
     });
+    widget.onDeleteTask?.call(id);
     _showMessage('Tugas "${task.title}" telah dihapus.', isError: true);
   }
 

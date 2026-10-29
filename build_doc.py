@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import docx
 from docx.shared import Inches, Pt, RGBColor
 from docx.enum.text import WD_ALIGN_PARAGRAPH
@@ -157,7 +159,7 @@ screens = [
     ("6", "TaskFormScreen", "Halaman form tambah & edit tugas full screen (dukungan Form Manual & AI Brain Dump)."),
     ("7", "FinanceScreen", "Halaman manajemen keuangan, riwayat transaksi pengeluaran, dan pemasokan."),
     ("8", "ProfileScreen", "Halaman profil pengguna, statistik tugas selesai, dan tombol toggle tema Dark/Light."),
-    ("9", "ScanScreen", "Halaman pemindai kuitansi/struk belanja menggunakan kamera device."),
+    ("9", "ScanScreen", "Halaman pemindai kuitansi/struk belanja dengan preview kamera langsung di dalam aplikasi."),
     ("10", "QuickAddModal", "Bottom sheet modal pencatatan cepat / brain dump global.")
 ]
 
@@ -453,8 +455,8 @@ set_table_borders(t_test)
 
 # --- 12. KETERBATASAN APLIKASI ---
 add_h1("12. KETERBATASAN APLIKASI")
-add_bullet("Penyimpanan data masih berbasis in-memory/simulasi lokal (belum terhubung ke database cloud Firebase/REST API).", "● ")
-add_bullet("Data riset akan kembali ke kondisi data sampel default jika aplikasi di-restart total.", "● ")
+add_bullet("Data tugas, transaksi, profil, pengaturan, tema, dan sesi login disimpan lokal melalui SharedPreferences; belum terhubung ke database cloud Firebase/REST API.", "● ")
+add_bullet("Cadangan cloud, notifikasi, biometrik, dan OCR struk masih berupa simulasi.", "● ")
 add_bullet("Proses AI Brain Dump menggunakan pustaka parser aturan heuristik lokal (simulasi AI).", "● ")
 
 # --- 13. CHECKLIST SEBELUM UTS ---
@@ -478,11 +480,7 @@ add_bullet("Source Code Flutter (ZIP tanpa folder build/ dan .dart_tool/)", "1. 
 add_bullet("Dokumen Dokumentasi Laporan Project Kelompok (Dokumentasi_Project_AturAja.docx)", "2. ")
 add_bullet("Video Demonstrasi Aplikasi (Durasi 8-10 menit)", "3. ")
 
-# Save to path
-output_path1 = r"C:\Semester 5\Reguler\Pemmob\AturAja\Dokumentasi_Project_AturAja.docx"
-output_path2 = r"C:\Users\Zidan\Downloads\Dokumentasi_Project_AturAja.docx"
-
-doc.save(output_path1)
-doc.save(output_path2)
-
-print(f"Successfully generated docx files at:\n - {output_path1}\n - {output_path2}")
+# Save next to this script so the output path works on every machine.
+output_path = Path(__file__).resolve().parent / "Dokumentasi_Project_AturAja.docx"
+doc.save(output_path)
+print(f"Successfully generated document at: {output_path}")
