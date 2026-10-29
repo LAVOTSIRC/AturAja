@@ -65,6 +65,7 @@ kiri/kanan. Status login disimpan sehingga sesi tetap aktif setelah restart.
 | `flutter build apk --debug`               | Membuat APK debug.                                             |
 | `flutter build apk --release`             | Membuat APK release dengan signing debug untuk kebutuhan demo. |
 | `dart run tool/generate_splash_icon.dart` | Membuat ulang asset icon splash Android 12+.                   |
+| `dart run flutter_launcher_icons`         | Membuat ulang ikon aplikasi Android dan iOS dari logo AturAja. |
 
 Jika asset splash diubah, jalankan juga generator splash berikut sebelum build:
 
