@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 class AppTypography {
+  static const String fontFamily = 'Poppins';
+
   static const double font10 = 10;
   static const double font11 = 11;
   static const double font12 = 12;
@@ -64,18 +66,26 @@ class AppTypography {
     color: color,
   );
 
-  static TextTheme apply(TextTheme base, Color color) => base.copyWith(
-    displayLarge: base.displayLarge?.copyWith(fontSize: font36, color: color),
-    headlineLarge: base.headlineLarge?.copyWith(fontSize: font30, color: color),
-    titleLarge: base.titleLarge?.copyWith(fontSize: font18, color: color),
-    titleMedium: base.titleMedium?.copyWith(fontSize: font16, color: color),
-    bodyLarge: base.bodyLarge?.copyWith(fontSize: font16, color: color),
-    bodyMedium: base.bodyMedium?.copyWith(fontSize: font14, color: color),
-    bodySmall: base.bodySmall?.copyWith(fontSize: font12, color: color),
-    labelLarge: base.labelLarge?.copyWith(fontSize: font14, color: color),
-    labelMedium: base.labelMedium?.copyWith(fontSize: font13, color: color),
-    labelSmall: base.labelSmall?.copyWith(fontSize: font12, color: color),
-  );
+  static TextTheme apply(TextTheme base, Color color) => base
+      .apply(fontFamily: fontFamily)
+      .copyWith(
+        displayLarge: base.displayLarge?.copyWith(
+          fontSize: font36,
+          color: color,
+        ),
+        headlineLarge: base.headlineLarge?.copyWith(
+          fontSize: font30,
+          color: color,
+        ),
+        titleLarge: base.titleLarge?.copyWith(fontSize: font18, color: color),
+        titleMedium: base.titleMedium?.copyWith(fontSize: font16, color: color),
+        bodyLarge: base.bodyLarge?.copyWith(fontSize: font16, color: color),
+        bodyMedium: base.bodyMedium?.copyWith(fontSize: font14, color: color),
+        bodySmall: base.bodySmall?.copyWith(fontSize: font12, color: color),
+        labelLarge: base.labelLarge?.copyWith(fontSize: font14, color: color),
+        labelMedium: base.labelMedium?.copyWith(fontSize: font13, color: color),
+        labelSmall: base.labelSmall?.copyWith(fontSize: font12, color: color),
+      );
 
   static TextStyle mono(Color color) =>
       GoogleFonts.robotoMono(fontSize: font12, color: color, height: 1.8);
