@@ -1,165 +1,33 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
-import '../data/models.dart';
-import '../data/settings_controller.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_typography.dart';
 import '../theme/theme_scope.dart';
+import '../utils/responsive.dart';
 import '../widgets/common.dart';
-import 'brain_dump_finance_screen.dart';
-import 'finance_screen.dart';
-import 'home_screen.dart';
-import 'login_screen.dart';
-import 'profile_screen.dart';
-import 'scan_screen.dart';
-import 'task_screen.dart';
 
-class MainShell extends StatefulWidget {
-  const MainShell({super.key});
+class MainShell extends StatelessWidget {
+  final StatefulNavigationShell navigationShell;
 
-  @override
-  State<MainShell> createState() => _MainShellState();
-}
-
-class _MainShellState extends State<MainShell> {
-  int tab = 0;
-  List<TaskItem> tasks = List<TaskItem>.of(sampleTasks);
-  int nextTaskId = sampleTasks.length + 1;
-  late final SettingsController settings;
-  late final PageController _pageController;
-
-  @override
-  void initState() {
-    super.initState();
-    settings = SettingsController();
-    _pageController = PageController(initialPage: tab);
-  }
-
-  @override
-  void dispose() {
-    settings.dispose();
-    _pageController.dispose();
-    super.dispose();
-  }
+  const MainShell({super.key, required this.navigationShell});
 
   void _onTabTapped(int index) {
-    setState(() => tab = index);
-    if (_pageController.hasClients) {
-      _pageController.animateToPage(
-        index,
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeInOut,
-      );
-    }
-  }
-
-  Future<void> _openBrainDump() async {
-    final TransactionItem? note = await Navigator.of(context)
-        .push<TransactionItem>(
-          MaterialPageRoute(builder: (_) => const BrainDumpFinanceScreen()),
-        );
-    if (note == null || !mounted) {
-      return;
-    }
-    setState(() {});
-    ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-      SnackBar(
-        content: Text(
-          note.amount >= 0
-              ? 'Catatan keuangan "${note.label}" dicatat.'
-              : 'Catatan pengeluaran "${note.label}" dicatat.',
-        ),
-      ),
-    );
-  }
-
-  void _openTaskAdd() {
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => TaskFormScreen(onSave: _saveTask)),
-    );
-  }
-
-  void _saveTask(TaskItem task) {
-    final bool isUpdate = tasks.any((item) => item.id == task.id);
-    setState(() {
-      final index = tasks.indexWhere((item) => item.id == task.id);
-      if (index >= 0) {
-        tasks = [...tasks]..[index] = task;
-      } else {
-        tasks = [...tasks, task];
-      }
-    });
-    ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-      SnackBar(
-        content: Text(
-          isUpdate
-              ? 'Tugas berhasil diperbarui.'
-              : 'Tugas berhasil ditambahkan.',
-        ),
-      ),
-    );
-  }
-
-  void _toggleTask(int id) {
-    setState(() {
-      tasks = tasks
-          .map(
-            (TaskItem task) =>
-                task.id == id ? task.copyWith(done: !task.done) : task,
-          )
-          .toList();
-    });
-  }
-
-  void _openScan() {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => const ScanScreen(),
-        fullscreenDialog: true,
-      ),
-    );
-  }
-
-  void _logout() {
-    final NavigatorState navigator = Navigator.of(context);
-    navigator.pushReplacement(
-      MaterialPageRoute(
-        builder: (_) => LoginScreen(
-          onLogin: () => navigator.pushReplacement(
-            MaterialPageRoute(builder: (_) => const MainShell()),
-          ),
-        ),
-      ),
+    navigationShell.goBranch(
+      index,
+      initialLocation: index == navigationShell.currentIndex,
     );
   }
 
   @override
   Widget build(BuildContext context) {
     final AppColors c = ThemeScope.of(context).colors;
-    final List<Widget> screens = [
-      HomeScreen(
-        onScan: _openScan,
-        onAddTask: _openTaskAdd,
-        onBrainDump: _openBrainDump,
-      ),
-      FinanceScreen(onScan: _openScan),
-      TaskScreen(
-        tasks: tasks,
-        onAddTask: _openTaskAdd,
-        onToggleTask: _toggleTask,
-        onSaveTask: _saveTask,
-      ),
-      ProfileScreen(settings: settings, onLogout: _logout),
-    ];
+    final int tab = navigationShell.currentIndex;
 
     return Scaffold(
       backgroundColor: c.shell,
-      body: PageView(
-        controller: _pageController,
-        onPageChanged: (index) => setState(() => tab = index),
-        children: screens,
-      ),
+      body: navigationShell,
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
           color: c.navBg,
@@ -168,18 +36,19 @@ class _MainShellState extends State<MainShell> {
         child: SafeArea(
           top: false,
           child: SizedBox(
-            height: AppSpacing.navHeight,
+            height: Responsive.navHeight(context),
             child: Row(
-              children: [
-                _navItem(c, 0, Icons.home_outlined, 'Beranda'),
+              children: <Widget>[
+                _navItem(c, tab, 0, Icons.home_outlined, 'Beranda'),
                 _navItem(
                   c,
+                  tab,
                   1,
                   Icons.account_balance_wallet_outlined,
                   'Keuangan',
                 ),
-                _navItem(c, 2, Icons.task_alt_outlined, 'Tugas'),
-                _navItem(c, 3, Icons.person_outline, 'Profil'),
+                _navItem(c, tab, 2, Icons.task_alt_outlined, 'Tugas'),
+                _navItem(c, tab, 3, Icons.person_outline, 'Profil'),
               ],
             ),
           ),
@@ -188,8 +57,14 @@ class _MainShellState extends State<MainShell> {
     );
   }
 
-  Widget _navItem(AppColors c, int index, IconData icon, String label) {
-    final bool active = tab == index;
+  Widget _navItem(
+    AppColors c,
+    int activeIndex,
+    int index,
+    IconData icon,
+    String label,
+  ) {
+    final bool active = activeIndex == index;
     return Expanded(
       child: PressableScale(
         onTap: () => _onTabTapped(index),
@@ -209,7 +84,7 @@ class _MainShellState extends State<MainShell> {
           ),
           child: Stack(
             alignment: Alignment.center,
-            children: [
+            children: <Widget>[
               if (active)
                 Positioned(
                   left: 0,
@@ -228,7 +103,7 @@ class _MainShellState extends State<MainShell> {
                 ),
               Column(
                 mainAxisAlignment: MainAxisAlignment.center,
-                children: [
+                children: <Widget>[
                   Icon(
                     icon,
                     size: AppSpacing.iconMedium,

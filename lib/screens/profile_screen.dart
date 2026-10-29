@@ -1,17 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
-import '../data/settings_controller.dart';
+import '../config/routes.dart';
+import '../data/models.dart';
+import '../providers/settings_provider.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_typography.dart';
 import '../theme/theme_scope.dart';
 import '../utils/format.dart';
 import '../widgets/common.dart';
-import 'budget_limit_screen.dart';
-import 'cloud_backup_screen.dart';
-import 'notification_settings_screen.dart';
-import 'nlp_simulation_screen.dart';
-import 'privacy_security_screen.dart';
 
 enum _SettingsDestination { notifications, cloud, budget, nlp, privacy }
 
@@ -51,11 +49,15 @@ class _StatItem {
 
 class ProfileScreen extends StatefulWidget {
   final SettingsController settings;
+  final ProfileData? initialProfile;
+  final ValueChanged<ProfileData>? onProfileChanged;
   final VoidCallback onLogout;
 
   const ProfileScreen({
     super.key,
     required this.settings,
+    this.initialProfile,
+    this.onProfileChanged,
     required this.onLogout,
   });
 
@@ -98,10 +100,31 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  String fullName = 'M Zidan Ruriano A.G';
-  String nim = '241401063';
-  String program = 'Ilmu Komputer';
-  String avatarLabel = 'ZR';
+  late String fullName;
+  late String nim;
+  late String program;
+  late String avatarLabel;
+
+  @override
+  void initState() {
+    super.initState();
+    final ProfileData profile = widget.initialProfile ?? ProfileData.initial;
+    fullName = profile.fullName;
+    nim = profile.nim;
+    program = profile.program;
+    avatarLabel = profile.avatarLabel;
+  }
+
+  void _notifyProfileChanged() {
+    widget.onProfileChanged?.call(
+      ProfileData(
+        fullName: fullName,
+        nim: nim,
+        program: program,
+        avatarLabel: avatarLabel,
+      ),
+    );
+  }
 
   String _initialsFromName(String value) {
     final List<String> parts = value
@@ -150,6 +173,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
     if (choice == 'default') {
       setState(() => avatarLabel = _initialsFromName(fullName));
+      _notifyProfileChanged();
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('Avatar bawaan digunakan.')));
@@ -179,6 +203,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       program = draft.program;
       avatarLabel = _initialsFromName(draft.fullName);
     });
+    _notifyProfileChanged();
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Profil berhasil diperbarui.')),
     );
@@ -189,23 +214,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (selected == null) {
       return;
     }
-    final SettingsController settings = widget.settings;
-    final Widget destination;
-    switch (selected) {
-      case _SettingsDestination.notifications:
-        destination = NotificationSettingsScreen(settings: settings);
-      case _SettingsDestination.cloud:
-        destination = CloudBackupScreen(settings: settings);
-      case _SettingsDestination.budget:
-        destination = BudgetLimitScreen(settings: settings);
-      case _SettingsDestination.nlp:
-        destination = NlpSimulationScreen(settings: settings);
-      case _SettingsDestination.privacy:
-        destination = PrivacySecurityScreen(settings: settings);
-    }
+    final String path = switch (selected) {
+      _SettingsDestination.notifications => AppRoutes.notificationSettings,
+      _SettingsDestination.cloud => AppRoutes.cloudBackup,
+      _SettingsDestination.budget => AppRoutes.budgetLimit,
+      _SettingsDestination.nlp => AppRoutes.nlpSimulation,
+      _SettingsDestination.privacy => AppRoutes.privacySecurity,
+    };
 
-    final bool? saved = await Navigator.of(context)
-        .push<bool>(MaterialPageRoute<bool>(builder: (_) => destination));
+    final bool? saved = await context.push<bool>(path);
     if (selected == _SettingsDestination.budget && saved == true && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Limit anggaran berhasil diperbarui.')),

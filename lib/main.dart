@@ -1,19 +1,49 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+import 'package:provider/provider.dart';
 
-import 'screens/splash_screen.dart';
+import 'config/routes.dart';
+import 'providers/app_provider.dart';
+import 'providers/settings_provider.dart';
 import 'theme/app_colors.dart';
 import 'theme/app_spacing.dart';
 import 'theme/app_typography.dart';
 import 'theme/theme_scope.dart';
 
-void main() {
-  runApp(MyApp(controller: ThemeController()));
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  final AppProvider app = await AppProvider.loadPersistent();
+  runApp(
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider<AppProvider>.value(value: app),
+        ChangeNotifierProvider<ThemeController>.value(value: app.theme),
+        ChangeNotifierProvider<SettingsController>.value(value: app.settings),
+      ],
+      child: const MyApp(),
+    ),
+  );
 }
 
-class MyApp extends StatelessWidget {
-  final ThemeController controller;
+class MyApp extends StatefulWidget {
+  final String initialLocation;
 
-  const MyApp({super.key, required this.controller});
+  const MyApp({super.key, this.initialLocation = AppRoutes.splash});
+
+  @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> {
+  late final GoRouter _router = createAppRouter(
+    initialLocation: widget.initialLocation,
+  );
+
+  @override
+  void dispose() {
+    _router.dispose();
+    super.dispose();
+  }
 
   ThemeData _theme(AppColors c, Brightness brightness) {
     final ColorScheme scheme =
@@ -78,22 +108,19 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final ThemeController theme = context.watch<ThemeController>();
+    final AppColors c = theme.colors;
+    final Brightness brightness = theme.isDark
+        ? Brightness.dark
+        : Brightness.light;
+
     return ThemeScope(
-      controller: controller,
-      child: AnimatedBuilder(
-        animation: controller,
-        builder: (BuildContext context, Widget? child) {
-          final AppColors c = controller.colors;
-          final Brightness brightness = controller.isDark
-              ? Brightness.dark
-              : Brightness.light;
-          return MaterialApp(
-            title: 'AturAja',
-            debugShowCheckedModeBanner: false,
-            theme: _theme(c, brightness),
-            home: const SplashScreen(),
-          );
-        },
+      controller: theme,
+      child: MaterialApp.router(
+        title: 'AturAja',
+        debugShowCheckedModeBanner: false,
+        theme: _theme(c, brightness),
+        routerConfig: _router,
       ),
     );
   }
