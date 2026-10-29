@@ -88,42 +88,20 @@ class MainShell extends StatelessWidget {
           decoration: BoxDecoration(
             color: active ? c.blueDim : c.transparent,
             borderRadius: BorderRadius.circular(AppSpacing.huge),
-            border: Border.all(color: active ? c.borderAccent : c.transparent),
           ),
-          child: Stack(
-            alignment: Alignment.center,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
             children: <Widget>[
-              if (active)
-                Positioned(
-                  left: 0,
-                  right: 0,
-                  bottom: 0,
-                  child: Center(
-                    child: Container(
-                      width: AppSpacing.lg,
-                      height: AppSpacing.xxs,
-                      decoration: BoxDecoration(
-                        color: c.blue,
-                        borderRadius: BorderRadius.circular(AppSpacing.huge),
-                      ),
-                    ),
-                  ),
-                ),
-              Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: <Widget>[
-                  Icon(
-                    icon,
-                    size: AppSpacing.iconMedium,
-                    color: active ? c.blue : c.textMuted,
-                  ),
-                  const SizedBox(height: AppSpacing.xxs),
-                  Text(
-                    label,
-                    style: AppTypography.micro(active ? c.blue : c.textMuted)
-                        .copyWith(fontWeight: FontWeight.w600),
-                  ),
-                ],
+              Icon(
+                icon,
+                size: AppSpacing.iconMedium,
+                color: active ? c.blue : c.textMuted,
+              ),
+              const SizedBox(height: AppSpacing.xxs),
+              Text(
+                label,
+                style: AppTypography.micro(active ? c.blue : c.textMuted)
+                    .copyWith(fontWeight: FontWeight.w600),
               ),
             ],
           ),
