@@ -95,6 +95,28 @@ class AppProvider extends ChangeNotifier {
   List<TaskItem> get urgentTasks =>
       tasks.where((TaskItem task) => task.urgent && !task.done).toList();
 
+  List<TaskItem> get todayTasks => tasks.where((TaskItem task) {
+        if (task.done) return false;
+        if (task.dueDate != null) {
+          final DateTime now = DateTime.now();
+          return task.dueDate!.year == now.year &&
+              task.dueDate!.month == now.month &&
+              task.dueDate!.day == now.day;
+        }
+        final String lower = task.deadline.toLowerCase();
+        return lower.contains('hari ini');
+      }).toList();
+
+  int get todayTaskCount => todayTasks.length;
+
+  int get nextTaskId {
+    if (tasks.isEmpty) return 1;
+    return tasks
+        .map((TaskItem t) => t.id)
+        .reduce((int a, int b) => a > b ? a : b) +
+        1;
+  }
+
   Future<void> load() async {
     _isLoading = true;
     try {

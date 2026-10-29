@@ -42,7 +42,8 @@ IconData categoryIcon(String category) {
 }
 
 class TaskScreen extends StatefulWidget {
-  final List<TaskItem>? tasks;
+  final List<TaskItem> tasks;
+  final int nextTaskId;
   final VoidCallback? onAddTask;
   final ValueChanged<int>? onToggleTask;
   final ValueChanged<TaskItem>? onSaveTask;
@@ -50,7 +51,8 @@ class TaskScreen extends StatefulWidget {
 
   const TaskScreen({
     super.key,
-    this.tasks,
+    required this.tasks,
+    required this.nextTaskId,
     this.onAddTask,
     this.onToggleTask,
     this.onSaveTask,
@@ -62,25 +64,10 @@ class TaskScreen extends StatefulWidget {
 }
 
 class _TaskScreenState extends State<TaskScreen> {
-  late List<TaskItem> list;
   TaskFilter activeFilter = TaskFilter.all;
   String selectedCategoryFilter = 'Semua';
 
-  @override
-  void initState() {
-    super.initState();
-    list = widget.tasks != null ? List.of(widget.tasks!) : List.of(sampleTasks);
-  }
-
-  @override
-  void didUpdateWidget(TaskScreen oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.tasks != null && widget.tasks != oldWidget.tasks) {
-      setState(() {
-        list = List.of(widget.tasks!);
-      });
-    }
-  }
+  List<TaskItem> get list => widget.tasks;
 
   void _showMessage(String message, {bool isError = false}) {
     final AppColors c = ThemeScope.of(context).colors;
@@ -114,46 +101,29 @@ class _TaskScreenState extends State<TaskScreen> {
   }
 
   void _toggleDone(int id) {
-    setState(() {
-      list = list.map((TaskItem t) {
-        if (t.id == id) {
-          final updated = t.copyWith(done: !t.done);
-          _showMessage(
-            updated.done
-                ? 'Tugas "${t.title}" ditandai selesai! 🎉'
-                : 'Tugas "${t.title}" dibuka kembali.',
-          );
-          return updated;
-        }
-        return t;
-      }).toList();
-    });
+    final task = list.firstWhere((t) => t.id == id, orElse: () => list.first);
+    final isDoneNow = !task.done;
+    _showMessage(
+      isDoneNow
+          ? 'Tugas "${task.title}" ditandai selesai! 🎉'
+          : 'Tugas "${task.title}" dibuka kembali.',
+    );
+
     widget.onToggleTask?.call(id);
   }
 
   void _saveTask(TaskItem task) {
-    setState(() {
-      final index = list.indexWhere((t) => t.id == task.id);
-      if (index >= 0) {
-        list[index] = task;
-        _showMessage('Tugas "${task.title}" berhasil diperbarui.');
-      } else {
-        list.insert(0, task);
-        _showMessage('Tugas baru "${task.title}" berhasil ditambahkan.');
-      }
-    });
+    final bool isUpdate = widget.tasks.any((t) => t.id == task.id);
     widget.onSaveTask?.call(task);
+    _showMessage(
+      isUpdate
+          ? 'Tugas "${task.title}" berhasil diperbarui.'
+          : 'Tugas baru "${task.title}" berhasil ditambahkan.',
+    );
   }
 
   void _deleteTask(int id) {
-    final int index = list.indexWhere((TaskItem t) => t.id == id);
-    if (index < 0) {
-      return;
-    }
-    final TaskItem task = list[index];
-    setState(() {
-      list.removeAt(index);
-    });
+    final task = list.firstWhere((t) => t.id == id, orElse: () => list.first);
     widget.onDeleteTask?.call(id);
     _showMessage('Tugas "${task.title}" telah dihapus.', isError: true);
   }
@@ -215,6 +185,7 @@ class _TaskScreenState extends State<TaskScreen> {
       MaterialPageRoute(
         builder: (_) => TaskFormScreen(
           taskToEdit: taskToEdit,
+          nextTaskId: widget.nextTaskId,
           onSave: (savedTask) {
             _saveTask(savedTask);
           },
@@ -1195,9 +1166,15 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
 /// Dedicated Full-Screen Page for Creating or Editing a Task with AI Brain Dump
 class TaskFormScreen extends StatefulWidget {
   final TaskItem? taskToEdit;
+  final int nextTaskId;
   final ValueChanged<TaskItem> onSave;
 
-  const TaskFormScreen({super.key, this.taskToEdit, required this.onSave});
+  const TaskFormScreen({
+    super.key,
+    this.taskToEdit,
+    required this.nextTaskId,
+    required this.onSave,
+  });
 
   @override
   State<TaskFormScreen> createState() => _TaskFormScreenState();
@@ -1516,7 +1493,7 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
     final description = descriptionController.text.trim();
 
     final TaskItem task = TaskItem(
-      id: widget.taskToEdit?.id ?? DateTime.now().millisecondsSinceEpoch,
+      id: widget.taskToEdit?.id ?? widget.nextTaskId,
       title: title,
       categories: selectedCategories,
       description: description,
