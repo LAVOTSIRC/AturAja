@@ -66,26 +66,27 @@ class AppTypography {
     color: color,
   );
 
-  static TextTheme apply(TextTheme base, Color color) => base
-      .apply(fontFamily: fontFamily)
-      .copyWith(
-        displayLarge: base.displayLarge?.copyWith(
-          fontSize: font36,
-          color: color,
-        ),
-        headlineLarge: base.headlineLarge?.copyWith(
-          fontSize: font30,
-          color: color,
-        ),
-        titleLarge: base.titleLarge?.copyWith(fontSize: font18, color: color),
-        titleMedium: base.titleMedium?.copyWith(fontSize: font16, color: color),
-        bodyLarge: base.bodyLarge?.copyWith(fontSize: font16, color: color),
-        bodyMedium: base.bodyMedium?.copyWith(fontSize: font14, color: color),
-        bodySmall: base.bodySmall?.copyWith(fontSize: font12, color: color),
-        labelLarge: base.labelLarge?.copyWith(fontSize: font14, color: color),
-        labelMedium: base.labelMedium?.copyWith(fontSize: font13, color: color),
-        labelSmall: base.labelSmall?.copyWith(fontSize: font12, color: color),
-      );
+  static TextTheme apply(TextTheme base, Color color) {
+    final TextTheme themed = base.apply(fontFamily: fontFamily);
+    return themed.copyWith(
+      displayLarge: themed.displayLarge?.copyWith(
+        fontSize: font36,
+        color: color,
+      ),
+      headlineLarge: themed.headlineLarge?.copyWith(
+        fontSize: font30,
+        color: color,
+      ),
+      titleLarge: themed.titleLarge?.copyWith(fontSize: font18, color: color),
+      titleMedium: themed.titleMedium?.copyWith(fontSize: font16, color: color),
+      bodyLarge: themed.bodyLarge?.copyWith(fontSize: font16, color: color),
+      bodyMedium: themed.bodyMedium?.copyWith(fontSize: font14, color: color),
+      bodySmall: themed.bodySmall?.copyWith(fontSize: font12, color: color),
+      labelLarge: themed.labelLarge?.copyWith(fontSize: font14, color: color),
+      labelMedium: themed.labelMedium?.copyWith(fontSize: font13, color: color),
+      labelSmall: themed.labelSmall?.copyWith(fontSize: font12, color: color),
+    );
+  }
 
   static TextStyle mono(Color color) =>
       GoogleFonts.robotoMono(fontSize: font12, color: color, height: 1.8);
