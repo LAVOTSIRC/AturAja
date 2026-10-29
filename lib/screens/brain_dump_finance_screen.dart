@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
 
 import '../data/models.dart';
+import '../providers/app_provider.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_typography.dart';
@@ -304,7 +306,7 @@ class _BrainDumpFinanceScreenState extends State<BrainDumpFinanceScreen> {
     );
 
     HapticFeedback.lightImpact();
-    transactionStore.insert(0, note);
+    context.read<AppProvider>().addTransaction(note);
     Navigator.of(context).pop(note);
   }
 
