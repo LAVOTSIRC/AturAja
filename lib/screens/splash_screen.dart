@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -24,6 +25,18 @@ class _SplashScreenState extends State<SplashScreen>
   late final AnimationController _dotsController;
   late final Animation<double> _opacity;
   late final Animation<double> _scale;
+  Timer? _fallbackTimer;
+  bool _navigated = false;
+
+  void _navigateToNext() {
+    if (_navigated || !mounted) {
+      return;
+    }
+    _navigated = true;
+    _fallbackTimer?.cancel();
+    final bool isLoggedIn = context.read<AppProvider>().isLoggedIn;
+    context.go(isLoggedIn ? AppRoutes.home : AppRoutes.login);
+  }
 
   @override
   void initState() {
@@ -55,17 +68,23 @@ class _SplashScreenState extends State<SplashScreen>
       ),
     ]).animate(_controller);
 
-    _controller.forward();
     _controller.addStatusListener((AnimationStatus status) {
-      if (status == AnimationStatus.completed && mounted) {
-        final bool isLoggedIn = context.read<AppProvider>().isLoggedIn;
-        context.go(isLoggedIn ? AppRoutes.home : AppRoutes.login);
+      if (status == AnimationStatus.completed) {
+        _navigateToNext();
       }
     });
+
+    _controller.forward();
+
+    // Safety fallback for devices with disabled animations or battery saver.
+    // Simpan timer agar bisa dibatalkan saat widget di-dispose; tanpa ini
+    // widget test akan gagal karena masih ada timer yang pending.
+    _fallbackTimer = Timer(const Duration(milliseconds: 3100), _navigateToNext);
   }
 
   @override
   void dispose() {
+    _fallbackTimer?.cancel();
     _controller.dispose();
     _dotsController.dispose();
     super.dispose();
@@ -137,6 +156,16 @@ class _SplashScreenState extends State<SplashScreen>
                             child: Image.asset(
                               'assets/images/maketh1.jpg',
                               fit: BoxFit.cover,
+                              errorBuilder: (context, error, stackTrace) {
+                                return Container(
+                                  color: c.surfaceHigh,
+                                  child: Icon(
+                                    Icons.account_balance_wallet,
+                                    size: 40,
+                                    color: c.blue,
+                                  ),
+                                );
+                              },
                             ),
                           ),
                         ),
