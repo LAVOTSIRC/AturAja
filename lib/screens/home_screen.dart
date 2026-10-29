@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -12,6 +14,19 @@ import '../utils/icons.dart';
 import '../utils/responsive.dart';
 import '../widgets/common.dart';
 import '../widgets/roasting_toast.dart';
+
+String greetingForHour(int hour) {
+  if (hour >= 5 && hour < 12) {
+    return 'Selamat pagi';
+  }
+  if (hour >= 12 && hour < 15) {
+    return 'Selamat siang';
+  }
+  if (hour >= 15 && hour < 18) {
+    return 'Selamat sore';
+  }
+  return 'Selamat malam';
+}
 
 class HomeScreen extends StatefulWidget {
   final VoidCallback onScan;
@@ -35,6 +50,23 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   bool showRoast = false;
+  late final Timer _greetingTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _greetingTimer = Timer.periodic(const Duration(minutes: 1), (_) {
+      if (mounted) {
+        setState(() {});
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _greetingTimer.cancel();
+    super.dispose();
+  }
 
   void _showMessage(String message) {
     ScaffoldMessenger.maybeOf(context)
@@ -101,7 +133,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                'Selamat pagi',
+                                greetingForHour(DateTime.now().hour),
                                 style: AppTypography.caption(c.textMuted),
                               ),
                               const SizedBox(height: AppSpacing.xxs),

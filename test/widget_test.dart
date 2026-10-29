@@ -80,6 +80,14 @@ Future<void> returnFromSetting(WidgetTester tester) async {
 }
 
 void main() {
+  test('Home greeting follows the time of day', () {
+    expect(greetingForHour(6), 'Selamat pagi');
+    expect(greetingForHour(12), 'Selamat siang');
+    expect(greetingForHour(16), 'Selamat sore');
+    expect(greetingForHour(21), 'Selamat malam');
+    expect(greetingForHour(2), 'Selamat malam');
+  });
+
   testWidgets('Splash screen shows the AturAja logo text', (
     WidgetTester tester,
   ) async {
