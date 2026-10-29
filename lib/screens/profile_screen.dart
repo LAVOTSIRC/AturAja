@@ -1,18 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
+import '../config/routes.dart';
 import '../data/models.dart';
-import '../data/settings_controller.dart';
+import '../providers/settings_provider.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_typography.dart';
 import '../theme/theme_scope.dart';
 import '../utils/format.dart';
 import '../widgets/common.dart';
-import 'budget_limit_screen.dart';
-import 'cloud_backup_screen.dart';
-import 'notification_settings_screen.dart';
-import 'nlp_simulation_screen.dart';
-import 'privacy_security_screen.dart';
 
 enum _SettingsDestination { notifications, cloud, budget, nlp, privacy }
 
@@ -217,23 +214,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (selected == null) {
       return;
     }
-    final SettingsController settings = widget.settings;
-    final Widget destination;
-    switch (selected) {
-      case _SettingsDestination.notifications:
-        destination = NotificationSettingsScreen(settings: settings);
-      case _SettingsDestination.cloud:
-        destination = CloudBackupScreen(settings: settings);
-      case _SettingsDestination.budget:
-        destination = BudgetLimitScreen(settings: settings);
-      case _SettingsDestination.nlp:
-        destination = NlpSimulationScreen(settings: settings);
-      case _SettingsDestination.privacy:
-        destination = PrivacySecurityScreen(settings: settings);
-    }
+    final String path = switch (selected) {
+      _SettingsDestination.notifications => AppRoutes.notificationSettings,
+      _SettingsDestination.cloud => AppRoutes.cloudBackup,
+      _SettingsDestination.budget => AppRoutes.budgetLimit,
+      _SettingsDestination.nlp => AppRoutes.nlpSimulation,
+      _SettingsDestination.privacy => AppRoutes.privacySecurity,
+    };
 
-    final bool? saved = await Navigator.of(context)
-        .push<bool>(MaterialPageRoute<bool>(builder: (_) => destination));
+    final bool? saved = await context.push<bool>(path);
     if (selected == _SettingsDestination.budget && saved == true && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Limit anggaran berhasil diperbarui.')),
