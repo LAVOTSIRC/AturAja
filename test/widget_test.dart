@@ -15,6 +15,7 @@ import 'package:bruh/screens/home_screen.dart';
 import 'package:bruh/screens/login_screen.dart';
 import 'package:bruh/screens/main_shell.dart';
 import 'package:bruh/screens/profile_screen.dart';
+import 'package:bruh/services/receipt_camera.dart';
 import 'package:bruh/theme/theme_scope.dart';
 import 'package:bruh/widgets/quick_add_modal.dart';
 
@@ -23,8 +24,12 @@ Future<AppProvider> pumpApp(
   String initialLocation = '/home',
   bool isLoggedIn = true,
   bool settle = true,
+  List<TransactionItem>? transactions,
 }) async {
-  final AppProvider app = AppProvider.inMemory(isLoggedIn: isLoggedIn);
+  final AppProvider app = AppProvider.inMemory(
+    isLoggedIn: isLoggedIn,
+    transactions: transactions,
+  );
   addTearDown(app.dispose);
   await tester.pumpWidget(
     MultiProvider(
@@ -296,11 +301,39 @@ void main() {
     }
   });
 
+  testWidgets('Deleting a task removes it from the shared task list', (
+    WidgetTester tester,
+  ) async {
+    final AppProvider app = await pumpApp(tester);
+    await tester.tap(find.byTooltip('Tugas'));
+    await tester.pumpAndSettle();
+
+    final TaskItem firstTask = app.tasks.first;
+    final int before = app.tasks.length;
+
+    final Finder firstTaskTile = find.byTooltip('Buka detail tugas').first;
+    await tester.ensureVisible(firstTaskTile);
+    await tester.pumpAndSettle();
+    await tester.tap(firstTaskTile);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Hapus Tugas'));
+    await tester.pumpAndSettle();
+    expect(find.text('Hapus Tugas?'), findsOneWidget);
+
+    await tester.tap(find.widgetWithText(TextButton, 'Hapus'));
+    await tester.pumpAndSettle();
+
+    expect(app.tasks.length, before - 1);
+    expect(app.tasks.any((TaskItem task) => task.id == firstTask.id), isFalse);
+    expect(find.text(firstTask.title), findsNothing);
+  });
+
   testWidgets('Brain Dump finance note processes into a preview then saves', (
     WidgetTester tester,
   ) async {
-    final int before = transactionStore.length;
-    await pumpApp(tester);
+    final AppProvider app = await pumpApp(tester);
+    final int before = app.transactions.length;
 
     await tester.tap(find.text('Brain Dump'));
     await tester.pumpAndSettle();
@@ -327,9 +360,9 @@ void main() {
     await tester.tap(find.text('Simpan Catatan Pengeluaran'));
     await tester.pumpAndSettle();
 
-    expect(transactionStore.length, before + 1);
-    expect(transactionStore.first.amount, -120000);
-    expect(transactionStore.first.cat, 'belanja');
+    expect(app.transactions.length, before + 1);
+    expect(app.transactions.first.amount, -120000);
+    expect(app.transactions.first.cat, 'belanja');
   });
 
   testWidgets('Brain Dump rejects input without a detectable amount', (
@@ -715,4 +748,125 @@ void main() {
     expect(find.byType(MainShell), findsOneWidget);
     expect(find.byType(LoginScreen), findsNothing);
   });
+
+  testWidgets(
+    'Scan struk creates a real transaction that persists in history',
+    (WidgetTester tester) async {
+      ReceiptCamera.debugCaptureOverride = () async => 'test-receipt.jpg';
+      addTearDown(() => ReceiptCamera.debugCaptureOverride = null);
+      final AppProvider app = await pumpApp(tester);
+      final int before = app.transactions.length;
+
+      await tester.tap(find.text('Scan Struk'));
+      // ScanScreen runs a perpetual scan-line animation, so pumpAndSettle()
+      // would hang forever here; advance frames manually instead.
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+
+      expect(find.text('Ambil Foto Struk'), findsOneWidget);
+
+      await tester.tap(find.byTooltip('Ambil foto'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 950));
+
+      expect(find.text('Konfirmasi & Catat'), findsOneWidget);
+
+      await tester.tap(find.text('Konfirmasi & Catat'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 650));
+      await tester.pump(const Duration(milliseconds: 400));
+
+      expect(app.transactions.length, before + 1);
+      expect(app.transactions.first.label, 'Belanja di Indomaret');
+      expect(app.transactions.first.amount, -28500);
+      expect(app.transactions.first.cat, 'belanja');
+      expect(app.transactions.first.receiptImagePath, 'test-receipt.jpg');
+      expect(find.textContaining('berhasil dicatat'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'Manually adding an expense from Finance updates totals and history',
+    (WidgetTester tester) async {
+      final AppProvider app = await pumpApp(
+        tester,
+        initialLocation: '/finance',
+        transactions: const <TransactionItem>[],
+      );
+
+      await tester.tap(find.bySemanticsLabel('Tambah pengeluaran'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Tambah Pengeluaran'), findsOneWidget);
+
+      final Finder fields = find.byType(TextField);
+      await tester.enterText(fields.at(0), '25000');
+      await tester.enterText(fields.at(1), 'Jajan sore');
+      await tester.ensureVisible(find.text('Simpan'));
+      await tester.tap(find.text('Simpan'));
+      await tester.pumpAndSettle();
+
+      expect(app.transactions, hasLength(1));
+      expect(app.transactions.first.label, 'Jajan sore');
+      expect(app.transactions.first.amount, -25000);
+      expect(app.transactions.first.cat, 'food');
+      expect(find.textContaining('dicatat'), findsOneWidget);
+      expect(find.text('Jajan sore'), findsOneWidget);
+    },
+  );
+
+  testWidgets('Finance shows scan expenses in the Belanja category', (
+    WidgetTester tester,
+  ) async {
+    await pumpApp(
+      tester,
+      initialLocation: '/finance',
+      transactions: const <TransactionItem>[
+        TransactionItem(
+          id: 9003,
+          label: 'Belanja di Indomaret',
+          amount: -28500,
+          cat: 'belanja',
+          time: '10:00',
+        ),
+      ],
+    );
+
+    expect(find.text('Belanja'), findsWidgets);
+    expect(find.text('100% dari total pengeluaran'), findsOneWidget);
+  });
+
+  testWidgets(
+    'Finance screen computes budget usage and category totals from real transactions',
+    (WidgetTester tester) async {
+      final AppProvider app = await pumpApp(
+        tester,
+        initialLocation: '/finance',
+        transactions: const <TransactionItem>[
+          TransactionItem(
+            id: 9001,
+            label: 'Makan siang kantin',
+            amount: -50000,
+            cat: 'food',
+            time: '12:00',
+          ),
+          TransactionItem(
+            id: 9002,
+            label: 'Nonton bioskop',
+            amount: -50000,
+            cat: 'entertainment',
+            time: '19:00',
+          ),
+        ],
+      );
+      app.settings.setMonthlyBudgetLimit(200000);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Anggaran Bulan Ini'), findsOneWidget);
+      expect(find.text('Rp200.000'), findsOneWidget);
+      expect(find.text('Terpakai: Rp100.000'), findsOneWidget);
+      expect(find.text('Sisa Rp100.000'), findsOneWidget);
+      expect(find.text('50% dari total pengeluaran'), findsNWidgets(2));
+    },
+  );
 }

@@ -20,6 +20,8 @@ String _catLabel(String cat) {
       return 'Hiburan';
     case 'transport':
       return 'Transport';
+    case 'belanja':
+      return 'Belanja';
     case 'income':
       return 'Pemasukan';
     default:
@@ -100,8 +102,7 @@ class _CategoryDetailScreenState extends State<CategoryDetailScreen> {
           );
         },
         onDelete: () {
-          final removedIndex =
-              _transactions.indexWhere((x) => x.id == t.id);
+          final removedIndex = _transactions.indexWhere((x) => x.id == t.id);
           setState(() => _transactions.removeWhere((x) => x.id == t.id));
           widget.onTransactionDeleted?.call(t.id);
           ScaffoldMessenger.of(context).showSnackBar(
@@ -111,8 +112,10 @@ class _CategoryDetailScreenState extends State<CategoryDetailScreen> {
                 label: 'Urungkan',
                 onPressed: () {
                   setState(() {
-                    final insertIndex =
-                        removedIndex.clamp(0, _transactions.length);
+                    final insertIndex = removedIndex.clamp(
+                      0,
+                      _transactions.length,
+                    );
                     _transactions.insert(insertIndex, t);
                   });
                   widget.onTransactionRestored?.call(t);
@@ -129,8 +132,7 @@ class _CategoryDetailScreenState extends State<CategoryDetailScreen> {
   @override
   Widget build(BuildContext context) {
     final AppColors c = ThemeScope.of(context).colors;
-    final int total =
-        _transactions.fold(0, (sum, t) => sum + t.amount.abs());
+    final int total = _transactions.fold(0, (sum, t) => sum + t.amount.abs());
 
     return Scaffold(
       backgroundColor: c.bg,
@@ -229,8 +231,7 @@ class _CategoryDetailScreenState extends State<CategoryDetailScreen> {
                       itemBuilder: (context, index) {
                         final t = _transactions[index];
                         return Padding(
-                          padding:
-                              const EdgeInsets.only(bottom: AppSpacing.xs),
+                          padding: const EdgeInsets.only(bottom: AppSpacing.xs),
                           child: PressableScale(
                             onTap: () => _showTransactionDetail(t),
                             semanticLabel: 'Detail transaksi ${t.label}',
@@ -323,9 +324,8 @@ class _TransactionRow extends StatelessWidget {
             children: [
               Text(
                 '${isExpense ? '-' : '+'}${formatRupiah(t.amount.abs())}',
-                style:
-                    AppTypography.label(isExpense ? c.expense : c.success)
-                        .copyWith(fontWeight: FontWeight.w600),
+                style: AppTypography.label(isExpense ? c.expense : c.success)
+                    .copyWith(fontWeight: FontWeight.w600),
               ),
               const SizedBox(height: AppSpacing.xxs),
               Icon(
@@ -381,7 +381,8 @@ class _TransactionDetailSheetState extends State<_TransactionDetailSheet> {
     super.initState();
     _labelCtrl = TextEditingController(text: widget.transaction.label);
     _amountCtrl = TextEditingController(
-        text: widget.transaction.amount.abs().toString());
+      text: widget.transaction.amount.abs().toString(),
+    );
     _selectedCategory = _catLabel(widget.transaction.cat);
   }
 
@@ -397,15 +398,17 @@ class _TransactionDetailSheetState extends State<_TransactionDetailSheet> {
       setState(() => _errorMessage = 'Deskripsi wajib diisi.');
       return;
     }
-    final rawAmount =
-        int.tryParse(_amountCtrl.text.replaceAll(RegExp(r'[^0-9]'), ''));
+    final rawAmount = int.tryParse(
+      _amountCtrl.text.replaceAll(RegExp(r'[^0-9]'), ''),
+    );
     if (rawAmount == null || rawAmount <= 0) {
       setState(() => _errorMessage = 'Nominal harus lebih dari Rp0.');
       return;
     }
     if (rawAmount > _kMaxAmount) {
-      setState(() => _errorMessage =
-          'Nominal maksimal ${formatRupiah(_kMaxAmount)}.');
+      setState(
+        () => _errorMessage = 'Nominal maksimal ${formatRupiah(_kMaxAmount)}.',
+      );
       return;
     }
     final isExpense = widget.transaction.amount < 0;
@@ -539,7 +542,8 @@ class _TransactionDetailSheetState extends State<_TransactionDetailSheet> {
                 Text(
                   '${isExpense ? '-' : '+'}${formatRupiah(widget.transaction.amount.abs())}',
                   style: AppTypography.display(
-                      isExpense ? c.expense : c.success),
+                    isExpense ? c.expense : c.success,
+                  ),
                 ),
               ],
             ),
@@ -550,7 +554,9 @@ class _TransactionDetailSheetState extends State<_TransactionDetailSheet> {
               children: [
                 Container(
                   padding: const EdgeInsets.symmetric(
-                      horizontal: AppSpacing.sm, vertical: AppSpacing.xxs),
+                    horizontal: AppSpacing.sm,
+                    vertical: AppSpacing.xxs,
+                  ),
                   decoration: BoxDecoration(
                     color: c.surfaceHigh,
                     borderRadius: BorderRadius.circular(AppSpacing.huge),
@@ -559,11 +565,16 @@ class _TransactionDetailSheetState extends State<_TransactionDetailSheet> {
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(Icons.label_outline,
-                          size: AppSpacing.sm, color: c.textSub),
+                      Icon(
+                        Icons.label_outline,
+                        size: AppSpacing.sm,
+                        color: c.textSub,
+                      ),
                       const SizedBox(width: AppSpacing.xxs),
-                      Text(_catLabel(widget.transaction.cat),
-                          style: AppTypography.meta(c.textSub)),
+                      Text(
+                        _catLabel(widget.transaction.cat),
+                        style: AppTypography.meta(c.textSub),
+                      ),
                     ],
                   ),
                 ),
@@ -571,14 +582,18 @@ class _TransactionDetailSheetState extends State<_TransactionDetailSheet> {
                   const SizedBox(width: AppSpacing.xs),
                   Container(
                     padding: const EdgeInsets.symmetric(
-                        horizontal: AppSpacing.sm, vertical: AppSpacing.xxs),
+                      horizontal: AppSpacing.sm,
+                      vertical: AppSpacing.xxs,
+                    ),
                     decoration: BoxDecoration(
                       color: c.warningDim,
                       borderRadius: BorderRadius.circular(AppSpacing.huge),
                       border: Border.all(color: c.warning),
                     ),
-                    child: Text('konsumtif',
-                        style: AppTypography.micro(c.warning)),
+                    child: Text(
+                      'konsumtif',
+                      style: AppTypography.micro(c.warning),
+                    ),
                   ),
                 ],
               ],
@@ -603,9 +618,7 @@ class _TransactionDetailSheetState extends State<_TransactionDetailSheet> {
                 }
               },
               style: AppTypography.body(c.text),
-              decoration: const InputDecoration(
-                labelText: 'Deskripsi',
-              ),
+              decoration: const InputDecoration(labelText: 'Deskripsi'),
             ),
 
             // Amount field
@@ -643,7 +656,9 @@ class _TransactionDetailSheetState extends State<_TransactionDetailSheet> {
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 150),
                     padding: const EdgeInsets.symmetric(
-                        horizontal: AppSpacing.sm, vertical: AppSpacing.xs),
+                      horizontal: AppSpacing.sm,
+                      vertical: AppSpacing.xs,
+                    ),
                     decoration: BoxDecoration(
                       color: active
                           ? (isExpense ? c.expenseDim : c.successDim)
@@ -657,13 +672,16 @@ class _TransactionDetailSheetState extends State<_TransactionDetailSheet> {
                     ),
                     child: Text(
                       cat,
-                      style: AppTypography.label(
-                        active
-                            ? (isExpense ? c.expense : c.success)
-                            : c.textSub,
-                      ).copyWith(
-                          fontWeight:
-                              active ? FontWeight.w600 : FontWeight.w400),
+                      style:
+                          AppTypography.label(
+                            active
+                                ? (isExpense ? c.expense : c.success)
+                                : c.textSub,
+                          ).copyWith(
+                            fontWeight: active
+                                ? FontWeight.w600
+                                : FontWeight.w400,
+                          ),
                     ),
                   ),
                 );
@@ -698,7 +716,8 @@ class _TransactionDetailSheetState extends State<_TransactionDetailSheet> {
                     tooltip: 'Simpan',
                     child: Container(
                       constraints: const BoxConstraints(
-                          minHeight: AppSpacing.target),
+                        minHeight: AppSpacing.target,
+                      ),
                       alignment: Alignment.center,
                       decoration: BoxDecoration(
                         color: c.blue,
@@ -707,11 +726,16 @@ class _TransactionDetailSheetState extends State<_TransactionDetailSheet> {
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.check_rounded,
-                              size: AppSpacing.iconSmall, color: c.onAccent),
+                          Icon(
+                            Icons.check_rounded,
+                            size: AppSpacing.iconSmall,
+                            color: c.onAccent,
+                          ),
                           const SizedBox(width: AppSpacing.xs),
-                          Text('Simpan',
-                              style: AppTypography.button(c.onAccent)),
+                          Text(
+                            'Simpan',
+                            style: AppTypography.button(c.onAccent),
+                          ),
                         ],
                       ),
                     ),
@@ -725,7 +749,8 @@ class _TransactionDetailSheetState extends State<_TransactionDetailSheet> {
                     tooltip: 'Hapus',
                     child: Container(
                       constraints: const BoxConstraints(
-                          minHeight: AppSpacing.target),
+                        minHeight: AppSpacing.target,
+                      ),
                       alignment: Alignment.center,
                       decoration: BoxDecoration(
                         color: c.expenseDim,
@@ -735,11 +760,13 @@ class _TransactionDetailSheetState extends State<_TransactionDetailSheet> {
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.delete_outline,
-                              size: AppSpacing.iconSmall, color: c.expense),
+                          Icon(
+                            Icons.delete_outline,
+                            size: AppSpacing.iconSmall,
+                            color: c.expense,
+                          ),
                           const SizedBox(width: AppSpacing.xs),
-                          Text('Hapus',
-                              style: AppTypography.button(c.expense)),
+                          Text('Hapus', style: AppTypography.button(c.expense)),
                         ],
                       ),
                     ),
@@ -765,11 +792,16 @@ class _TransactionDetailSheetState extends State<_TransactionDetailSheet> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.receipt_long_outlined,
-              size: AppSpacing.iconLarge, color: c.textMuted),
+          Icon(
+            Icons.receipt_long_outlined,
+            size: AppSpacing.iconLarge,
+            color: c.textMuted,
+          ),
           const SizedBox(height: AppSpacing.xxs),
-          Text('Tidak ada foto struk',
-              style: AppTypography.caption(c.textMuted)),
+          Text(
+            'Tidak ada foto struk',
+            style: AppTypography.caption(c.textMuted),
+          ),
         ],
       ),
     );
