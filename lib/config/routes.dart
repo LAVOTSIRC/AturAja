@@ -76,6 +76,7 @@ GoRouter createAppRouter({String initialLocation = AppRoutes.splash}) {
           final TaskItem? task = state.extra as TaskItem?;
           return TaskFormScreen(
             taskToEdit: task,
+            nextTaskId: app.nextTaskId,
             onSave: (TaskItem saved) {
               final bool isUpdate = app.tasks.any(
                 (TaskItem item) => item.id == saved.id,
@@ -234,9 +235,11 @@ GoRouter createAppRouter({String initialLocation = AppRoutes.splash}) {
                     builder: (BuildContext context, AppProvider app, _) {
                       return TaskScreen(
                         tasks: app.tasks,
+                        nextTaskId: app.nextTaskId,
                         onAddTask: () => context.push(AppRoutes.taskForm),
                         onToggleTask: app.toggleTask,
                         onSaveTask: app.upsertTask,
+                        onDeleteTask: app.deleteTask,
                       );
                     },
                   );
