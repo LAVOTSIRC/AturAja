@@ -1,19 +1,25 @@
 import 'package:flutter/material.dart';
 
+import 'data/app_store.dart';
 import 'screens/splash_screen.dart';
 import 'theme/app_colors.dart';
 import 'theme/app_spacing.dart';
 import 'theme/app_typography.dart';
 import 'theme/theme_scope.dart';
 
-void main() {
-  runApp(MyApp(controller: ThemeController()));
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  final AppStore store = await AppStore.loadPersistent();
+  runApp(MyApp(controller: store.theme, store: store));
 }
 
 class MyApp extends StatelessWidget {
   final ThemeController controller;
+  final AppStore? store;
 
-  const MyApp({super.key, required this.controller});
+  const MyApp({super.key, required this.controller, this.store});
+
+  ThemeController get themeController => store?.theme ?? controller;
 
   ThemeData _theme(AppColors c, Brightness brightness) {
     final ColorScheme scheme =
@@ -79,19 +85,19 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ThemeScope(
-      controller: controller,
+      controller: themeController,
       child: AnimatedBuilder(
-        animation: controller,
+        animation: themeController,
         builder: (BuildContext context, Widget? child) {
-          final AppColors c = controller.colors;
-          final Brightness brightness = controller.isDark
+          final AppColors c = themeController.colors;
+          final Brightness brightness = themeController.isDark
               ? Brightness.dark
               : Brightness.light;
           return MaterialApp(
             title: 'AturAja',
             debugShowCheckedModeBanner: false,
             theme: _theme(c, brightness),
-            home: const SplashScreen(),
+            home: SplashScreen(store: store),
           );
         },
       ),

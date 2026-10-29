@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../data/app_store.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_typography.dart';
@@ -9,7 +10,9 @@ import '../theme/theme_scope.dart';
 import 'main_shell.dart';
 
 class SplashScreen extends StatefulWidget {
-  const SplashScreen({super.key});
+  final AppStore? store;
+
+  const SplashScreen({super.key, this.store});
 
   @override
   State<SplashScreen> createState() => _SplashScreenState();
@@ -55,9 +58,9 @@ class _SplashScreenState extends State<SplashScreen>
     _controller.forward();
     _controller.addStatusListener((AnimationStatus status) {
       if (status == AnimationStatus.completed) {
-        Navigator.of(
-          context,
-        ).pushReplacement(MaterialPageRoute(builder: (_) => const MainShell()));
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (_) => MainShell(store: widget.store)),
+        );
       }
     });
   }

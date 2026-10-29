@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../data/app_store.dart';
 import '../data/models.dart';
-import '../data/settings_controller.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_typography.dart';
@@ -16,7 +16,9 @@ import 'scan_screen.dart';
 import 'task_screen.dart';
 
 class MainShell extends StatefulWidget {
-  const MainShell({super.key});
+  final AppStore? store;
+
+  const MainShell({super.key, this.store});
 
   @override
   State<MainShell> createState() => _MainShellState();
@@ -24,21 +26,23 @@ class MainShell extends StatefulWidget {
 
 class _MainShellState extends State<MainShell> {
   int tab = 0;
-  List<TaskItem> tasks = List<TaskItem>.of(sampleTasks);
-  int nextTaskId = sampleTasks.length + 1;
-  late final SettingsController settings;
+  late final AppStore _store;
+  late final bool _ownsStore;
   late final PageController _pageController;
 
   @override
   void initState() {
     super.initState();
-    settings = SettingsController();
+    _ownsStore = widget.store == null;
+    _store = widget.store ?? AppStore.inMemory();
     _pageController = PageController(initialPage: tab);
   }
 
   @override
   void dispose() {
-    settings.dispose();
+    if (_ownsStore) {
+      _store.dispose();
+    }
     _pageController.dispose();
     super.dispose();
   }
@@ -62,7 +66,7 @@ class _MainShellState extends State<MainShell> {
     if (note == null || !mounted) {
       return;
     }
-    setState(() {});
+    _store.transactionsChanged();
     ScaffoldMessenger.maybeOf(context)?.showSnackBar(
       SnackBar(
         content: Text(
@@ -81,15 +85,8 @@ class _MainShellState extends State<MainShell> {
   }
 
   void _saveTask(TaskItem task) {
-    final bool isUpdate = tasks.any((item) => item.id == task.id);
-    setState(() {
-      final index = tasks.indexWhere((item) => item.id == task.id);
-      if (index >= 0) {
-        tasks = [...tasks]..[index] = task;
-      } else {
-        tasks = [...tasks, task];
-      }
-    });
+    final bool isUpdate = _store.tasks.any((item) => item.id == task.id);
+    _store.upsertTask(task);
     ScaffoldMessenger.maybeOf(context)?.showSnackBar(
       SnackBar(
         content: Text(
@@ -102,14 +99,7 @@ class _MainShellState extends State<MainShell> {
   }
 
   void _toggleTask(int id) {
-    setState(() {
-      tasks = tasks
-          .map(
-            (TaskItem task) =>
-                task.id == id ? task.copyWith(done: !task.done) : task,
-          )
-          .toList();
-    });
+    _store.toggleTask(id);
   }
 
   void _openScan() {
@@ -127,7 +117,7 @@ class _MainShellState extends State<MainShell> {
       MaterialPageRoute(
         builder: (_) => LoginScreen(
           onLogin: () => navigator.pushReplacement(
-            MaterialPageRoute(builder: (_) => const MainShell()),
+            MaterialPageRoute(builder: (_) => MainShell(store: widget.store)),
           ),
         ),
       ),
@@ -137,54 +127,68 @@ class _MainShellState extends State<MainShell> {
   @override
   Widget build(BuildContext context) {
     final AppColors c = ThemeScope.of(context).colors;
-    final List<Widget> screens = [
-      HomeScreen(
-        onScan: _openScan,
-        onAddTask: _openTaskAdd,
-        onBrainDump: _openBrainDump,
-      ),
-      FinanceScreen(onScan: _openScan),
-      TaskScreen(
-        tasks: tasks,
-        onAddTask: _openTaskAdd,
-        onToggleTask: _toggleTask,
-        onSaveTask: _saveTask,
-      ),
-      ProfileScreen(settings: settings, onLogout: _logout),
-    ];
+    return AnimatedBuilder(
+      animation: _store,
+      builder: (BuildContext context, Widget? child) {
+        final List<Widget> screens = [
+          HomeScreen(
+            onScan: _openScan,
+            onAddTask: _openTaskAdd,
+            onBrainDump: _openBrainDump,
+            userName: _store.profile.fullName,
+          ),
+          FinanceScreen(
+            onScan: _openScan,
+            onTransactionsChanged: _store.transactionsChanged,
+          ),
+          TaskScreen(
+            tasks: _store.tasks,
+            onAddTask: _openTaskAdd,
+            onToggleTask: _toggleTask,
+            onSaveTask: _saveTask,
+          ),
+          ProfileScreen(
+            settings: _store.settings,
+            initialProfile: _store.profile,
+            onProfileChanged: _store.updateProfile,
+            onLogout: _logout,
+          ),
+        ];
 
-    return Scaffold(
-      backgroundColor: c.shell,
-      body: PageView(
-        controller: _pageController,
-        onPageChanged: (index) => setState(() => tab = index),
-        children: screens,
-      ),
-      bottomNavigationBar: Container(
-        decoration: BoxDecoration(
-          color: c.navBg,
-          border: Border(top: BorderSide(color: c.border)),
-        ),
-        child: SafeArea(
-          top: false,
-          child: SizedBox(
-            height: AppSpacing.navHeight,
-            child: Row(
-              children: [
-                _navItem(c, 0, Icons.home_outlined, 'Beranda'),
-                _navItem(
-                  c,
-                  1,
-                  Icons.account_balance_wallet_outlined,
-                  'Keuangan',
+        return Scaffold(
+          backgroundColor: c.shell,
+          body: PageView(
+            controller: _pageController,
+            onPageChanged: (index) => setState(() => tab = index),
+            children: screens,
+          ),
+          bottomNavigationBar: Container(
+            decoration: BoxDecoration(
+              color: c.navBg,
+              border: Border(top: BorderSide(color: c.border)),
+            ),
+            child: SafeArea(
+              top: false,
+              child: SizedBox(
+                height: AppSpacing.navHeight,
+                child: Row(
+                  children: [
+                    _navItem(c, 0, Icons.home_outlined, 'Beranda'),
+                    _navItem(
+                      c,
+                      1,
+                      Icons.account_balance_wallet_outlined,
+                      'Keuangan',
+                    ),
+                    _navItem(c, 2, Icons.task_alt_outlined, 'Tugas'),
+                    _navItem(c, 3, Icons.person_outline, 'Profil'),
+                  ],
                 ),
-                _navItem(c, 2, Icons.task_alt_outlined, 'Tugas'),
-                _navItem(c, 3, Icons.person_outline, 'Profil'),
-              ],
+              ),
             ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 
