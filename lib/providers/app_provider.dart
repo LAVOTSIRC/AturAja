@@ -17,7 +17,6 @@ class AppProvider extends ChangeNotifier {
   List<TaskItem> tasks;
   List<TransactionItem> _transactions;
   ProfileData profile;
-  bool isLoggedIn;
 
   bool _isLoading = false;
   Future<void> _saveChain = Future<void>.value();
@@ -29,7 +28,6 @@ class AppProvider extends ChangeNotifier {
     required List<TaskItem> tasks,
     List<TransactionItem>? transactions,
     required this.profile,
-    required this.isLoggedIn,
   }) : tasks = List<TaskItem>.of(tasks),
        _transactions = List<TransactionItem>.of(
          transactions ?? sampleTransactions,
@@ -42,7 +40,6 @@ class AppProvider extends ChangeNotifier {
     List<TaskItem>? tasks,
     List<TransactionItem>? transactions,
     ProfileData? profile,
-    bool isLoggedIn = false,
   }) {
     return AppProvider(
       storage: MemoryAppStorage(),
@@ -51,7 +48,6 @@ class AppProvider extends ChangeNotifier {
       tasks: tasks ?? sampleTasks,
       transactions: transactions,
       profile: profile ?? ProfileData.initial,
-      isLoggedIn: isLoggedIn,
     );
   }
 
@@ -63,7 +59,6 @@ class AppProvider extends ChangeNotifier {
       theme: ThemeController(),
       tasks: sampleTasks,
       profile: ProfileData.initial,
-      isLoggedIn: false,
     );
     await provider.load();
     return provider;
@@ -96,24 +91,24 @@ class AppProvider extends ChangeNotifier {
       tasks.where((TaskItem task) => task.urgent && !task.done).toList();
 
   List<TaskItem> get todayTasks => tasks.where((TaskItem task) {
-        if (task.done) return false;
-        if (task.dueDate != null) {
-          final DateTime now = DateTime.now();
-          return task.dueDate!.year == now.year &&
-              task.dueDate!.month == now.month &&
-              task.dueDate!.day == now.day;
-        }
-        final String lower = task.deadline.toLowerCase();
-        return lower.contains('hari ini');
-      }).toList();
+    if (task.done) return false;
+    if (task.dueDate != null) {
+      final DateTime now = DateTime.now();
+      return task.dueDate!.year == now.year &&
+          task.dueDate!.month == now.month &&
+          task.dueDate!.day == now.day;
+    }
+    final String lower = task.deadline.toLowerCase();
+    return lower.contains('hari ini');
+  }).toList();
 
   int get todayTaskCount => todayTasks.length;
 
   int get nextTaskId {
     if (tasks.isEmpty) return 1;
     return tasks
-        .map((TaskItem t) => t.id)
-        .reduce((int a, int b) => a > b ? a : b) +
+            .map((TaskItem t) => t.id)
+            .reduce((int a, int b) => a > b ? a : b) +
         1;
   }
 
@@ -168,8 +163,6 @@ class AppProvider extends ChangeNotifier {
       if (rawTheme is Map) {
         theme.applyJson(Map<String, dynamic>.from(rawTheme));
       }
-
-      isLoggedIn = data['isLoggedIn'] as bool? ?? false;
     } catch (error) {
       debugPrint('Gagal memuat data AturAja: $error');
     } finally {
@@ -187,7 +180,6 @@ class AppProvider extends ChangeNotifier {
     'profile': profile.toJson(),
     'settings': settings.toJson(),
     'theme': theme.toJson(),
-    'isLoggedIn': isLoggedIn,
   };
 
   Future<void> save() {
@@ -280,14 +272,6 @@ class AppProvider extends ChangeNotifier {
 
   void updateProfile(ProfileData value) {
     profile = value;
-    _changed();
-  }
-
-  void setLoggedIn(bool value) {
-    if (isLoggedIn == value) {
-      return;
-    }
-    isLoggedIn = value;
     _changed();
   }
 

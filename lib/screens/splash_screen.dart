@@ -6,7 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../config/routes.dart';
-import '../providers/app_provider.dart';
+import '../providers/auth_provider.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_typography.dart';
@@ -27,20 +27,25 @@ class _SplashScreenState extends State<SplashScreen>
   late final Animation<double> _scale;
   Timer? _fallbackTimer;
   bool _navigated = false;
+  late final AuthProvider _auth;
 
   void _navigateToNext() {
     if (_navigated || !mounted) {
       return;
     }
+    if (_auth.isInitializing) {
+      return;
+    }
     _navigated = true;
     _fallbackTimer?.cancel();
-    final bool isLoggedIn = context.read<AppProvider>().isLoggedIn;
-    context.go(isLoggedIn ? AppRoutes.home : AppRoutes.login);
+    context.go(_auth.isAuthenticated ? AppRoutes.home : AppRoutes.login);
   }
 
   @override
   void initState() {
     super.initState();
+    _auth = context.read<AuthProvider>();
+    _auth.addListener(_navigateToNext);
     _controller = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 2900),
@@ -84,6 +89,7 @@ class _SplashScreenState extends State<SplashScreen>
 
   @override
   void dispose() {
+    _auth.removeListener(_navigateToNext);
     _fallbackTimer?.cancel();
     _controller.dispose();
     _dotsController.dispose();

@@ -42,9 +42,18 @@ class MyApp extends StatefulWidget {
 }
 
 class _MyAppState extends State<MyApp> {
-  late final GoRouter _router = createAppRouter(
-    initialLocation: widget.initialLocation,
-  );
+  late final AuthProvider _auth;
+  late final GoRouter _router;
+
+  @override
+  void initState() {
+    super.initState();
+    _auth = context.read<AuthProvider>();
+    _router = createAppRouter(
+      initialLocation: widget.initialLocation,
+      auth: _auth,
+    );
+  }
 
   @override
   void dispose() {

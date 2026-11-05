@@ -42,9 +42,30 @@ class AppRoutes {
   static const String privacySecurity = '/settings/privacy-security';
 }
 
-GoRouter createAppRouter({String initialLocation = AppRoutes.splash}) {
+GoRouter createAppRouter({
+  String initialLocation = AppRoutes.splash,
+  required AuthProvider auth,
+}) {
   return GoRouter(
     initialLocation: initialLocation,
+    refreshListenable: auth,
+    redirect: (BuildContext context, GoRouterState state) {
+      final String location = state.matchedLocation;
+      final bool onSplash = location == AppRoutes.splash;
+      final bool onAuthPage =
+          location == AppRoutes.login || location == AppRoutes.register;
+
+      if (auth.isInitializing) {
+        return onSplash ? null : AppRoutes.splash;
+      }
+      if (!auth.isAuthenticated) {
+        return onSplash || onAuthPage ? null : AppRoutes.login;
+      }
+      if (onAuthPage) {
+        return AppRoutes.home;
+      }
+      return null;
+    },
     routes: <RouteBase>[
       GoRoute(
         path: AppRoutes.splash,
@@ -56,18 +77,9 @@ GoRouter createAppRouter({String initialLocation = AppRoutes.splash}) {
         builder: (BuildContext context, GoRouterState state) {
           final AuthProvider auth = context.read<AuthProvider>();
           return LoginScreen(
-            onLogin: ({required String email, required String password}) async {
-              await auth.signInWithEmail(email: email, password: password);
-              if (context.mounted) {
-                context.go(AppRoutes.home);
-              }
-            },
-            onGoogleSignIn: () async {
-              await auth.signInWithGoogle();
-              if (context.mounted) {
-                context.go(AppRoutes.home);
-              }
-            },
+            onLogin: ({required String email, required String password}) =>
+                auth.signInWithEmail(email: email, password: password),
+            onGoogleSignIn: auth.signInWithGoogle,
             onRegister: () => context.go(AppRoutes.register),
           );
         },
@@ -77,16 +89,8 @@ GoRouter createAppRouter({String initialLocation = AppRoutes.splash}) {
         builder: (BuildContext context, GoRouterState state) {
           final AuthProvider auth = context.read<AuthProvider>();
           return RegisterScreen(
-            onRegister:
-                ({required String email, required String password}) async {
-                  await auth.registerWithEmail(
-                    email: email,
-                    password: password,
-                  );
-                  if (context.mounted) {
-                    context.go(AppRoutes.home);
-                  }
-                },
+            onRegister: ({required String email, required String password}) =>
+                auth.registerWithEmail(email: email, password: password),
             onLogin: () => context.go(AppRoutes.login),
           );
         },
@@ -286,10 +290,7 @@ GoRouter createAppRouter({String initialLocation = AppRoutes.splash}) {
                             .where((TaskItem task) => task.done)
                             .length,
                         totalSavings: app.balance,
-                        onLogout: () {
-                          app.setLoggedIn(false);
-                          context.go(AppRoutes.login);
-                        },
+                        onLogout: context.read<AuthProvider>().signOut,
                       );
                     },
                   );

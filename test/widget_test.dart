@@ -31,10 +31,7 @@ Future<AppProvider> pumpApp(
   bool settle = true,
   List<TransactionItem>? transactions,
 }) async {
-  final AppProvider app = AppProvider.inMemory(
-    isLoggedIn: isLoggedIn,
-    transactions: transactions,
-  );
+  final AppProvider app = AppProvider.inMemory(transactions: transactions);
   final FakeAuthService authService = FakeAuthService(
     initialUser: isLoggedIn ? testAuthUser : null,
   );
@@ -65,14 +62,17 @@ Future<AppProvider> pumpApp(
 Future<void> pumpProfile(
   WidgetTester tester,
   SettingsController settings, {
-  VoidCallback? onLogout,
+  Future<void> Function()? onLogout,
 }) async {
   await tester.pumpWidget(
     ThemeScope(
       controller: ThemeController(),
       child: MaterialApp(
         home: Scaffold(
-          body: ProfileScreen(settings: settings, onLogout: onLogout ?? () {}),
+          body: ProfileScreen(
+            settings: settings,
+            onLogout: onLogout ?? () async {},
+          ),
         ),
       ),
     ),
@@ -723,7 +723,13 @@ void main() {
     final SettingsController settings = SettingsController();
     addTearDown(settings.dispose);
     bool didLogout = false;
-    await pumpProfile(tester, settings, onLogout: () => didLogout = true);
+    await pumpProfile(
+      tester,
+      settings,
+      onLogout: () async {
+        didLogout = true;
+      },
+    );
 
     await tester.ensureVisible(find.text('Keluar'));
     await tester.pumpAndSettle();
@@ -732,7 +738,9 @@ void main() {
 
     expect(find.text('Keluar dari AturAja?'), findsOneWidget);
     expect(
-      find.text('Yakin ingin keluar? Sesi lokal akan diakhiri.'),
+      find.text(
+        'Yakin ingin keluar? Sesi Firebase akan diakhiri dan kamu perlu masuk kembali.',
+      ),
       findsOneWidget,
     );
     expect(didLogout, isFalse);
