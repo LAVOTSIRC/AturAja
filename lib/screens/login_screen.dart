@@ -1,16 +1,28 @@
 import 'package:flutter/material.dart';
 
+import '../services/auth_service.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_typography.dart';
 import '../theme/theme_scope.dart';
+import '../utils/snackbar_helper.dart';
 import '../utils/validators.dart';
 import '../widgets/common.dart';
 
-class LoginScreen extends StatefulWidget {
-  final VoidCallback onLogin;
+typedef LoginCallback = Future<void> Function({
+  required String email,
+  required String password,
+});
 
-  const LoginScreen({super.key, required this.onLogin});
+class LoginScreen extends StatefulWidget {
+  final LoginCallback onLogin;
+  final VoidCallback onRegister;
+
+  const LoginScreen({
+    super.key,
+    required this.onLogin,
+    required this.onRegister,
+  });
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
@@ -59,11 +71,31 @@ class _LoginScreenState extends State<LoginScreen> {
     }
     FocusScope.of(context).unfocus();
     setState(() => submitting = true);
-    await Future<void>.delayed(const Duration(milliseconds: 700));
-    if (!mounted) {
-      return;
+    try {
+      await widget.onLogin(
+        email: emailController.text.trim(),
+        password: passwordController.text,
+      );
+      if (!mounted) {
+        return;
+      }
+      showSuccessSnackBar(context, 'Berhasil masuk. Selamat datang!');
+    } on AuthFailure catch (error) {
+      if (mounted) {
+        showErrorSnackBar(context, error.message);
+      }
+    } catch (_) {
+      if (mounted) {
+        showErrorSnackBar(
+          context,
+          'Gagal masuk. Periksa koneksi lalu coba lagi.',
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => submitting = false);
+      }
     }
-    widget.onLogin();
   }
 
   @override
@@ -100,7 +132,9 @@ class _LoginScreenState extends State<LoginScreen> {
                       const SizedBox(height: AppSpacing.xl),
                       _buildForm(c),
                       const SizedBox(height: AppSpacing.lg),
-                      _buildDemoHint(c),
+                      _buildAuthHint(c),
+                      const SizedBox(height: AppSpacing.xs),
+                      _buildRegisterLink(c),
                     ],
                   ),
                 ),
@@ -261,7 +295,7 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  Widget _buildDemoHint(AppColors c) {
+  Widget _buildAuthHint(AppColors c) {
     return Container(
       padding: const EdgeInsets.all(AppSpacing.sm),
       decoration: BoxDecoration(
@@ -273,19 +307,43 @@ class _LoginScreenState extends State<LoginScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Icon(
-            Icons.info_outline_rounded,
+            Icons.shield_outlined,
             size: AppSpacing.iconSmall,
             color: c.blue,
           ),
           const SizedBox(width: AppSpacing.xs),
           Expanded(
             child: Text(
-              'Mode demo: gunakan email valid dan kata sandi minimal 6 karakter untuk masuk.',
+              'Sesi masuk diamankan oleh Firebase dan tetap aktif setelah aplikasi dibuka ulang.',
               style: AppTypography.caption(c.textSub),
             ),
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildRegisterLink(AppColors c) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Text('Belum punya akun?', style: AppTypography.caption(c.textSub)),
+        PressableScale(
+          onTap: widget.onRegister,
+          semanticLabel: 'Buat akun AturAja baru',
+          child: Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.xs,
+              vertical: AppSpacing.sm,
+            ),
+            child: Text(
+              'Daftar',
+              style: AppTypography.caption(c.blue)
+                  .copyWith(fontWeight: FontWeight.w700),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
