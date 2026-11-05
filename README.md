@@ -41,6 +41,9 @@ project Firebase sendiri sesuai langkah di bawah.
 3. Tambahkan SHA-1 debug ke project Firebase. Untuk mendapatkan SHA-1:
    `cd android && ./gradlew signingReport` (Windows: `gradlew.bat signingReport`).
 4. Unduh `google-services.json` dan letakkan di `android/app/google-services.json`.
+   File ini harus memuat `oauth_client` bertipe web (`client_type: 3`) agar
+   Google Sign-In Android dapat meminta ID token. Jika belum ada, tambahkan
+   aplikasi web pada project Firebase lalu unduh ulang file konfigurasi.
 5. Pastikan file tersebut tidak ikut ter-commit (sudah masuk `.gitignore`).
 
 Tanpa langkah tersebut, build Android akan gagal pada plugin Google Services dan
