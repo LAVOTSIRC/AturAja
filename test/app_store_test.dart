@@ -1,9 +1,9 @@
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:bruh/data/app_store.dart';
-import 'package:bruh/data/models.dart';
-import 'package:bruh/data/settings_controller.dart';
-import 'package:bruh/theme/theme_scope.dart';
+import 'package:aturaja/data/app_store.dart';
+import 'package:aturaja/data/models.dart';
+import 'package:aturaja/data/settings_controller.dart';
+import 'package:aturaja/theme/theme_scope.dart';
 
 void main() {
   test('TaskItem serializes and restores all fields', () {
