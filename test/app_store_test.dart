@@ -64,7 +64,6 @@ void main() {
         theme: ThemeController(),
         tasks: sampleTasks,
         profile: ProfileData.initial,
-        isLoggedIn: false,
       );
       addTearDown(store.dispose);
       await store.load();
@@ -97,7 +96,6 @@ void main() {
       store.settings.setMonthlyBudgetLimit(2500000);
       store.settings.setDeadlineNotifications(false);
       store.theme.setDark(false);
-      store.setLoggedIn(true);
       await store.save();
 
       final AppProvider restored = AppProvider(
@@ -106,7 +104,6 @@ void main() {
         theme: ThemeController(),
         tasks: const <TaskItem>[],
         profile: ProfileData.initial,
-        isLoggedIn: false,
       );
       addTearDown(restored.dispose);
       await restored.load();
@@ -125,7 +122,6 @@ void main() {
       expect(restored.settings.monthlyBudgetLimit, 2500000);
       expect(restored.settings.deadlineNotificationsEnabled, isFalse);
       expect(restored.theme.isDark, isFalse);
-      expect(restored.isLoggedIn, isTrue);
     },
   );
 
@@ -138,7 +134,6 @@ void main() {
       tasks: sampleTasks,
       transactions: const <TransactionItem>[],
       profile: ProfileData.initial,
-      isLoggedIn: false,
     );
     addTearDown(store.dispose);
     await store.load();
@@ -166,7 +161,6 @@ void main() {
       tasks: const <TaskItem>[],
       transactions: const <TransactionItem>[],
       profile: ProfileData.initial,
-      isLoggedIn: false,
     );
     addTearDown(restored.dispose);
     await restored.load();
@@ -190,7 +184,6 @@ void main() {
       tasks: const <TaskItem>[],
       transactions: const <TransactionItem>[],
       profile: ProfileData.initial,
-      isLoggedIn: false,
     );
     addTearDown(reloaded.dispose);
     await reloaded.load();
@@ -205,7 +198,6 @@ void main() {
       theme: ThemeController(),
       tasks: sampleTasks,
       profile: ProfileData.initial,
-      isLoggedIn: false,
     );
     addTearDown(store.dispose);
 
@@ -270,7 +262,6 @@ void main() {
       theme: ThemeController(),
       tasks: <TaskItem>[],
       profile: ProfileData.initial,
-      isLoggedIn: false,
     );
     addTearDown(store.dispose);
     await store.load();
@@ -293,7 +284,6 @@ void main() {
       theme: ThemeController(),
       tasks: <TaskItem>[],
       profile: ProfileData.initial,
-      isLoggedIn: false,
     );
     addTearDown(restored.dispose);
     await restored.load();
@@ -311,7 +301,6 @@ void main() {
       theme: ThemeController(),
       tasks: <TaskItem>[],
       profile: ProfileData.initial,
-      isLoggedIn: false,
     );
     addTearDown(afterDelete.dispose);
     await afterDelete.load();
