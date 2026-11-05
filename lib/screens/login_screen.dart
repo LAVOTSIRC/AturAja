@@ -4,6 +4,7 @@ import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_typography.dart';
 import '../theme/theme_scope.dart';
+import '../utils/validators.dart';
 import '../widgets/common.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -43,16 +44,8 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   bool _validate() {
-    final String email = emailController.text.trim();
-    final String password = passwordController.text;
-    final String? nextEmailError = email.isEmpty
-        ? 'Email tidak boleh kosong.'
-        : (RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(email)
-              ? null
-              : 'Masukkan format email yang valid.');
-    final String? nextPasswordError = password.isEmpty
-        ? 'Kata sandi tidak boleh kosong.'
-        : (password.length < 6 ? 'Kata sandi minimal 6 karakter.' : null);
+    final String? nextEmailError = validateEmail(emailController.text);
+    final String? nextPasswordError = validatePassword(passwordController.text);
     setState(() {
       emailError = nextEmailError;
       passwordError = nextPasswordError;

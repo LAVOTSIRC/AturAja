@@ -1,4 +1,4 @@
-package com.example.bruh
+package com.aturaja.app
 
 import io.flutter.embedding.android.FlutterActivity
 

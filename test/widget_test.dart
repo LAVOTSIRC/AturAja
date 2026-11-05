@@ -5,21 +5,21 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 
-import 'package:bruh/data/models.dart';
-import 'package:bruh/data/settings_controller.dart';
-import 'package:bruh/main.dart';
-import 'package:bruh/providers/app_provider.dart';
-import 'package:bruh/theme/app_colors.dart';
-import 'package:bruh/screens/brain_dump_finance_screen.dart';
-import 'package:bruh/screens/finance_screen.dart';
-import 'package:bruh/screens/home_screen.dart';
-import 'package:bruh/screens/login_screen.dart';
-import 'package:bruh/screens/main_shell.dart';
-import 'package:bruh/screens/profile_screen.dart';
-import 'package:bruh/screens/task_screen.dart';
-import 'package:bruh/services/receipt_camera.dart';
-import 'package:bruh/theme/theme_scope.dart';
-import 'package:bruh/widgets/quick_add_modal.dart';
+import 'package:aturaja/data/models.dart';
+import 'package:aturaja/data/settings_controller.dart';
+import 'package:aturaja/main.dart';
+import 'package:aturaja/providers/app_provider.dart';
+import 'package:aturaja/theme/app_colors.dart';
+import 'package:aturaja/screens/brain_dump_finance_screen.dart';
+import 'package:aturaja/screens/finance_screen.dart';
+import 'package:aturaja/screens/home_screen.dart';
+import 'package:aturaja/screens/login_screen.dart';
+import 'package:aturaja/screens/main_shell.dart';
+import 'package:aturaja/screens/profile_screen.dart';
+import 'package:aturaja/screens/task_screen.dart';
+import 'package:aturaja/services/receipt_camera.dart';
+import 'package:aturaja/theme/theme_scope.dart';
+import 'package:aturaja/widgets/quick_add_modal.dart';
 
 Future<AppProvider> pumpApp(
   WidgetTester tester, {
