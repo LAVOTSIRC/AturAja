@@ -41,6 +41,9 @@ dependencies:
   # 13.x requires compileSdk 37; proyek ini masih memakai compileSdk 36.
   permission_handler: 12.0.0
   camera: ^0.12.2
+  firebase_core: ^5.1.0
+  firebase_auth: ^7.0.1
+  google_sign_in: ^7.2.0
 
 dev_dependencies:
   flutter_test:
