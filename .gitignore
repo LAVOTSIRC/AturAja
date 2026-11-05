@@ -69,6 +69,11 @@ key.properties
 .env.*
 *.env
 
+# Firebase project configuration is environment-specific and may contain
+# API keys / OAuth client IDs. Ask the project owner for these files.
+/android/app/google-services.json
+/ios/Runner/GoogleService-Info.plist
+
 # Desktop platform build artifacts (safe to keep even before these platforms
 # are added to the project, in case a collaborator later runs
 # `flutter create .` to enable Windows/macOS/Linux support).
