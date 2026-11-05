@@ -76,6 +76,7 @@ class _MyAppState extends State<MyApp> {
     return ThemeData(
       useMaterial3: true,
       brightness: brightness,
+      fontFamily: AppTypography.fontFamily,
       colorScheme: scheme,
       scaffoldBackgroundColor: c.bg,
       textTheme: textTheme,
