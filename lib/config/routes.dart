@@ -62,6 +62,12 @@ GoRouter createAppRouter({String initialLocation = AppRoutes.splash}) {
                 context.go(AppRoutes.home);
               }
             },
+            onGoogleSignIn: () async {
+              await auth.signInWithGoogle();
+              if (context.mounted) {
+                context.go(AppRoutes.home);
+              }
+            },
             onRegister: () => context.go(AppRoutes.register),
           );
         },

@@ -16,11 +16,13 @@ typedef LoginCallback = Future<void> Function({
 
 class LoginScreen extends StatefulWidget {
   final LoginCallback onLogin;
+  final Future<void> Function() onGoogleSignIn;
   final VoidCallback onRegister;
 
   const LoginScreen({
     super.key,
     required this.onLogin,
+    required this.onGoogleSignIn,
     required this.onRegister,
   });
 
@@ -89,6 +91,32 @@ class _LoginScreenState extends State<LoginScreen> {
         showErrorSnackBar(
           context,
           'Gagal masuk. Periksa koneksi lalu coba lagi.',
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => submitting = false);
+      }
+    }
+  }
+
+  Future<void> _signInWithGoogle() async {
+    if (submitting) {
+      return;
+    }
+    FocusScope.of(context).unfocus();
+    setState(() => submitting = true);
+    try {
+      await widget.onGoogleSignIn();
+    } on AuthFailure catch (error) {
+      if (mounted) {
+        showErrorSnackBar(context, error.message);
+      }
+    } catch (_) {
+      if (mounted) {
+        showErrorSnackBar(
+          context,
+          'Gagal masuk dengan Google. Periksa koneksi lalu coba lagi.',
         );
       }
     } finally {
@@ -265,6 +293,48 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                     )
                   : Text('Masuk', style: AppTypography.button(c.onAccent)),
+            ),
+          ),
+          const SizedBox(height: AppSpacing.md),
+          Row(
+            children: [
+              Expanded(child: Divider(color: c.border, thickness: 1)),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
+                child: Text('atau', style: AppTypography.caption(c.textMuted)),
+              ),
+              Expanded(child: Divider(color: c.border, thickness: 1)),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.md),
+          PressableScale(
+            onTap: submitting ? null : _signInWithGoogle,
+            enabled: !submitting,
+            semanticLabel: 'Masuk dengan Google',
+            tooltip: 'Masuk dengan Google',
+            child: Container(
+              constraints: const BoxConstraints(minHeight: AppSpacing.target),
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: c.surfaceHigh,
+                borderRadius: BorderRadius.circular(AppSpacing.sm),
+                border: Border.all(color: c.border, width: 1.5),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.g_mobiledata_rounded,
+                    size: AppSpacing.iconMedium,
+                    color: c.blue,
+                  ),
+                  const SizedBox(width: AppSpacing.xs),
+                  Text(
+                    'Masuk dengan Google',
+                    style: AppTypography.button(c.text),
+                  ),
+                ],
+              ),
             ),
           ),
         ],
