@@ -774,6 +774,7 @@ void main() {
             onLogin: ({required String email, required String password}) async {
               didLogin = true;
             },
+            onGoogleSignIn: () async {},
             onRegister: () {},
           ),
         ),
