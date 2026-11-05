@@ -255,7 +255,7 @@ class _TaskScreenState extends State<TaskScreen> {
                         AppSpacing.md,
                         AppSpacing.lg,
                         AppSpacing.md,
-                        AppSpacing.xs,
+                        AppSpacing.sm,
                       ),
                       child: Row(
                         children: [
@@ -265,12 +265,33 @@ class _TaskScreenState extends State<TaskScreen> {
                               children: [
                                 Text(
                                   'Tugas',
-                                  style: AppTypography.titleLarge(c.text),
+                                  style: AppTypography.titleLarge(c.text)
+                                      .copyWith(
+                                        fontWeight: FontWeight.w800,
+                                        letterSpacing: -0.3,
+                                      ),
                                 ),
                                 const SizedBox(height: AppSpacing.xxs),
-                                Text(
-                                  '${pending.length} belum selesai',
-                                  style: AppTypography.meta(c.textMuted),
+                                Row(
+                                  children: [
+                                    Container(
+                                      width: 7,
+                                      height: 7,
+                                      decoration: BoxDecoration(
+                                        color: pending.isEmpty
+                                            ? c.teal
+                                            : c.amber,
+                                        shape: BoxShape.circle,
+                                      ),
+                                    ),
+                                    const SizedBox(width: AppSpacing.xxs),
+                                    Text(
+                                      pending.isEmpty
+                                          ? 'Semua tugas selesai'
+                                          : '${pending.length} tugas perlu diselesaikan',
+                                      style: AppTypography.meta(c.textMuted),
+                                    ),
+                                  ],
                                 ),
                               ],
                             ),
@@ -292,13 +313,13 @@ class _TaskScreenState extends State<TaskScreen> {
                               decoration: BoxDecoration(
                                 color: c.blue,
                                 borderRadius: BorderRadius.circular(
-                                  AppSpacing.sm,
+                                  AppSpacing.huge,
                                 ),
                                 boxShadow: [
                                   BoxShadow(
                                     color: c.blue.withValues(alpha: 0.25),
-                                    blurRadius: AppSpacing.xs,
-                                    offset: const Offset(0, 2),
+                                    blurRadius: AppSpacing.sm,
+                                    offset: const Offset(0, 4),
                                   ),
                                 ],
                               ),
@@ -333,22 +354,52 @@ class _TaskScreenState extends State<TaskScreen> {
                       child: AppCard(
                         padding: const EdgeInsets.symmetric(
                           horizontal: AppSpacing.md,
-                          vertical: AppSpacing.sm,
+                          vertical: AppSpacing.md,
                         ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                Text(
-                                  'Progress Minggu Ini',
-                                  style: AppTypography.label(c.text),
+                                Container(
+                                  width: 36,
+                                  height: 36,
+                                  decoration: BoxDecoration(
+                                    color: c.blueDim,
+                                    borderRadius: BorderRadius.circular(
+                                      AppSpacing.sm,
+                                    ),
+                                  ),
+                                  child: Icon(
+                                    Icons.trending_up_rounded,
+                                    color: c.blue,
+                                    size: AppSpacing.iconSmall,
+                                  ),
+                                ),
+                                const SizedBox(width: AppSpacing.sm),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'Progress tugas',
+                                        style: AppTypography.label(
+                                          c.text,
+                                        ).copyWith(fontWeight: FontWeight.w700),
+                                      ),
+                                      const SizedBox(height: AppSpacing.xxs),
+                                      Text(
+                                        'Pantau penyelesaian tugasmu minggu ini',
+                                        style: AppTypography.micro(c.textMuted),
+                                      ),
+                                    ],
+                                  ),
                                 ),
                                 Text(
-                                  '${done.length}/${list.length} selesai',
-                                  style: AppTypography.label(c.blue)
-                                      .copyWith(fontWeight: FontWeight.w700),
+                                  '${done.length}/${list.length}',
+                                  style: AppTypography.title(c.blue)
+                                      .copyWith(fontWeight: FontWeight.w800),
                                 ),
                               ],
                             ),
@@ -401,7 +452,30 @@ class _TaskScreenState extends State<TaskScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          SectionLabel(_getFilterSectionTitle()),
+                          Padding(
+                            padding: const EdgeInsets.only(
+                              bottom: AppSpacing.sm,
+                              left: AppSpacing.xxs,
+                            ),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    _getFilterSectionTitle(),
+                                    style: AppTypography.caption(c.textSub)
+                                        .copyWith(
+                                          fontWeight: FontWeight.w800,
+                                          letterSpacing: 0.8,
+                                        ),
+                                  ),
+                                ),
+                                Text(
+                                  '${filtered.length} tugas',
+                                  style: AppTypography.micro(c.textMuted),
+                                ),
+                              ],
+                            ),
+                          ),
                           if (filtered.isEmpty)
                             _buildEmptyStateForFilter()
                           else
@@ -441,12 +515,13 @@ class _TaskScreenState extends State<TaskScreen> {
 
     return AppCard(
       padding: const EdgeInsets.all(AppSpacing.xs),
+      background: c.surface,
+      borderColor: c.border.withValues(alpha: 0.55),
       child: Container(
-        height: 48,
+        height: 52,
         decoration: BoxDecoration(
-          color: c.surfaceHigh.withValues(alpha: 0.5),
-          borderRadius: BorderRadius.circular(AppSpacing.md),
-          border: Border.all(color: c.border, width: 1.0),
+          color: c.surfaceHigh.withValues(alpha: 0.45),
+          borderRadius: BorderRadius.circular(AppSpacing.sm),
         ),
         child: Row(
           children: [
@@ -482,11 +557,11 @@ class _TaskScreenState extends State<TaskScreen> {
                     items: [
                       DropdownMenuItem(
                         value: TaskFilter.all,
-                        child: Text('Semua Status (${list.length})'),
+                        child: Text('Status · Semua (${list.length})'),
                       ),
                       DropdownMenuItem(
                         value: TaskFilter.pending,
-                        child: Text('Belum Selesai ($pendingCount)'),
+                        child: Text('Belum selesai ($pendingCount)'),
                       ),
                       DropdownMenuItem(
                         value: TaskFilter.urgent,
@@ -537,7 +612,7 @@ class _TaskScreenState extends State<TaskScreen> {
                     items: [
                       DropdownMenuItem(
                         value: 'Semua',
-                        child: Text('Semua Kategori (${list.length})'),
+                        child: Text('Kategori · Semua (${list.length})'),
                       ),
                       ...availableCategories.map((cat) {
                         final count = list
@@ -649,6 +724,9 @@ class _TaskScreenState extends State<TaskScreen> {
   Widget _taskTile(AppColors c, TaskItem t) {
     final bool isUrgent = t.urgent;
     final bool isOverdue = t.isOverdue;
+    final List<String> visibleCategories = t.categories.take(2).toList();
+    final int hiddenCategoryCount =
+        t.categories.length - visibleCategories.length;
 
     // Determine status color indicator
     Color statusAccentColor = c.blue;
@@ -668,186 +746,208 @@ class _TaskScreenState extends State<TaskScreen> {
       child: AppCard(
         padding: const EdgeInsets.symmetric(
           horizontal: AppSpacing.sm,
-          vertical: AppSpacing.sm,
+          vertical: AppSpacing.md,
         ),
         background: c.surface,
-        borderColor: !t.done && (isOverdue || isUrgent)
-            ? statusAccentColor.withValues(alpha: 0.6)
-            : c.border,
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Checkbox with Status Badge Circle Dot
-            Stack(
-              clipBehavior: Clip.none,
-              children: [
-                GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: () => _toggleDone(t.id),
-                  child: SizedBox(
-                    width: AppSpacing.targetCompact,
-                    height: AppSpacing.targetCompact,
-                    child: Center(
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 180),
-                        width: AppSpacing.checkbox,
-                        height: AppSpacing.checkbox,
+        borderColor: c.border.withValues(alpha: 0.5),
+        child: IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Container(
+                width: 4,
+                decoration: BoxDecoration(
+                  color: statusAccentColor,
+                  borderRadius: BorderRadius.circular(AppSpacing.huge),
+                ),
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              // Checkbox with Status Badge Circle Dot
+              Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () => _toggleDone(t.id),
+                    child: SizedBox(
+                      width: AppSpacing.targetCompact,
+                      height: AppSpacing.targetCompact,
+                      child: Center(
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 180),
+                          width: AppSpacing.checkbox,
+                          height: AppSpacing.checkbox,
+                          decoration: BoxDecoration(
+                            color: t.done ? c.success : c.transparent,
+                            border: Border.all(
+                              color: t.done
+                                  ? c.success
+                                  : (isOverdue
+                                        ? c.expense
+                                        : (isUrgent ? c.amber : c.textMuted)),
+                              width: 1.5,
+                            ),
+                            borderRadius: BorderRadius.circular(AppSpacing.xs),
+                          ),
+                          child: t.done
+                              ? Icon(
+                                  Icons.check_rounded,
+                                  size: AppSpacing.md,
+                                  color: c.onAccent,
+                                )
+                              : null,
+                        ),
+                      ),
+                    ),
+                  ),
+                  if (!t.done && (isOverdue || isUrgent))
+                    Positioned(
+                      top: 2,
+                      right: 2,
+                      child: Container(
+                        width: 10,
+                        height: 10,
                         decoration: BoxDecoration(
-                          color: t.done ? c.success : c.transparent,
-                          border: Border.all(
+                          color: isOverdue ? c.expense : c.amber,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: c.surface, width: 2),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(width: AppSpacing.xxs),
+
+              // Main Info
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 2),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        t.title,
+                        style: AppTypography.label(t.done ? c.textSub : c.text)
+                            .copyWith(
+                              decoration: t.done
+                                  ? TextDecoration.lineThrough
+                                  : null,
+                              fontWeight: FontWeight.w600,
+                            ),
+                      ),
+                      const SizedBox(height: AppSpacing.xxs),
+
+                      // Multi-category Badges
+                      Wrap(
+                        spacing: AppSpacing.xxs,
+                        runSpacing: 2,
+                        children: <Widget>[
+                          ...visibleCategories.map((cat) {
+                            return Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: AppSpacing.xs - 2,
+                                vertical: 1,
+                              ),
+                              decoration: BoxDecoration(
+                                color: c.blueDim,
+                                borderRadius: BorderRadius.circular(
+                                  AppSpacing.huge,
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    categoryIcon(cat),
+                                    size: 10,
+                                    color: c.blue,
+                                  ),
+                                  const SizedBox(width: 2),
+                                  Text(
+                                    cat,
+                                    style: AppTypography.micro(c.blue)
+                                        .copyWith(fontWeight: FontWeight.w600),
+                                  ),
+                                ],
+                              ),
+                            );
+                          }),
+                          if (hiddenCategoryCount > 0)
+                            Pill(
+                              text: '+$hiddenCategoryCount',
+                              color: c.textMuted,
+                              background: c.surfaceHigh,
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: AppSpacing.xs),
+
+                      Row(
+                        children: [
+                          Icon(
+                            isOverdue
+                                ? Icons.warning_amber_rounded
+                                : Icons.access_time_rounded,
+                            size: AppSpacing.sm,
                             color: t.done
-                                ? c.success
+                                ? c.textMuted
                                 : (isOverdue
                                       ? c.expense
                                       : (isUrgent ? c.amber : c.textMuted)),
-                            width: 1.5,
                           ),
-                          borderRadius: BorderRadius.circular(AppSpacing.xs),
-                        ),
-                        child: t.done
-                            ? Icon(
-                                Icons.check_rounded,
-                                size: AppSpacing.md,
-                                color: c.onAccent,
-                              )
-                            : null,
-                      ),
-                    ),
-                  ),
-                ),
-                if (!t.done && (isOverdue || isUrgent))
-                  Positioned(
-                    top: 2,
-                    right: 2,
-                    child: Container(
-                      width: 10,
-                      height: 10,
-                      decoration: BoxDecoration(
-                        color: isOverdue ? c.expense : c.amber,
-                        shape: BoxShape.circle,
-                        border: Border.all(color: c.surface, width: 2),
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-            const SizedBox(width: AppSpacing.xxs),
-
-            // Main Info
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.only(top: 2),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      t.title,
-                      style: AppTypography.label(t.done ? c.textSub : c.text)
-                          .copyWith(
-                            decoration: t.done
-                                ? TextDecoration.lineThrough
-                                : null,
-                            fontWeight: FontWeight.w600,
+                          const SizedBox(width: AppSpacing.xxs),
+                          Text(
+                            t.deadline,
+                            style:
+                                AppTypography.micro(
+                                  t.done
+                                      ? c.textMuted
+                                      : (isOverdue
+                                            ? c.expense
+                                            : (isUrgent
+                                                  ? c.amber
+                                                  : c.textMuted)),
+                                ).copyWith(
+                                  fontWeight: !t.done && (isOverdue || isUrgent)
+                                      ? FontWeight.w600
+                                      : FontWeight.w400,
+                                ),
                           ),
-                    ),
-                    const SizedBox(height: AppSpacing.xxs),
-
-                    // Multi-category Badges
-                    Wrap(
-                      spacing: AppSpacing.xxs,
-                      runSpacing: 2,
-                      children: t.categories.map((cat) {
-                        return Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: AppSpacing.xs - 2,
-                            vertical: 1,
-                          ),
-                          decoration: BoxDecoration(
-                            color: c.blueDim,
-                            borderRadius: BorderRadius.circular(
-                              AppSpacing.huge,
+                          if (!t.done && isOverdue) ...[
+                            const SizedBox(width: AppSpacing.xs),
+                            Pill(
+                              text: '⚠️ Terlewat',
+                              color: c.expense,
+                              background: c.expenseDim,
                             ),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(categoryIcon(cat), size: 10, color: c.blue),
-                              const SizedBox(width: 2),
-                              Text(
-                                cat,
-                                style: AppTypography.micro(c.blue)
-                                    .copyWith(fontWeight: FontWeight.w600),
-                              ),
-                            ],
-                          ),
-                        );
-                      }).toList(),
-                    ),
-                    const SizedBox(height: AppSpacing.xs),
-
-                    Row(
-                      children: [
-                        Icon(
-                          isOverdue
-                              ? Icons.warning_amber_rounded
-                              : Icons.access_time_rounded,
-                          size: AppSpacing.sm,
-                          color: t.done
-                              ? c.textMuted
-                              : (isOverdue
-                                    ? c.expense
-                                    : (isUrgent ? c.amber : c.textMuted)),
-                        ),
-                        const SizedBox(width: AppSpacing.xxs),
-                        Text(
-                          t.deadline,
-                          style:
-                              AppTypography.micro(
-                                t.done
-                                    ? c.textMuted
-                                    : (isOverdue
-                                          ? c.expense
-                                          : (isUrgent ? c.amber : c.textMuted)),
-                              ).copyWith(
-                                fontWeight: !t.done && (isOverdue || isUrgent)
-                                    ? FontWeight.w600
-                                    : FontWeight.w400,
-                              ),
-                        ),
-                        if (!t.done && isOverdue) ...[
-                          const SizedBox(width: AppSpacing.xs),
-                          Pill(
-                            text: '⚠️ Terlewat',
-                            color: c.expense,
-                            background: c.expenseDim,
-                          ),
-                        ] else if (!t.done && isUrgent) ...[
-                          const SizedBox(width: AppSpacing.xs),
-                          Pill(
-                            text: 'Mendesak (<24j)',
-                            color: c.amber,
-                            background: c.amberDim,
-                          ),
+                          ] else if (!t.done && isUrgent) ...[
+                            const SizedBox(width: AppSpacing.xs),
+                            Pill(
+                              text: 'Mendesak (<24j)',
+                              color: c.amber,
+                              background: c.amberDim,
+                            ),
+                          ],
                         ],
-                      ],
-                    ),
-                  ],
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ),
 
-            // Chevron Indicator
-            SizedBox(
-              height: AppSpacing.targetCompact,
-              child: Center(
-                child: Icon(
-                  Icons.chevron_right_rounded,
-                  size: AppSpacing.iconSmall,
-                  color: c.textMuted,
+              // Chevron Indicator
+              SizedBox(
+                height: AppSpacing.targetCompact,
+                child: Center(
+                  child: Icon(
+                    Icons.chevron_right_rounded,
+                    size: AppSpacing.iconSmall,
+                    color: c.textMuted,
+                  ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -926,51 +1026,70 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
           children: [
             Expanded(
               child: SingleChildScrollView(
-                padding: const EdgeInsets.all(AppSpacing.md),
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.md,
+                  AppSpacing.sm,
+                  AppSpacing.md,
+                  AppSpacing.xxl,
+                ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     // Status & Urgent / Overdue Badges
-                    Row(
-                      children: [
-                        Pill(
-                          text: currentTask.done ? 'Selesai' : 'Belum Selesai',
-                          color: currentTask.done ? c.teal : c.blue,
-                          background: currentTask.done ? c.tealDim : c.blueDim,
-                        ),
-                        if (!currentTask.done && isOverdue) ...[
-                          const SizedBox(width: AppSpacing.xs),
-                          Pill(
-                            text: '⚠️ Terlewat (Overdue)',
-                            color: c.expense,
-                            background: c.expenseDim,
+                    AppCard(
+                      padding: const EdgeInsets.all(AppSpacing.lg),
+                      background: c.surface,
+                      borderColor: c.border.withValues(alpha: 0.55),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Wrap(
+                            spacing: AppSpacing.xs,
+                            runSpacing: AppSpacing.xs,
+                            children: [
+                              Pill(
+                                text: currentTask.done
+                                    ? 'Selesai'
+                                    : 'Belum selesai',
+                                color: currentTask.done ? c.teal : c.blue,
+                                background: currentTask.done
+                                    ? c.tealDim
+                                    : c.blueDim,
+                              ),
+                              if (!currentTask.done && isOverdue)
+                                Pill(
+                                  text: 'Terlewat',
+                                  color: c.expense,
+                                  background: c.expenseDim,
+                                )
+                              else if (!currentTask.done && isUrgent)
+                                Pill(
+                                  text: 'Mendesak <24 jam',
+                                  color: c.amber,
+                                  background: c.amberDim,
+                                ),
+                            ],
                           ),
-                        ] else if (!currentTask.done && isUrgent) ...[
-                          const SizedBox(width: AppSpacing.xs),
-                          Pill(
-                            text: '🔥 Mendesak (< 24 Jam)',
-                            color: c.amber,
-                            background: c.amberDim,
+                          const SizedBox(height: AppSpacing.md),
+                          Text(
+                            currentTask.title,
+                            style: AppTypography.hero(c.text).copyWith(
+                              height: 1.15,
+                              decoration: currentTask.done
+                                  ? TextDecoration.lineThrough
+                                  : null,
+                            ),
                           ),
                         ],
-                      ],
-                    ),
-                    const SizedBox(height: AppSpacing.md),
-
-                    // Title
-                    Text(
-                      currentTask.title,
-                      style: AppTypography.hero(c.text).copyWith(
-                        decoration: currentTask.done
-                            ? TextDecoration.lineThrough
-                            : null,
                       ),
                     ),
-                    const SizedBox(height: AppSpacing.sm),
+                    const SizedBox(height: AppSpacing.lg),
 
                     // Categories Card
                     AppCard(
-                      padding: const EdgeInsets.all(AppSpacing.sm),
+                      padding: const EdgeInsets.all(AppSpacing.md),
+                      background: c.surface,
+                      borderColor: c.border.withValues(alpha: 0.55),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -1023,11 +1142,11 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
 
                     // Deadline Card
                     AppCard(
-                      padding: const EdgeInsets.all(AppSpacing.sm),
+                      padding: const EdgeInsets.all(AppSpacing.md),
                       background: c.surface,
                       borderColor: !currentTask.done && (isOverdue || isUrgent)
                           ? (isOverdue ? c.expense : c.amber)
-                          : c.border,
+                          : c.border.withValues(alpha: 0.55),
                       child: Row(
                         children: [
                           Container(
@@ -1543,9 +1662,9 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
                 ),
                 padding: const EdgeInsets.all(AppSpacing.xxs),
                 decoration: BoxDecoration(
-                  color: c.surfaceHigh,
+                  color: c.surface,
                   borderRadius: BorderRadius.circular(AppSpacing.md),
-                  border: Border.all(color: c.border),
+                  border: Border.all(color: c.border.withValues(alpha: 0.55)),
                 ),
                 child: Row(
                   children: [
@@ -1582,6 +1701,8 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
                     if (!isEditing && inputMode == TaskInputMode.brainDump) ...[
                       AppCard(
                         padding: const EdgeInsets.all(AppSpacing.md),
+                        background: c.surface,
+                        borderColor: c.ai.withValues(alpha: 0.55),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -1590,13 +1711,13 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
                                 Container(
                                   padding: const EdgeInsets.all(AppSpacing.xs),
                                   decoration: BoxDecoration(
-                                    color: c.blueDim,
+                                    color: c.aiDim,
                                     shape: BoxShape.circle,
                                   ),
                                   child: Icon(
                                     Icons.auto_awesome_rounded,
                                     size: AppSpacing.iconSmall,
-                                    color: c.blue,
+                                    color: c.ai,
                                   ),
                                 ),
                                 const SizedBox(width: AppSpacing.xs),
@@ -1688,7 +1809,7 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
                                 height: AppSpacing.target,
                                 alignment: Alignment.center,
                                 decoration: BoxDecoration(
-                                  color: c.blue,
+                                  color: c.ai,
                                   borderRadius: BorderRadius.circular(
                                     AppSpacing.md,
                                   ),
@@ -1740,6 +1861,8 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
                       // Input Judul Tugas Card
                       AppCard(
                         padding: const EdgeInsets.all(AppSpacing.md),
+                        background: c.surface,
+                        borderColor: c.border.withValues(alpha: 0.55),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -1777,6 +1900,8 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
                       // Multi-Select Category Dropdown Card
                       AppCard(
                         padding: const EdgeInsets.all(AppSpacing.md),
+                        background: c.surface,
+                        borderColor: c.border.withValues(alpha: 0.55),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -1982,6 +2107,8 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
                       // Input Tenggat Waktu Card
                       AppCard(
                         padding: const EdgeInsets.all(AppSpacing.md),
+                        background: c.surface,
+                        borderColor: c.border.withValues(alpha: 0.55),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -2209,6 +2336,7 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
     required String label,
   }) {
     final bool isSelected = inputMode == mode;
+    final Color accent = mode == TaskInputMode.brainDump ? c.ai : c.blue;
     return Expanded(
       child: PressableScale(
         onTap: () {
@@ -2224,7 +2352,7 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
           height: AppSpacing.targetCompact,
           alignment: Alignment.center,
           decoration: BoxDecoration(
-            color: isSelected ? c.blue : c.transparent,
+            color: isSelected ? accent : c.transparent,
             borderRadius: BorderRadius.circular(AppSpacing.sm),
           ),
           child: Row(
@@ -2233,12 +2361,12 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
               Icon(
                 icon,
                 size: AppSpacing.iconSmall - 2,
-                color: isSelected ? c.onAccent : c.textSub,
+                color: isSelected ? c.onAccent : accent,
               ),
               const SizedBox(width: AppSpacing.xxs),
               Text(
                 label,
-                style: AppTypography.label(isSelected ? c.onAccent : c.textSub)
+                style: AppTypography.label(isSelected ? c.onAccent : accent)
                     .copyWith(
                       fontWeight: isSelected
                           ? FontWeight.w700
