@@ -2,7 +2,8 @@
 
 AturAja adalah aplikasi mobile untuk membantu mahasiswa mengatur tugas,
 keuangan, dan rutinitas harian dalam satu tempat. Project ini dibuat dengan
-Flutter dan saat ini menggunakan data lokal/dummy untuk kebutuhan demonstrasi.
+Flutter, menggunakan data lokal/dummy untuk kebutuhan demonstrasi, dan
+autentikasi Firebase untuk login email/password serta Google Sign-In.
 
 ## Setup
 
@@ -51,6 +52,24 @@ Firebase App Check memakai debug provider; token debug yang muncul di log
 aplikasi harus didaftarkan pada Firebase Console sebelum request Gemini diuji.
 Build release memakai Play Integrity untuk Android dan App Attest untuk iOS.
 
+### Konfigurasi Firebase
+
+1. Pastikan project Firebase `aturaja-ai` digunakan dan aplikasi Android
+   didaftarkan dengan package name `com.aturaja.app`.
+2. Aktifkan provider **Email/Password** dan **Google** di Firebase Authentication.
+3. Tambahkan SHA-1 debug ke project Firebase. Untuk mendapatkan SHA-1:
+   `cd android && ./gradlew signingReport` (Windows: `gradlew.bat signingReport`).
+4. Pastikan `google-services.json` tersedia di
+   `android/app/google-services.json`.
+   File ini harus memuat `oauth_client` bertipe web (`client_type: 3`) agar
+   Google Sign-In Android dapat meminta ID token. Jika belum ada, tambahkan
+   aplikasi web pada project Firebase lalu unduh ulang file konfigurasi.
+5. Jalankan `flutter pub get` setelah mengambil perubahan dependency.
+
+Tanpa langkah tersebut, build Android akan gagal pada plugin Google Services dan
+aplikasi tidak dapat melakukan autentikasi. File `env.json` tidak digunakan pada
+modul autentikasi ini.
+
 ## Cara Menjalankan
 
 1. Hubungkan perangkat fisik atau nyalakan emulator.
@@ -67,13 +86,14 @@ Build release memakai Play Integrity untuk Android dan App Attest untuk iOS.
    ```
 
 Saat dibuka, aplikasi menampilkan splash screen AturAja selama sekitar tiga
-detik. Jika belum ada sesi login, aplikasi menuju halaman login demo; setelah
-login, pengguna masuk ke `MainShell` dengan tab Home, Keuangan, Tugas, dan
-Profil. Tab utama dapat diganti lewat bottom navigation atau dengan swipe ke
-kiri/kanan. Status login disimpan sehingga sesi tetap aktif setelah restart.
+detik. Jika belum ada sesi Firebase, aplikasi menuju halaman login; setelah
+login atau register, pengguna masuk ke `MainShell` dengan tab Home, Keuangan,
+Tugas, dan Profil. Tab utama dapat diganti lewat bottom navigation atau dengan
+swipe ke kiri/kanan. Sesi login dipulihkan dari Firebase saat aplikasi dibuka
+ulang, dan logout akan mengakhiri sesi Firebase tersebut.
 
-> Login hanya memvalidasi format email dan password minimal enam karakter;
-> tidak ada autentikasi ke server.
+Gunakan tombol **Daftar** untuk membuat akun email/password baru, atau tombol
+**Masuk dengan Google** untuk autentikasi Google pada perangkat Android.
 
 ## Command Run
 
@@ -98,9 +118,10 @@ dart run flutter_native_splash:create
 ## Dummy Data
 
 Data demo awal didefinisikan di `lib/data/models.dart`. Setelah aplikasi
-dijalankan pertama kali, perubahan tugas, transaksi, profil, pengaturan, tema,
-dan status login disimpan secara lokal melalui `SharedPreferences` dan tetap
-ada setelah restart.
+dijalankan pertama kali, perubahan tugas, transaksi, profil, pengaturan, dan
+tema disimpan secara lokal melalui `SharedPreferences` dan tetap ada setelah
+restart. Status login tidak lagi disimpan sebagai flag lokal; sesi dikelola
+oleh Firebase Authentication.
 
 ### Data keuangan
 
@@ -188,8 +209,10 @@ Dari tab **Profil**, skenario yang tersedia adalah:
 - Mengubah limit anggaran.
 - Mengaktifkan/nonaktifkan kunci biometrik.
 - Membuka simulasi NLP.
-- Menguji alur logout dan login demo.
+- Menguji alur logout Firebase dan masuk kembali dengan email/password atau
+  Google Sign-In.
 - Mengubah tema Dark/Light melalui toggle tema.
 
-Login hanya melakukan validasi format email dan password minimal enam karakter;
-tidak ada autentikasi server.
+Autentikasi email/password dan Google Sign-In dijalankan melalui Firebase.
+Pesan kesalahan umum seperti email belum terdaftar, kata sandi salah, atau
+masalah koneksi ditampilkan dalam bahasa Indonesia.

@@ -9,6 +9,7 @@ import '../theme/app_spacing.dart';
 import '../theme/app_typography.dart';
 import '../theme/theme_scope.dart';
 import '../utils/format.dart';
+import '../utils/snackbar_helper.dart';
 import '../widgets/common.dart';
 
 enum _SettingsDestination { notifications, cloud, budget, nlp, privacy }
@@ -67,7 +68,7 @@ class ProfileScreen extends StatefulWidget {
   final SettingsController settings;
   final ProfileData? initialProfile;
   final ValueChanged<ProfileData>? onProfileChanged;
-  final VoidCallback onLogout;
+  final Future<void> Function() onLogout;
   final int completedTaskCount;
   final int totalSavings;
   final int streakDays;
@@ -252,7 +253,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
       context: context,
       builder: (BuildContext dialogContext) => AlertDialog(
         title: const Text('Keluar dari AturAja?'),
-        content: const Text('Yakin ingin keluar? Sesi lokal akan diakhiri.'),
+        content: const Text(
+          'Yakin ingin keluar? Sesi Firebase akan diakhiri dan kamu perlu masuk kembali.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(false),
@@ -270,7 +273,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (!mounted || shouldLogout != true) {
       return;
     }
-    widget.onLogout();
+    try {
+      await widget.onLogout();
+    } catch (_) {
+      if (mounted) {
+        showErrorSnackBar(context, 'Gagal keluar. Silakan coba lagi.');
+      }
+    }
   }
 
   @override
