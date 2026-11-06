@@ -254,7 +254,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       builder: (BuildContext dialogContext) => AlertDialog(
         title: const Text('Keluar dari AturAja?'),
         content: const Text(
-          'Yakin ingin keluar? Sesi Firebase akan diakhiri dan kamu perlu masuk kembali.',
+          'Yakin ingin keluar? Sesi akan diakhiri dan kamu perlu masuk kembali.',
         ),
         actions: [
           TextButton(

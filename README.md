@@ -28,27 +28,50 @@ Clone atau buka folder project, kemudian jalankan:
 flutter pub get
 ```
 
-Project membutuhkan project Firebase untuk autentikasi. File konfigurasi
-`android/app/google-services.json` tidak di-commit karena bersifat
-environment-specific; minta file tersebut dari pemilik project atau buat
-project Firebase sendiri sesuai langkah di bawah.
+Project menggunakan Firebase untuk Gemini AI Logic. Konfigurasi aplikasi
+Firebase dibuat oleh FlutterFire CLI; tidak ada Gemini secret key atau file
+`.env` yang perlu ditambahkan ke source code.
+
+### Setup Firebase AI Logic
+
+Setelah project Firebase dibuat dan dihubungkan:
+
+```bash
+firebase login
+dart pub global activate flutterfire_cli
+flutterfire configure
+flutter pub get
+```
+
+Pilih project Firebase `aturaja-ai` dan platform Android/iOS. Pastikan
+`com.aturaja.app` dipilih sebagai Android application ID.
+
+Di Firebase Console, aktifkan **AI Logic > Gemini Developer API**. Daftarkan
+aplikasi Android dan iOS pada **App Check**. Saat menjalankan build debug,
+Firebase App Check memakai debug provider; token debug yang muncul di log
+aplikasi harus didaftarkan pada Firebase Console sebelum request Gemini diuji.
+Build release memakai Play Integrity untuk Android dan App Attest untuk iOS.
 
 ### Konfigurasi Firebase
 
-1. Buat project Firebase dan daftarkan aplikasi Android dengan package name
-   `com.aturaja.app`.
+1. Pastikan project Firebase `aturaja-ai` digunakan dan aplikasi Android
+   didaftarkan dengan package name `com.aturaja.app`.
 2. Aktifkan provider **Email/Password** dan **Google** di Firebase Authentication.
 3. Tambahkan SHA-1 debug ke project Firebase. Untuk mendapatkan SHA-1:
    `cd android && ./gradlew signingReport` (Windows: `gradlew.bat signingReport`).
-4. Unduh `google-services.json` dan letakkan di `android/app/google-services.json`.
+4. Pastikan `google-services.json` tersedia di
+   `android/app/google-services.json`.
    File ini harus memuat `oauth_client` bertipe web (`client_type: 3`) agar
    Google Sign-In Android dapat meminta ID token. Jika belum ada, tambahkan
    aplikasi web pada project Firebase lalu unduh ulang file konfigurasi.
-5. Pastikan file tersebut tidak ikut ter-commit (sudah masuk `.gitignore`).
+5. Jalankan `flutter pub get` setelah mengambil perubahan dependency.
 
 Tanpa langkah tersebut, build Android akan gagal pada plugin Google Services dan
 aplikasi tidak dapat melakukan autentikasi. File `env.json` tidak digunakan pada
-modul autentikasi ini.
+modul autentikasi ini. File hasil generate seperti
+`android/app/google-services.json` dan `lib/firebase_options.dart` bersifat
+environment-specific dan tidak di-commit; masing-masing developer perlu
+menyiapkannya secara lokal.
 
 ## Cara Menjalankan
 
