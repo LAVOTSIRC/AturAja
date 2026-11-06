@@ -10,9 +10,13 @@ import 'settings_provider.dart';
 import 'theme_provider.dart';
 
 class AppProvider extends ChangeNotifier {
-  final AppStorage storage;
+  AppStorage storage;
   final SettingsController settings;
   final ThemeController theme;
+
+  final SharedPreferences? preferences;
+  String? activeUserId;
+  Future<void> _switchChain = Future<void>.value();
 
   List<TaskItem> tasks;
   List<TransactionItem> _transactions;
@@ -28,6 +32,8 @@ class AppProvider extends ChangeNotifier {
     required List<TaskItem> tasks,
     List<TransactionItem>? transactions,
     required this.profile,
+    this.preferences,
+    this.activeUserId,
   }) : tasks = List<TaskItem>.of(tasks),
        _transactions = List<TransactionItem>.of(
          transactions ?? sampleTransactions,
@@ -51,17 +57,85 @@ class AppProvider extends ChangeNotifier {
     );
   }
 
-  static Future<AppProvider> loadPersistent() async {
+  /// Memuat data milik akun Firebase aktif.
+  ///
+  /// Akun yang belum punya data akan dimulai dari state kosong. Data lama dari
+  /// versi sebelum pemisahan akun dimigrasikan ke akun pertama yang masuk.
+  static Future<AppProvider> loadPersistent({String? userId}) async {
     final SharedPreferences preferences = await SharedPreferences.getInstance();
+    if (userId != null) {
+      await _migrateLegacyData(preferences, userId);
+    }
+    final bool isGuest = userId == null || userId.trim().isEmpty;
     final AppProvider provider = AppProvider(
-      storage: SharedPreferencesAppStorage(preferences),
+      storage: SharedPreferencesAppStorage(preferences, userId: userId),
       settings: SettingsController(),
       theme: ThemeController(),
-      tasks: sampleTasks,
-      profile: ProfileData.initial,
+      tasks: isGuest ? sampleTasks : const <TaskItem>[],
+      transactions: isGuest ? sampleTransactions : const <TransactionItem>[],
+      profile: isGuest ? ProfileData.initial : ProfileData.empty,
+      preferences: preferences,
+      activeUserId: userId,
     );
     await provider.load();
     return provider;
+  }
+
+  /// Berganti penyimpanan saat akun Firebase berubah.
+  Future<void> switchUser(String? userId) {
+    _switchChain = _switchChain.then((_) => _switchUser(userId));
+    return _switchChain;
+  }
+
+  Future<void> _switchUser(String? userId) async {
+    if (activeUserId == userId) {
+      return;
+    }
+    final SharedPreferences? prefs = preferences;
+    if (prefs == null) {
+      return;
+    }
+
+    // Simpan dulu data akun sebelumnya sebelum mengganti key penyimpanan.
+    await save();
+    if (userId != null) {
+      await _migrateLegacyData(prefs, userId);
+    }
+
+    activeUserId = userId;
+    storage = SharedPreferencesAppStorage(prefs, userId: userId);
+    _isLoading = true;
+    _resetState(seedSampleData: userId == null || userId.trim().isEmpty);
+    notifyListeners();
+    await load();
+  }
+
+  static Future<void> _migrateLegacyData(
+    SharedPreferences prefs,
+    String userId,
+  ) async {
+    final String userKey = SharedPreferencesAppStorage.storageKeyFor(userId);
+    if (prefs.containsKey(userKey)) {
+      return;
+    }
+    final String? legacy = prefs.getString(
+      SharedPreferencesAppStorage.legacyStorageKey,
+    );
+    if (legacy == null || legacy.trim().isEmpty) {
+      return;
+    }
+    await prefs.setString(userKey, legacy);
+    await prefs.remove(SharedPreferencesAppStorage.legacyStorageKey);
+  }
+
+  void _resetState({required bool seedSampleData}) {
+    tasks = seedSampleData ? List<TaskItem>.of(sampleTasks) : <TaskItem>[];
+    _transactions = seedSampleData
+        ? List<TransactionItem>.of(sampleTransactions)
+        : <TransactionItem>[];
+    profile = seedSampleData ? ProfileData.initial : ProfileData.empty;
+    settings.resetToDefaults();
+    theme.resetToDefaults();
   }
 
   List<TransactionItem> get transactions =>

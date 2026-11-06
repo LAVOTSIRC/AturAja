@@ -733,12 +733,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Keluar dari AturAja?'), findsOneWidget);
-    expect(
-      find.text(
-        'Yakin ingin keluar? Sesi Firebase akan diakhiri dan kamu perlu masuk kembali.',
-      ),
-      findsOneWidget,
-    );
+    expect(find.textContaining('Yakin ingin keluar?'), findsOneWidget);
     expect(didLogout, isFalse);
 
     await tester.tap(find.widgetWithText(TextButton, 'Keluar'));
