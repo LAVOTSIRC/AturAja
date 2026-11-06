@@ -6,11 +6,23 @@ abstract class AppStorage {
 }
 
 class SharedPreferencesAppStorage implements AppStorage {
-  static const String storageKey = 'aturaja_state_v1';
+  /// Key lama yang dipakai sebelum data dipisahkan per akun.
+  static const String legacyStorageKey = 'aturaja_state_v1';
+  static const String guestStorageKey = 'aturaja_state_v1_guest';
+
+  static String storageKeyFor(String? userId) {
+    final String? normalized = userId?.trim();
+    if (normalized == null || normalized.isEmpty) {
+      return guestStorageKey;
+    }
+    return '${legacyStorageKey}_$normalized';
+  }
 
   final SharedPreferences preferences;
+  final String storageKey;
 
-  const SharedPreferencesAppStorage(this.preferences);
+  SharedPreferencesAppStorage(this.preferences, {String? userId})
+    : storageKey = storageKeyFor(userId);
 
   @override
   Future<String?> read() async => preferences.getString(storageKey);

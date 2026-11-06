@@ -100,8 +100,13 @@ dart run flutter_native_splash:create
 Data demo awal didefinisikan di `lib/data/models.dart`. Setelah aplikasi
 dijalankan pertama kali, perubahan tugas, transaksi, profil, pengaturan, dan
 tema disimpan secara lokal melalui `SharedPreferences` dan tetap ada setelah
-restart. Status login tidak lagi disimpan sebagai flag lokal; sesi dikelola
-oleh Firebase Authentication.
+restart. Data lokal dipisahkan berdasarkan UID Firebase, jadi akun yang berbeda
+tidak saling melihat tugas atau transaksi. Akun baru dimulai dari data kosong,
+sedangkan data lama dari versi sebelumnya dimigrasikan ke akun pertama yang
+masuk. Data ini belum disinkronkan antar perangkat; sinkronisasi cloud
+memerlukan Firestore dan belum termasuk dalam modul autentikasi ini. Status
+login tidak lagi disimpan sebagai flag lokal; sesi dikelola oleh Firebase
+Authentication.
 
 ### Data keuangan
 
