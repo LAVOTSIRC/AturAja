@@ -9,6 +9,7 @@ import 'package:aturaja/data/models.dart';
 import 'package:aturaja/data/settings_controller.dart';
 import 'package:aturaja/main.dart';
 import 'package:aturaja/providers/app_provider.dart';
+import 'package:aturaja/providers/auth_provider.dart';
 import 'package:aturaja/theme/app_colors.dart';
 import 'package:aturaja/screens/brain_dump_finance_screen.dart';
 import 'package:aturaja/screens/finance_screen.dart';
@@ -21,6 +22,8 @@ import 'package:aturaja/services/receipt_camera.dart';
 import 'package:aturaja/theme/theme_scope.dart';
 import 'package:aturaja/widgets/quick_add_modal.dart';
 
+import 'helpers/fake_auth_service.dart';
+
 Future<AppProvider> pumpApp(
   WidgetTester tester, {
   String initialLocation = '/home',
@@ -28,15 +31,22 @@ Future<AppProvider> pumpApp(
   bool settle = true,
   List<TransactionItem>? transactions,
 }) async {
-  final AppProvider app = AppProvider.inMemory(
-    isLoggedIn: isLoggedIn,
-    transactions: transactions,
+  final AppProvider app = AppProvider.inMemory(transactions: transactions);
+  final FakeAuthService authService = FakeAuthService(
+    initialUser: isLoggedIn ? testAuthUser : null,
   );
-  addTearDown(app.dispose);
+  final AuthProvider auth = AuthProvider(service: authService);
+  await auth.initialize();
+  addTearDown(() {
+    auth.dispose();
+    authService.dispose();
+    app.dispose();
+  });
   await tester.pumpWidget(
     MultiProvider(
       providers: [
         ChangeNotifierProvider<AppProvider>.value(value: app),
+        ChangeNotifierProvider<AuthProvider>.value(value: auth),
         ChangeNotifierProvider<ThemeController>.value(value: app.theme),
         ChangeNotifierProvider<SettingsController>.value(value: app.settings),
       ],
@@ -52,14 +62,17 @@ Future<AppProvider> pumpApp(
 Future<void> pumpProfile(
   WidgetTester tester,
   SettingsController settings, {
-  VoidCallback? onLogout,
+  Future<void> Function()? onLogout,
 }) async {
   await tester.pumpWidget(
     ThemeScope(
       controller: ThemeController(),
       child: MaterialApp(
         home: Scaffold(
-          body: ProfileScreen(settings: settings, onLogout: onLogout ?? () {}),
+          body: ProfileScreen(
+            settings: settings,
+            onLogout: onLogout ?? () async {},
+          ),
         ),
       ),
     ),
@@ -706,7 +719,13 @@ void main() {
     final SettingsController settings = SettingsController();
     addTearDown(settings.dispose);
     bool didLogout = false;
-    await pumpProfile(tester, settings, onLogout: () => didLogout = true);
+    await pumpProfile(
+      tester,
+      settings,
+      onLogout: () async {
+        didLogout = true;
+      },
+    );
 
     await tester.ensureVisible(find.text('Keluar'));
     await tester.pumpAndSettle();
@@ -715,7 +734,9 @@ void main() {
 
     expect(find.text('Keluar dari AturAja?'), findsOneWidget);
     expect(
-      find.text('Yakin ingin keluar? Sesi lokal akan diakhiri.'),
+      find.text(
+        'Yakin ingin keluar? Sesi Firebase akan diakhiri dan kamu perlu masuk kembali.',
+      ),
       findsOneWidget,
     );
     expect(didLogout, isFalse);
@@ -752,7 +773,15 @@ void main() {
     await tester.pumpWidget(
       ThemeScope(
         controller: ThemeController(),
-        child: MaterialApp(home: LoginScreen(onLogin: () => didLogin = true)),
+        child: MaterialApp(
+          home: LoginScreen(
+            onLogin: ({required String email, required String password}) async {
+              didLogin = true;
+            },
+            onGoogleSignIn: () async {},
+            onRegister: () {},
+          ),
+        ),
       ),
     );
 
@@ -780,11 +809,7 @@ void main() {
     tester.testTextInput.hide();
     await tester.ensureVisible(find.byTooltip('Masuk'));
     await tester.tap(find.byTooltip('Masuk'));
-    await tester.pump();
-    expect(find.byType(CircularProgressIndicator), findsWidgets);
-    expect(didLogin, isFalse);
-
-    await tester.pump(const Duration(milliseconds: 800));
+    await tester.pumpAndSettle();
     expect(didLogin, isTrue);
   });
 
@@ -816,10 +841,6 @@ void main() {
     tester.testTextInput.hide();
     await tester.ensureVisible(find.byTooltip('Masuk'));
     await tester.tap(find.byTooltip('Masuk'));
-    await tester.pump();
-    expect(find.byType(CircularProgressIndicator), findsWidgets);
-
-    await tester.pump(const Duration(milliseconds: 800));
     await tester.pumpAndSettle();
 
     expect(find.byType(MainShell), findsOneWidget);

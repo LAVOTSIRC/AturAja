@@ -7,7 +7,9 @@ import 'package:provider/provider.dart';
 
 import 'config/routes.dart';
 import 'providers/app_provider.dart';
+import 'providers/auth_provider.dart';
 import 'providers/settings_provider.dart';
+import 'services/auth_service.dart';
 import 'theme/app_colors.dart';
 import 'theme/app_spacing.dart';
 import 'theme/app_typography.dart';
@@ -26,10 +28,13 @@ Future<void> main() async {
         : const AppleAppAttestProvider(),
   );
   final AppProvider app = await AppProvider.loadPersistent();
+  final AuthProvider auth = AuthProvider(service: FirebaseAuthService());
+  await auth.initialize();
   runApp(
     MultiProvider(
       providers: [
         ChangeNotifierProvider<AppProvider>.value(value: app),
+        ChangeNotifierProvider<AuthProvider>.value(value: auth),
         ChangeNotifierProvider<ThemeController>.value(value: app.theme),
         ChangeNotifierProvider<SettingsController>.value(value: app.settings),
       ],
@@ -48,9 +53,18 @@ class MyApp extends StatefulWidget {
 }
 
 class _MyAppState extends State<MyApp> {
-  late final GoRouter _router = createAppRouter(
-    initialLocation: widget.initialLocation,
-  );
+  late final AuthProvider _auth;
+  late final GoRouter _router;
+
+  @override
+  void initState() {
+    super.initState();
+    _auth = context.read<AuthProvider>();
+    _router = createAppRouter(
+      initialLocation: widget.initialLocation,
+      auth: _auth,
+    );
+  }
 
   @override
   void dispose() {
