@@ -272,19 +272,15 @@ GoRouter createAppRouter({String initialLocation = AppRoutes.splash}) {
 }
 
 Future<void> _openBrainDump(BuildContext context) async {
-  final TransactionItem? note = await context.push<TransactionItem>(
+  final List<TransactionItem>? notes = await context.push<List<TransactionItem>>(
     AppRoutes.brainDump,
   );
-  if (note == null || !context.mounted) {
+  if (notes == null || notes.isEmpty || !context.mounted) {
     return;
   }
   ScaffoldMessenger.maybeOf(context)?.showSnackBar(
     SnackBar(
-      content: Text(
-        note.amount >= 0
-            ? 'Catatan keuangan "${note.label}" dicatat.'
-            : 'Catatan pengeluaran "${note.label}" dicatat.',
-      ),
+      content: Text('${notes.length} catatan keuangan berhasil dicatat.'),
     ),
   );
 }
