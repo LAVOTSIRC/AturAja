@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../data/models.dart';
+import '../services/brain_dump_ai_service.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_typography.dart';
@@ -1326,6 +1327,50 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
     'Minggu depan',
   ];
 
+  DateTime? _parseBrainDumpDateTime(String text) {
+    final String lower = text.toLowerCase();
+    final DateTime now = DateTime.now();
+    final Match? dateMatch = RegExp(
+      r'\btanggal\s+(\d{1,2})\s+bulan\s+ini\b',
+    ).firstMatch(lower);
+    final Match? timeMatch = RegExp(
+      r'\bjam\s+(\d{1,2})(?::(\d{2}))?\s*(pagi|siang|sore|malam)?\b',
+    ).firstMatch(lower);
+
+    DateTime date = now;
+    if (dateMatch != null) {
+      final int day = int.parse(dateMatch.group(1)!);
+      if (day >= 1 && day <= DateTime(now.year, now.month + 1, 0).day) {
+        date = DateTime(now.year, now.month, day);
+      }
+    } else if (lower.contains('besok')) {
+      date = DateTime(now.year, now.month, now.day + 1);
+    } else if (lower.contains('lusa')) {
+      date = DateTime(now.year, now.month, now.day + 2);
+    } else if (!lower.contains('hari ini')) {
+      return null;
+    }
+
+    int hour = 23;
+    int minute = 59;
+    if (timeMatch != null) {
+      hour = int.parse(timeMatch.group(1)!);
+      minute = int.tryParse(timeMatch.group(2) ?? '0') ?? 0;
+      final String period = timeMatch.group(3) ?? '';
+      if (period == 'pagi' && hour == 12) {
+        hour = 0;
+      } else if (period == 'siang' && hour < 12) {
+        hour += 12;
+      } else if ((period == 'sore' || period == 'malam') && hour < 12) {
+        hour += 12;
+      }
+    }
+    if (hour > 23 || minute > 59) {
+      return null;
+    }
+    return DateTime(date.year, date.month, date.day, hour, minute);
+  }
+
   @override
   void initState() {
     super.initState();
@@ -1386,6 +1431,73 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
       isProcessingBrainDump = true;
       errorMessage = null;
     });
+
+    BrainDumpItem? aiItem;
+    String? aiFailure;
+    try {
+      final List<BrainDumpItem> items = await BrainDumpAiService().parse(text);
+      aiItem = items.firstWhere(
+        (BrainDumpItem item) =>
+            item.type == BrainDumpItemType.task ||
+            item.type == BrainDumpItemType.schedule,
+        orElse: () => items.first,
+      );
+    } on BrainDumpAiException catch (error, stackTrace) {
+      aiFailure = error.message;
+      debugPrint('Brain Dump Gemini gagal: $error');
+      debugPrintStack(stackTrace: stackTrace);
+    } catch (error, stackTrace) {
+      aiFailure = 'Kesalahan tidak terduga: $error';
+      debugPrint('Brain Dump Gemini gagal: $error');
+      debugPrintStack(stackTrace: stackTrace);
+    }
+
+    if (aiItem != null && mounted) {
+      final BrainDumpItem item = aiItem;
+      final List<String> aiCategories = item.category == null
+          ? const <String>['Pribadi']
+          : item.category!
+                .split(',')
+                .map((String value) => value.trim())
+                .where(availableCategories.contains)
+                .toList();
+      final List<String> categories = aiCategories.isEmpty
+          ? const <String>['Pribadi']
+          : aiCategories;
+      final DateTime? aiDueDate = item.dueDate == null
+          ? _parseBrainDumpDateTime(text)
+          : DateTime.tryParse('${item.dueDate!}T${item.dueTime ?? '23:59'}');
+      final String deadline = switch ((item.dueDate, item.dueTime)) {
+        (final String date, final String time) => '$date, $time',
+        (final String date, null) => date,
+        _ when aiDueDate != null =>
+          '${aiDueDate.year.toString().padLeft(4, '0')}-'
+          '${aiDueDate.month.toString().padLeft(2, '0')}-'
+          '${aiDueDate.day.toString().padLeft(2, '0')}, '
+          '${aiDueDate.hour.toString().padLeft(2, '0')}:'
+          '${aiDueDate.minute.toString().padLeft(2, '0')}',
+        _ => 'Hari ini, 23:59',
+      };
+      final String normalizedTitle = item.title.trim().toLowerCase();
+      final String title =
+          (normalizedTitle == 'jogging' || normalizedTitle == 'joging') &&
+              aiDueDate != null &&
+              aiDueDate.hour < 12
+          ? 'Jogging pagi'
+          : item.title;
+
+      setState(() {
+        isProcessingBrainDump = false;
+        titleController.text = title;
+        selectedCategories = categories;
+        deadlineController.text = deadline;
+        selectedDueDate = aiDueDate;
+        descriptionController.text = item.description ??
+            'Pada ${deadline.toLowerCase()}, ${title.toLowerCase()}.';
+        inputMode = TaskInputMode.manual;
+      });
+      return;
+    }
 
     await Future<void>.delayed(const Duration(milliseconds: 600));
 
@@ -1481,7 +1593,9 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
               const SizedBox(width: AppSpacing.xs),
               Expanded(
                 child: Text(
-                  'Brain dump berhasil diproses! Periksa detail tugas di bawah.',
+                  aiFailure == null
+                      ? 'Brain dump berhasil diproses oleh Gemini.'
+                      : 'Gemini gagal, memakai mode offline: $aiFailure',
                   style: AppTypography.label(c.text),
                 ),
               ),
