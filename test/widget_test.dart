@@ -433,11 +433,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Brain Dump Keuangan'), findsOneWidget);
-    expect(find.text('AI Brain Dump Catatan Keuangan'), findsOneWidget);
-
-    await tester.tap(find.text('Catatan Pengeluaran'));
-    await tester.pumpAndSettle();
-    expect(find.text('AI Brain Dump Catatan Pengeluaran'), findsOneWidget);
+    expect(find.text('AI Brain Dump Keuangan'), findsOneWidget);
 
     await tester.tap(find.text('Belanja sayur 120rb'));
     await tester.pumpAndSettle();
@@ -447,11 +443,11 @@ void main() {
 
     expect(find.text('Periksa hasil AI sebelum disimpan'), findsOneWidget);
     expect(find.text('120000'), findsOneWidget);
-    expect(find.text('Simpan Catatan Pengeluaran'), findsOneWidget);
+    expect(find.text('Simpan Semua Catatan'), findsOneWidget);
 
-    await tester.ensureVisible(find.text('Simpan Catatan Pengeluaran'));
+    await tester.ensureVisible(find.text('Simpan Semua Catatan'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Simpan Catatan Pengeluaran'));
+    await tester.tap(find.text('Simpan Semua Catatan'));
     await tester.pumpAndSettle();
 
     expect(app.transactions.length, before + 1);

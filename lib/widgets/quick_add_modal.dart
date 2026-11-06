@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../services/brain_dump_ai_service.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_typography.dart';
@@ -23,6 +24,7 @@ class _QuickAddModalState extends State<QuickAddModal> {
   final TextEditingController brainController = TextEditingController();
   bool isProcessing = false;
   String? errorMessage;
+  List<BrainDumpItem>? parsedItems;
 
   static const suggestions = ['15k batagor', '29k kopi', '54990 spotify'];
 
@@ -72,24 +74,33 @@ class _QuickAddModalState extends State<QuickAddModal> {
     setState(() {
       isProcessing = true;
       errorMessage = null;
+      parsedItems = null;
     });
 
     try {
-      await Future<void>.delayed(const Duration(milliseconds: 900));
-      if (value.length < 8) {
-        throw StateError('detail belum lengkap');
-      }
-      if (!mounted) {
-        return;
-      }
-      Navigator.of(context).pop();
-    } catch (_) {
+      final List<BrainDumpItem> items = await BrainDumpAiService().parse(value);
       if (!mounted) {
         return;
       }
       setState(() {
         isProcessing = false;
-        errorMessage = 'Brain dump belum bisa diproses. Tambahkan detail yang lebih lengkap.';
+        parsedItems = items;
+      });
+    } on BrainDumpAiException catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        isProcessing = false;
+        errorMessage = error.message;
+      });
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        isProcessing = false;
+        errorMessage = 'Brain dump gagal diproses: $error';
       });
     }
   }
@@ -397,14 +408,37 @@ class _QuickAddModalState extends State<QuickAddModal> {
             const SizedBox(width: AppSpacing.xs),
             Expanded(
               child: Text(
-                'Simulasi lokal mendeteksi jadwal, tugas & pengeluaran',
+                'AI mendeteksi jadwal, tugas & pengeluaran',
                 style: AppTypography.meta(c.ai),
               ),
             ),
           ],
         ),
         const SizedBox(height: AppSpacing.sm),
-        if (isProcessing) ...[
+        if (parsedItems != null) ...[
+          _brainDumpPreview(c, parsedItems!),
+          const SizedBox(height: AppSpacing.sm),
+          SizedBox(
+            width: double.infinity,
+            child: PressableScale(
+              onTap: () => Navigator.of(context).pop(parsedItems),
+              semanticLabel: 'Selesai melihat hasil brain dump',
+              tooltip: 'Selesai',
+              child: Container(
+                constraints: const BoxConstraints(minHeight: AppSpacing.target),
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: c.blue,
+                  borderRadius: BorderRadius.circular(AppSpacing.sm),
+                ),
+                child: Text(
+                  'Selesai',
+                  style: AppTypography.button(c.onAccent),
+                ),
+              ),
+            ),
+          ),
+        ] else if (isProcessing) ...[
           AppProcessingState(message: 'Memproses brain dump...', color: c.ai),
         ] else
           SizedBox(
@@ -428,6 +462,35 @@ class _QuickAddModalState extends State<QuickAddModal> {
             ),
           ),
       ],
+    );
+  }
+
+  Widget _brainDumpPreview(AppColors c, List<BrainDumpItem> items) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(AppSpacing.sm),
+      decoration: BoxDecoration(
+        color: c.surfaceHigh,
+        borderRadius: BorderRadius.circular(AppSpacing.sm),
+        border: Border.all(color: c.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Hasil AI', style: AppTypography.label(c.text)),
+          const SizedBox(height: AppSpacing.xs),
+          ...items.map(
+            (BrainDumpItem item) => Padding(
+              padding: const EdgeInsets.only(top: AppSpacing.xs),
+              child: Text(
+                '${item.title} (${item.type.name})'
+                '${item.description == null ? '' : '\n${item.description}'}',
+                style: AppTypography.caption(c.textSub),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
