@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../data/models.dart';
 import '../providers/app_provider.dart';
+import '../services/brain_dump_ai_service.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_typography.dart';
@@ -168,44 +169,17 @@ class _BrainDumpFinanceScreenState extends State<BrainDumpFinanceScreen> {
     'Belanja sayur 120rb',
   ];
 
-  FinanceNoteKind kind = FinanceNoteKind.income;
-
   final TextEditingController dumpController = TextEditingController();
-  final TextEditingController amountController = TextEditingController();
-  final TextEditingController labelController = TextEditingController();
 
   bool isProcessing = false;
   bool hasPreview = false;
-  String selectedCategory = 'Gaji';
+  List<BrainDumpItem> parsedItems = const <BrainDumpItem>[];
   String? errorMessage;
-
-  bool get isIncome => kind == FinanceNoteKind.income;
-
-  List<String> get categories =>
-      isIncome ? incomeCategoryLabels : expenseCategoryKeys.keys.toList();
-
-  List<String> get suggestions =>
-      isIncome ? incomeSuggestions : expenseSuggestions;
 
   @override
   void dispose() {
     dumpController.dispose();
-    amountController.dispose();
-    labelController.dispose();
     super.dispose();
-  }
-
-  void _selectKind(FinanceNoteKind next) {
-    if (next == kind) {
-      return;
-    }
-    setState(() {
-      kind = next;
-      hasPreview = false;
-      errorMessage = null;
-      amountController.clear();
-      labelController.clear();
-    });
   }
 
   Future<void> _processBrainDump() async {
@@ -221,93 +195,185 @@ class _BrainDumpFinanceScreenState extends State<BrainDumpFinanceScreen> {
       );
       return;
     }
-
-    final int? amount = parseBrainDumpAmount(text);
-    if (amount == null || amount <= 0) {
-      setState(
-        () => errorMessage = 'Nominal belum terdeteksi. Contoh: "650rb", "15k", atau "1.200.000".',
-      );
-      return;
-    }
-    if (amount > kMaxTransactionAmount) {
+    final int? localAmount = parseBrainDumpAmount(text);
+    if (localAmount == null || localAmount <= 0) {
       setState(
         () => errorMessage =
-            'Nominal maksimal ${formatRupiah(kMaxTransactionAmount)}.',
+            'Nominal belum terdeteksi. Contoh: "650rb", "15k", atau "1.200.000".',
       );
       return;
     }
-
     setState(() {
       isProcessing = true;
       errorMessage = null;
+      hasPreview = false;
     });
 
-    await Future<void>.delayed(const Duration(milliseconds: 600));
-    if (!mounted) {
-      return;
+    try {
+      final List<BrainDumpItem> items = await BrainDumpAiService().parse(text);
+      final List<BrainDumpItem> validItems = items
+          .where(
+            (BrainDumpItem item) =>
+                (item.type == BrainDumpItemType.income ||
+                    item.type == BrainDumpItemType.expense) &&
+                item.amount != null &&
+                item.amount! > 0,
+          )
+          .toList();
+      final List<int> localAmounts = _localAmounts(text);
+      if (validItems.length == localAmounts.length) {
+        for (int index = 0; index < validItems.length; index++) {
+          final BrainDumpItem item = validItems[index];
+          validItems[index] = BrainDumpItem(
+            type: item.type,
+            title: item.title,
+            description: item.description,
+            amount: localAmounts[index],
+            category: item.category,
+            dueDate: item.dueDate,
+            dueTime: item.dueTime,
+          );
+        }
+      }
+      if (validItems.isEmpty) {
+        throw const BrainDumpAiException(
+          'Nominal belum terdeteksi. Contoh: "650rb", "15k", atau "1.200.000".',
+        );
+      }
+      if (validItems.any(
+        (BrainDumpItem item) => item.amount! > kMaxTransactionAmount,
+      )) {
+        throw BrainDumpAiException(
+          'Salah satu nominal melebihi maksimal '
+          '${formatRupiah(kMaxTransactionAmount)}.',
+        );
+      }
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        isProcessing = false;
+        parsedItems = validItems;
+        hasPreview = true;
+      });
+    } on BrainDumpAiException catch (error) {
+      if (!mounted) {
+        return;
+      }
+      final List<BrainDumpItem> fallbackItems = _localItems(text);
+      setState(() {
+        isProcessing = false;
+        parsedItems = fallbackItems;
+        hasPreview = fallbackItems.isNotEmpty;
+        errorMessage = fallbackItems.isEmpty
+            ? error.message
+            : 'Gemini gagal, memakai hasil lokal: ${error.message}';
+      });
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      final List<BrainDumpItem> fallbackItems = _localItems(text);
+      setState(() {
+        isProcessing = false;
+        parsedItems = fallbackItems;
+        hasPreview = fallbackItems.isNotEmpty;
+        errorMessage = fallbackItems.isEmpty
+            ? 'Brain dump gagal diproses: $error'
+            : 'Gemini gagal, memakai hasil lokal: $error';
+      });
     }
+  }
 
-    final String detectedCategory = isIncome
-        ? detectIncomeCategory(text)
-        : detectExpenseCategory(text);
-
-    String label = text
-        .replaceFirst(RegExp(r'\b(rp|idr)\b', caseSensitive: false), '')
-        .replaceAll(
-          RegExp(
-            r'\d+(?:[.,\s]\d+)*\s*(ribu|rb|juta|jt|k)?',
-            caseSensitive: false,
-          ),
-          '',
-        )
-        .replaceAll(RegExp(r'\s{2,}'), ' ')
-        .replaceAll(RegExp(r'^[\s,.:;-]+'), '')
-        .trim();
-    if (label.isEmpty) {
-      label = detectedCategory;
+  List<BrainDumpItem> _localItems(String text) {
+    final List<BrainDumpItem> items = <BrainDumpItem>[];
+    final RegExp amountPattern = RegExp(
+      r'(\d+(?:[.,]\d+)*)\s*(ribu|rb|juta|jt|k)?',
+      caseSensitive: false,
+    );
+    for (final RegExpMatch match in amountPattern.allMatches(text)) {
+      final int? amount = parseBrainDumpAmount(match.group(0)!);
+      if (amount == null || amount <= 0 || amount > kMaxTransactionAmount) {
+        continue;
+      }
+      final String before = text.substring(0, match.start);
+      final String segment = before.split(RegExp(r'\b(dan|terus|lalu)\b')).last
+          .trim();
+      final String lower = segment.toLowerCase();
+      final bool income = lower.contains('dapat') ||
+          lower.contains('transfer') ||
+          lower.contains('kirim') ||
+          lower.contains('bayar utang') ||
+          lower.contains('dibayar');
+      final String title = segment.isEmpty
+          ? (income ? 'Pemasukan' : 'Pengeluaran')
+          : segment;
+      items.add(
+        BrainDumpItem(
+          type: income ? BrainDumpItemType.income : BrainDumpItemType.expense,
+          title: title,
+          amount: amount,
+          category: income
+              ? detectIncomeCategory(segment)
+              : detectExpenseCategory(segment),
+        ),
+      );
     }
+    return items;
+  }
 
-    setState(() {
-      isProcessing = false;
-      amountController.text = '$amount';
-      labelController.text = label;
-      selectedCategory = detectedCategory;
-      hasPreview = true;
-    });
+  List<int> _localAmounts(String text) {
+    return RegExp(
+      r'(\d+(?:[.,]\d+)*)\s*(ribu|rb|juta|jt|k)?',
+      caseSensitive: false,
+    )
+        .allMatches(text)
+        .map((RegExpMatch match) => parseBrainDumpAmount(match.group(0)!))
+        .whereType<int>()
+        .where((int amount) => amount > 0)
+        .toList();
+  }
+
+  String _categoryKey(BrainDumpItem item) {
+    if (item.type == BrainDumpItemType.income) {
+      return switch (item.category) {
+        'Gaji' || 'Kiriman' || 'Freelance' => item.category!.toLowerCase(),
+        _ => 'income',
+      };
+    }
+    return expenseCategoryKeys[item.category] ?? 'other';
   }
 
   void _save() {
-    final int? amount = int.tryParse(
-      amountController.text.replaceAll(RegExp('[^0-9]'), ''),
-    );
-    if (amount == null || amount <= 0) {
-      setState(() => errorMessage = 'Isi nominal dengan angka yang valid.');
+    if (parsedItems.isEmpty) {
+      setState(() => errorMessage = 'Belum ada hasil brain dump untuk disimpan.');
       return;
     }
-    if (amount > kMaxTransactionAmount) {
-      setState(
-        () => errorMessage =
-            'Nominal maksimal ${formatRupiah(kMaxTransactionAmount)}.',
+
+    final int timestamp = DateTime.now().millisecondsSinceEpoch;
+    final List<TransactionItem> notes = parsedItems.indexed.map((
+      (int, BrainDumpItem) entry,
+    ) {
+      final BrainDumpItem item = entry.$2;
+      return TransactionItem(
+        id: timestamp + entry.$1,
+        label: item.title,
+        amount: item.type == BrainDumpItemType.income
+            ? item.amount!
+            : -item.amount!,
+        cat: _categoryKey(item),
+        time: TimeOfDay.now().format(context),
+        date: 'Hari ini',
       );
-      return;
-    }
-
-    final String label = labelController.text.trim().isEmpty
-        ? selectedCategory
-        : labelController.text.trim();
-
-    final TransactionItem note = TransactionItem(
-      id: DateTime.now().millisecondsSinceEpoch,
-      label: label,
-      amount: isIncome ? amount : -amount,
-      cat: isIncome ? 'income' : expenseCategoryKeys[selectedCategory]!,
-      time: TimeOfDay.now().format(context),
-      date: 'Hari ini',
-    );
+    }).toList();
 
     HapticFeedback.lightImpact();
-    context.read<AppProvider>().addTransaction(note);
-    Navigator.of(context).pop(note);
+    final AppProvider app = context.read<AppProvider>();
+    for (final TransactionItem note in notes) {
+      app.addTransaction(note);
+    }
+    Navigator.of(context).pop(notes);
   }
 
   @override
@@ -333,29 +399,6 @@ class _BrainDumpFinanceScreenState extends State<BrainDumpFinanceScreen> {
       body: SafeArea(
         child: Column(
           children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(
-                AppSpacing.md,
-                AppSpacing.sm,
-                AppSpacing.md,
-                0,
-              ),
-              child: Container(
-                padding: const EdgeInsets.all(AppSpacing.xxs),
-                decoration: BoxDecoration(
-                  color: c.surfaceHigh,
-                  borderRadius: BorderRadius.circular(AppSpacing.md),
-                  border: Border.all(color: c.border),
-                ),
-                child: Row(
-                  children: [
-                    _kindTab(c, FinanceNoteKind.income),
-                    const SizedBox(width: AppSpacing.xxs),
-                    _kindTab(c, FinanceNoteKind.expense),
-                  ],
-                ),
-              ),
-            ),
             Expanded(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.all(AppSpacing.md),
@@ -377,58 +420,8 @@ class _BrainDumpFinanceScreenState extends State<BrainDumpFinanceScreen> {
     );
   }
 
-  Widget _kindTab(AppColors c, FinanceNoteKind value) {
-    final bool active = kind == value;
-    final Color accent = value == FinanceNoteKind.income
-        ? c.success
-        : c.expense;
-    return Expanded(
-      child: PressableScale(
-        onTap: () => _selectKind(value),
-        selected: active,
-        semanticLabel: 'Pilih mode ${value.label}',
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 150),
-          constraints: const BoxConstraints(minHeight: AppSpacing.target),
-          padding: const EdgeInsets.symmetric(
-            horizontal: AppSpacing.sm,
-            vertical: AppSpacing.xs,
-          ),
-          decoration: BoxDecoration(
-            color: active ? accent : c.transparent,
-            borderRadius: BorderRadius.circular(AppSpacing.sm),
-            border: Border.all(
-              color: active ? c.onAccent : c.transparent,
-              width: 1.5,
-            ),
-          ),
-          alignment: Alignment.center,
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                value.icon,
-                size: AppSpacing.iconSmall - 4,
-                color: active ? c.onAccent : c.textSub,
-              ),
-              const SizedBox(width: AppSpacing.xs),
-              Flexible(
-                child: Text(
-                  value.label,
-                  overflow: TextOverflow.ellipsis,
-                  style: AppTypography.caption(active ? c.onAccent : c.textSub)
-                      .copyWith(fontWeight: FontWeight.w600),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
   Widget _inputBody(AppColors c) {
-    final Color accent = isIncome ? c.success : c.expense;
+    const Color accent = Colors.deepPurple;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -457,14 +450,12 @@ class _BrainDumpFinanceScreenState extends State<BrainDumpFinanceScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'AI Brain Dump ${kind.label}',
+                          'AI Brain Dump Keuangan',
                           style: AppTypography.label(c.text)
                               .copyWith(fontWeight: FontWeight.w700),
                         ),
                         Text(
-                          isIncome
-                              ? 'Tuliskan pemasukan bebas — AI akan memilah Nominal, Sumber, dan Keterangan.'
-                              : 'Tuliskan pengeluaran bebas — AI akan memilah Nominal, Kategori, dan Keterangan.',
+                          'Tuliskan pemasukan dan pengeluaran sekaligus — AI akan memisahkan setiap transaksi.',
                           style: AppTypography.caption(c.textMuted),
                         ),
                       ],
@@ -486,9 +477,8 @@ class _BrainDumpFinanceScreenState extends State<BrainDumpFinanceScreen> {
                 },
                 decoration: _inputDecoration(
                   c,
-                  hintText: isIncome
-                      ? 'Contoh: Ibu kirim 500rb untuk uang kos bulan ini'
-                      : 'Contoh: Bayar kos 650rb sama makan batagor 15k',
+                  hintText:
+                      'Contoh: Ayah transfer 500rb lalu bayar parkir 2k',
                 ).copyWith(counterText: ''),
               ),
               const SizedBox(height: AppSpacing.sm),
@@ -500,7 +490,10 @@ class _BrainDumpFinanceScreenState extends State<BrainDumpFinanceScreen> {
               Wrap(
                 spacing: AppSpacing.xs,
                 runSpacing: AppSpacing.xs,
-                children: suggestions.map((String suggestion) {
+                children: <String>[
+                  ...incomeSuggestions,
+                  ...expenseSuggestions,
+                ].map((String suggestion) {
                   return PressableScale(
                     onTap: () => setState(() {
                       dumpController.text = suggestion;
@@ -584,7 +577,8 @@ class _BrainDumpFinanceScreenState extends State<BrainDumpFinanceScreen> {
             const SizedBox(width: AppSpacing.xs),
             Expanded(
               child: Text(
-                'Simulasi lokal. Hasilnya bisa kamu perbaiki sebelum disimpan.',
+                'Gemini akan memisahkan semua pemasukan dan pengeluaran. '
+                'Periksa hasilnya sebelum disimpan.',
                 style: AppTypography.meta(c.textMuted),
               ),
             ),
@@ -595,7 +589,6 @@ class _BrainDumpFinanceScreenState extends State<BrainDumpFinanceScreen> {
   }
 
   Widget _previewBody(AppColors c) {
-    final Color accent = isIncome ? c.success : c.expense;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -622,104 +615,97 @@ class _BrainDumpFinanceScreenState extends State<BrainDumpFinanceScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _formLabel(c, 'NOMINAL *'),
-              const SizedBox(height: AppSpacing.xxs),
-              TextField(
-                controller: amountController,
-                keyboardType: TextInputType.number,
-                style: AppTypography.display(c.text),
-                onChanged: (_) {
-                  if (errorMessage != null) {
-                    setState(() => errorMessage = null);
-                  }
-                },
-                decoration: _inputDecoration(c, hintText: '0').copyWith(
-                  counterText: '',
-                  prefixText: 'Rp ',
-                  prefixStyle: AppTypography.display(c.textMuted),
-                ),
-              ),
-              const SizedBox(height: AppSpacing.md),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  _formLabel(c, isIncome ? 'SUMBER' : 'KATEGORI'),
-                  Text(
-                    selectedCategory,
-                    style: AppTypography.micro(accent)
-                        .copyWith(fontWeight: FontWeight.w600),
-                  ),
-                ],
-              ),
-              const SizedBox(height: AppSpacing.xs),
-              Wrap(
-                spacing: AppSpacing.xs,
-                runSpacing: AppSpacing.xs,
-                children: categories.map((String cat) {
-                  final bool active = selectedCategory == cat;
-                  return GestureDetector(
-                    onTap: () => setState(() => selectedCategory = cat),
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 150),
-                      constraints: const BoxConstraints(
-                        minHeight: AppSpacing.targetCompact,
-                      ),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: AppSpacing.sm,
-                        vertical: AppSpacing.xs,
-                      ),
-                      decoration: BoxDecoration(
-                        color: active
-                            ? (isIncome ? c.successDim : c.expenseDim)
-                            : c.surfaceHigh,
-                        borderRadius: BorderRadius.circular(AppSpacing.huge),
-                        border: Border.all(color: active ? accent : c.border),
-                      ),
-                      alignment: Alignment.center,
-                      child: Text(
-                        cat,
-                        style: AppTypography.label(active ? accent : c.textSub)
-                            .copyWith(
-                              fontWeight: active
-                                  ? FontWeight.w600
-                                  : FontWeight.w400,
-                            ),
-                      ),
+              ...parsedItems.map((BrainDumpItem item) {
+                final bool income = item.type == BrainDumpItemType.income;
+                final Color accent = income ? c.success : c.expense;
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(AppSpacing.sm),
+                    decoration: BoxDecoration(
+                      color: c.surfaceHigh,
+                      borderRadius: BorderRadius.circular(AppSpacing.sm),
+                      border: Border.all(color: c.border),
                     ),
-                  );
-                }).toList(),
-              ),
-              const SizedBox(height: AppSpacing.md),
-              _formLabel(c, 'KETERANGAN'),
-              const SizedBox(height: AppSpacing.xxs),
-              TextField(
-                controller: labelController,
-                maxLines: 3,
-                style: AppTypography.bodyLarge(c.text),
-                decoration: _inputDecoration(
-                  c,
-                  hintText: 'misal: batagor depan kampus',
-                ),
-              ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(
+                              income
+                                  ? Icons.south_west_rounded
+                                  : Icons.north_east_rounded,
+                              color: accent,
+                              size: AppSpacing.iconSmall,
+                            ),
+                            const SizedBox(width: AppSpacing.xs),
+                            Expanded(
+                              child: Text(
+                                item.title,
+                                style: AppTypography.label(c.text).copyWith(
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                            Text(
+                              income ? '+' : '-',
+                              style: AppTypography.label(accent).copyWith(
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            Text(
+                              '${item.amount}',
+                              style: AppTypography.label(accent).copyWith(
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
+                        ),
+                        if (item.category != null)
+                          Padding(
+                            padding: const EdgeInsets.only(
+                              left: AppSpacing.iconSmall + AppSpacing.xs,
+                            ),
+                            child: Text(
+                              item.category!,
+                              style: AppTypography.meta(c.textMuted),
+                            ),
+                          ),
+                        if (item.description != null)
+                          Padding(
+                            padding: const EdgeInsets.only(
+                              top: AppSpacing.xs,
+                              left: AppSpacing.iconSmall + AppSpacing.xs,
+                            ),
+                            child: Text(
+                              item.description!,
+                              style: AppTypography.caption(c.textSub),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                );
+              }),
             ],
           ),
         ),
         const SizedBox(height: AppSpacing.lg),
         PressableScale(
           onTap: _save,
-          semanticLabel: isIncome
-              ? 'Simpan catatan keuangan'
-              : 'Simpan catatan pengeluaran',
+          semanticLabel: 'Simpan semua catatan keuangan',
           child: Container(
             width: double.infinity,
             height: AppSpacing.target,
             alignment: Alignment.center,
             decoration: BoxDecoration(
-              color: accent,
+              color: c.blue,
               borderRadius: BorderRadius.circular(AppSpacing.md),
             ),
             child: Text(
-              'Simpan ${kind.label}',
+              'Simpan Semua Catatan',
               style: AppTypography.button(c.onAccent),
             ),
           ),
@@ -747,10 +733,6 @@ class _BrainDumpFinanceScreenState extends State<BrainDumpFinanceScreen> {
         ),
       ],
     );
-  }
-
-  Widget _formLabel(AppColors c, String text) {
-    return Text(text, style: AppTypography.overline(c.textMuted));
   }
 
   InputDecoration _inputDecoration(AppColors c, {required String hintText}) {
