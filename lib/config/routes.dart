@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../data/models.dart';
 import '../providers/app_provider.dart';
+import '../providers/auth_provider.dart';
 import '../screens/brain_dump_finance_screen.dart';
 import '../screens/budget_limit_screen.dart';
 import '../screens/category_detail_screen.dart';
@@ -16,6 +17,7 @@ import '../screens/nlp_simulation_screen.dart';
 import '../screens/notification_settings_screen.dart';
 import '../screens/privacy_security_screen.dart';
 import '../screens/profile_screen.dart';
+import '../screens/register_screen.dart';
 import '../screens/scan_screen.dart';
 import '../screens/splash_screen.dart';
 import '../screens/task_screen.dart';
@@ -23,6 +25,7 @@ import '../screens/task_screen.dart';
 class AppRoutes {
   static const String splash = '/splash';
   static const String login = '/login';
+  static const String register = '/register';
   static const String home = '/home';
   static const String finance = '/finance';
   static const String tasks = '/tasks';
@@ -39,9 +42,30 @@ class AppRoutes {
   static const String privacySecurity = '/settings/privacy-security';
 }
 
-GoRouter createAppRouter({String initialLocation = AppRoutes.splash}) {
+GoRouter createAppRouter({
+  String initialLocation = AppRoutes.splash,
+  required AuthProvider auth,
+}) {
   return GoRouter(
     initialLocation: initialLocation,
+    refreshListenable: auth,
+    redirect: (BuildContext context, GoRouterState state) {
+      final String location = state.matchedLocation;
+      final bool onSplash = location == AppRoutes.splash;
+      final bool onAuthPage =
+          location == AppRoutes.login || location == AppRoutes.register;
+
+      if (auth.isInitializing) {
+        return onSplash ? null : AppRoutes.splash;
+      }
+      if (!auth.isAuthenticated) {
+        return onSplash || onAuthPage ? null : AppRoutes.login;
+      }
+      if (onAuthPage) {
+        return AppRoutes.home;
+      }
+      return null;
+    },
     routes: <RouteBase>[
       GoRoute(
         path: AppRoutes.splash,
@@ -51,11 +75,23 @@ GoRouter createAppRouter({String initialLocation = AppRoutes.splash}) {
       GoRoute(
         path: AppRoutes.login,
         builder: (BuildContext context, GoRouterState state) {
+          final AuthProvider auth = context.read<AuthProvider>();
           return LoginScreen(
-            onLogin: () {
-              context.read<AppProvider>().setLoggedIn(true);
-              context.go(AppRoutes.home);
-            },
+            onLogin: ({required String email, required String password}) =>
+                auth.signInWithEmail(email: email, password: password),
+            onGoogleSignIn: auth.signInWithGoogle,
+            onRegister: () => context.go(AppRoutes.register),
+          );
+        },
+      ),
+      GoRoute(
+        path: AppRoutes.register,
+        builder: (BuildContext context, GoRouterState state) {
+          final AuthProvider auth = context.read<AuthProvider>();
+          return RegisterScreen(
+            onRegister: ({required String email, required String password}) =>
+                auth.registerWithEmail(email: email, password: password),
+            onLogin: () => context.go(AppRoutes.login),
           );
         },
       ),
@@ -254,10 +290,7 @@ GoRouter createAppRouter({String initialLocation = AppRoutes.splash}) {
                             .where((TaskItem task) => task.done)
                             .length,
                         totalSavings: app.balance,
-                        onLogout: () {
-                          app.setLoggedIn(false);
-                          context.go(AppRoutes.login);
-                        },
+                        onLogout: context.read<AuthProvider>().signOut,
                       );
                     },
                   );
