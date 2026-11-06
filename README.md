@@ -27,7 +27,29 @@ Clone atau buka folder project, kemudian jalankan:
 flutter pub get
 ```
 
-Project tidak membutuhkan API key, database, akun cloud, atau file `.env`.
+Project menggunakan Firebase untuk Gemini AI Logic. Konfigurasi aplikasi
+Firebase dibuat oleh FlutterFire CLI; tidak ada Gemini secret key atau file
+`.env` yang perlu ditambahkan ke source code.
+
+### Setup Firebase AI Logic
+
+Setelah project Firebase dibuat dan dihubungkan:
+
+```bash
+firebase login
+dart pub global activate flutterfire_cli
+flutterfire configure
+flutter pub get
+```
+
+Pilih project Firebase `aturaja-ai` dan platform Android/iOS. Pastikan
+`com.aturaja.app` dipilih sebagai Android application ID.
+
+Di Firebase Console, aktifkan **AI Logic > Gemini Developer API**. Daftarkan
+aplikasi Android dan iOS pada **App Check**. Saat menjalankan build debug,
+Firebase App Check memakai debug provider; token debug yang muncul di log
+aplikasi harus didaftarkan pada Firebase Console sebelum request Gemini diuji.
+Build release memakai Play Integrity untuk Android dan App Attest untuk iOS.
 
 ## Cara Menjalankan
 
