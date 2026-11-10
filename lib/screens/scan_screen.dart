@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 import '../data/models.dart';
 import '../providers/app_provider.dart';
 import '../services/receipt_camera.dart';
+import '../services/receipt_ocr_service.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_typography.dart';
@@ -31,9 +32,17 @@ class ScanScreen extends StatefulWidget {
 class _ScanScreenState extends State<ScanScreen>
     with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   _ScanStep step = _ScanStep.scan;
+  final TextEditingController merchantController = TextEditingController(
+    text: 'Belanja di Indomaret',
+  );
   final TextEditingController amountController = TextEditingController(
     text: '28500',
   );
+  final TextEditingController dateController = TextEditingController(
+    text: 'Hari ini',
+  );
+  final ReceiptOcrService _ocrService = ReceiptOcrService();
+  String _category = 'belanja';
   bool isProcessing = false;
   bool _isCameraInitializing = false;
   String? errorMessage;
@@ -69,6 +78,9 @@ class _ScanScreenState extends State<ScanScreen>
       unawaited(controller.dispose());
     }
     amountController.dispose();
+    merchantController.dispose();
+    dateController.dispose();
+    unawaited(_ocrService.close());
     _scanLineController.dispose();
     super.dispose();
   }
@@ -215,6 +227,25 @@ class _ScanScreenState extends State<ScanScreen>
         step = _ScanStep.confirm;
       });
       await _releaseCamera();
+      try {
+        final ReceiptOcrResult result = await _ocrService.recognizeFile(path);
+        if (!mounted) return;
+        setState(() {
+          if (result.merchant.isNotEmpty) {
+            merchantController.text = result.merchant;
+          }
+          if (result.total != null) {
+            amountController.text = result.total.toString();
+          }
+          if (result.date != null) {
+            dateController.text = _shortDate(result.date!);
+          }
+          errorMessage = null;
+        });
+      } on ReceiptOcrException catch (error) {
+        if (!mounted) return;
+        setState(() => errorMessage = error.message);
+      }
     } on ReceiptCameraException catch (error) {
       if (!mounted) return;
       setState(() {
@@ -259,15 +290,17 @@ class _ScanScreenState extends State<ScanScreen>
       }
       if (!mounted) return;
 
-      // OCR masih disimulasikan, tetapi foto struk yang diambil dari kamera
-      // asli ikut disimpan pada transaksi.
       final TransactionItem transaction = TransactionItem(
         id: DateTime.now().millisecondsSinceEpoch,
-        label: 'Belanja di Indomaret',
+        label: merchantController.text.trim().isEmpty
+            ? 'Belanja di Indomaret'
+            : merchantController.text.trim(),
         amount: -amount,
-        cat: 'belanja',
+        cat: _category,
         time: TimeOfDay.now().format(context),
-        date: 'Hari ini',
+        date: dateController.text.trim().isEmpty
+            ? 'Hari ini'
+            : dateController.text.trim(),
         receiptImagePath: _receiptImagePath,
       );
       context.read<AppProvider>().addTransaction(transaction);
@@ -287,6 +320,10 @@ class _ScanScreenState extends State<ScanScreen>
       isProcessing = false;
       errorMessage = null;
       _receiptImagePath = null;
+      merchantController.text = 'Belanja di Indomaret';
+      amountController.text = '28500';
+      dateController.text = 'Hari ini';
+      _category = 'belanja';
     });
     if (!_scanLineController.isAnimating) {
       _scanLineController.repeat(reverse: true);
@@ -783,7 +820,7 @@ class _ScanScreenState extends State<ScanScreen>
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'INDOMARET · ${_shortDate(DateTime.now())}',
+                        '${merchantController.text.toUpperCase()} · ${dateController.text}',
                         style: AppTypography.mono(c.textSub),
                       ),
                       Text(
@@ -863,9 +900,25 @@ class _ScanScreenState extends State<ScanScreen>
           ),
           const SizedBox(height: AppSpacing.sm),
           Text(
-            'Hasil OCR masih disimulasikan. Foto asli tetap disimpan bersama transaksi.',
+            'Periksa dan koreksi hasil OCR sebelum menyimpan transaksi.',
             style: AppTypography.micro(c.textMuted),
           ),
+          const SizedBox(height: AppSpacing.sm),
+          TextField(
+            controller: merchantController,
+            onChanged: (_) => _clearError(),
+            style: AppTypography.body(c.text),
+            decoration: InputDecoration(
+              labelText: 'Nama merchant',
+              filled: true,
+              fillColor: c.surface,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(AppSpacing.sm),
+                borderSide: BorderSide(color: c.borderAccent, width: 1.5),
+              ),
+            ),
+          ),
+          const SizedBox(height: AppSpacing.sm),
           const SizedBox(height: AppSpacing.xs),
           Text(
             'Koreksi nominal jika perlu',
@@ -894,6 +947,49 @@ class _ScanScreenState extends State<ScanScreen>
                 borderSide: BorderSide(color: c.focus, width: 1.5),
               ),
             ),
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          TextField(
+            controller: dateController,
+            onChanged: (_) => _clearError(),
+            style: AppTypography.body(c.text),
+            decoration: InputDecoration(
+              labelText: 'Tanggal transaksi',
+              hintText: 'Contoh: 10/11/2026',
+              filled: true,
+              fillColor: c.surface,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(AppSpacing.sm),
+                borderSide: BorderSide(color: c.borderAccent, width: 1.5),
+              ),
+            ),
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          DropdownButtonFormField<String>(
+            initialValue: _category,
+            decoration: InputDecoration(
+              labelText: 'Kategori',
+              filled: true,
+              fillColor: c.surface,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(AppSpacing.sm),
+                borderSide: BorderSide(color: c.borderAccent, width: 1.5),
+              ),
+            ),
+            items: const <DropdownMenuItem<String>>[
+              DropdownMenuItem(value: 'belanja', child: Text('Belanja')),
+              DropdownMenuItem(value: 'food', child: Text('Makan & Minum')),
+              DropdownMenuItem(value: 'transport', child: Text('Transport')),
+              DropdownMenuItem(value: 'entertainment', child: Text('Hiburan')),
+              DropdownMenuItem(value: 'other', child: Text('Lainnya')),
+            ],
+            onChanged: isProcessing
+                ? null
+                : (String? value) {
+                    if (value != null) {
+                      setState(() => _category = value);
+                    }
+                  },
           ),
           if (errorMessage != null) ...[
             const SizedBox(height: AppSpacing.sm),
