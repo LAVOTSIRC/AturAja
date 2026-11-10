@@ -228,6 +228,38 @@ void main() {
     expect(reloaded.transactions.single.id, transaction.id);
   });
 
+  test('AppProvider shows newest transactions first on the home screen', () {
+    final AppProvider store = AppProvider.inMemory(
+      tasks: const <TaskItem>[],
+      transactions: const <TransactionItem>[],
+    );
+    addTearDown(store.dispose);
+
+    store.addTransaction(
+      TransactionItem(
+        id: 'older',
+        label: 'Beli batagor lama',
+        amount: -10000,
+        cat: 'food',
+        time: '09:00',
+        createdAt: DateTime(2026, 11, 10, 9),
+      ),
+    );
+    store.addTransaction(
+      TransactionItem(
+        id: 'newer',
+        label: 'Makan siang terbaru',
+        amount: -25000,
+        cat: 'food',
+        time: '12:00',
+        createdAt: DateTime(2026, 11, 10, 12),
+      ),
+    );
+
+    expect(store.recentTransactions.first.id, 'newer');
+    expect(store.recentTransactions.last.id, 'older');
+  });
+
   test('AppProvider keeps seeded data when stored JSON is invalid', () async {
     final MemoryAppStorage storage = MemoryAppStorage('bukan-json');
     final AppProvider store = AppProvider(
@@ -558,58 +590,55 @@ void main() {
     expect(store.lastSyncedAt, isNotNull);
   });
 
-  test(
-    'user yang sudah migrasi tetap mendapat stream cloud walau migrasi gagal (skenario offline)',
-    () async {
-      const String userId = 'returning-user-offline';
-      final String flagKey = 'aturaja_cloud_migrated_$userId';
+  test('user yang sudah migrasi tetap mendapat stream cloud walau migrasi gagal (skenario offline)', () async {
+    const String userId = 'returning-user-offline';
+    final String flagKey = 'aturaja_cloud_migrated_$userId';
 
-      SharedPreferences.setMockInitialValues(<String, Object>{
-        flagKey: true, // flag migrasi sudah ada dari sesi sebelumnya
-      });
-      final SharedPreferences prefs = await SharedPreferences.getInstance();
+    SharedPreferences.setMockInitialValues(<String, Object>{
+      flagKey: true, // flag migrasi sudah ada dari sesi sebelumnya
+    });
+    final SharedPreferences prefs = await SharedPreferences.getInstance();
 
-      final FakeCloudRepository cloud = FakeCloudRepository()
-        ..throwOnMigrate = true; // simulasi gagal migrasi (mis. offline)
-      addTearDown(cloud.dispose);
+    final FakeCloudRepository cloud = FakeCloudRepository()
+      ..throwOnMigrate = true; // simulasi gagal migrasi (mis. offline)
+    addTearDown(cloud.dispose);
 
-      // Tambahkan data ke cloud (seolah sudah diisi dari perangkat lain)
-      final TaskItem existingTask = TaskItem(
-        id: 'task-cloud-existing',
-        title: 'Tugas sudah ada di cloud',
-        categories: const <String>['Pribadi'],
-        deadline: 'Besok',
-      );
-      cloud.tasks[existingTask.id] = existingTask;
-      cloud.initialized = true;
+    // Tambahkan data ke cloud (seolah sudah diisi dari perangkat lain)
+    final TaskItem existingTask = TaskItem(
+      id: 'task-cloud-existing',
+      title: 'Tugas sudah ada di cloud',
+      categories: const <String>['Pribadi'],
+      deadline: 'Besok',
+    );
+    cloud.tasks[existingTask.id] = existingTask;
+    cloud.initialized = true;
 
-      final AppProvider store = AppProvider(
-        storage: MemoryAppStorage(),
-        settings: SettingsController(),
-        theme: ThemeController(),
-        tasks: const <TaskItem>[],
-        transactions: const <TransactionItem>[],
-        profile: ProfileData.empty,
-        preferences: prefs,
-        activeUserId: userId,
-        cloudRepository: cloud,
-      );
-      addTearDown(store.dispose);
+    final AppProvider store = AppProvider(
+      storage: MemoryAppStorage(),
+      settings: SettingsController(),
+      theme: ThemeController(),
+      tasks: const <TaskItem>[],
+      transactions: const <TransactionItem>[],
+      profile: ProfileData.empty,
+      preferences: prefs,
+      activeUserId: userId,
+      cloudRepository: cloud,
+    );
+    addTearDown(store.dispose);
 
-      await store.connectCloud();
-      await Future<void>.delayed(const Duration(milliseconds: 10));
+    await store.connectCloud();
+    await Future<void>.delayed(const Duration(milliseconds: 10));
 
-      // Meski migrasi gagal, stream tetap aktif karena previouslyMigrated = true
-      // → data cloud (dari cache offline atau fake repo) berhasil diterima
-      expect(
-        store.tasks.any((TaskItem t) => t.id == existingTask.id),
-        isTrue,
-        reason: 'Stream harus dipasang walau migrasi gagal untuk returning user',
-      );
-      // catatan: cloudError bisa sudah dibersihkan oleh meta stream
-      expect(cloud.migrateCalls, 1);
-    },
-  );
+    // Meski migrasi gagal, stream tetap aktif karena previouslyMigrated = true
+    // → data cloud (dari cache offline atau fake repo) berhasil diterima
+    expect(
+      store.tasks.any((TaskItem t) => t.id == existingTask.id),
+      isTrue,
+      reason: 'Stream harus dipasang walau migrasi gagal untuk returning user',
+    );
+    // catatan: cloudError bisa sudah dibersihkan oleh meta stream
+    expect(cloud.migrateCalls, 1);
+  });
 
   test(
     'user baru tidak mendapat stream cloud saat migrasi gagal offline',
@@ -654,45 +683,39 @@ void main() {
     },
   );
 
-  test(
-    'migrasi sukses menyimpan flag ke SharedPreferences',
-    () async {
-      const String userId = 'user-first-migration';
-      SharedPreferences.setMockInitialValues(<String, Object>{});
-      final SharedPreferences prefs = await SharedPreferences.getInstance();
+  test('migrasi sukses menyimpan flag ke SharedPreferences', () async {
+    const String userId = 'user-first-migration';
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+    final SharedPreferences prefs = await SharedPreferences.getInstance();
 
-      final FakeCloudRepository cloud = FakeCloudRepository();
-      addTearDown(cloud.dispose);
+    final FakeCloudRepository cloud = FakeCloudRepository();
+    addTearDown(cloud.dispose);
 
-      final AppProvider store = AppProvider(
-        storage: MemoryAppStorage(),
-        settings: SettingsController(),
-        theme: ThemeController(),
-        tasks: <TaskItem>[
-          TaskItem(
-            id: 'task-migrate',
-            title: 'Tugas yang dimigrasikan',
-            categories: const <String>['Pribadi'],
-            deadline: 'Besok',
-          ),
-        ],
-        transactions: const <TransactionItem>[],
-        profile: ProfileData.initial,
-        preferences: prefs,
-        activeUserId: userId,
-        cloudRepository: cloud,
-      );
-      addTearDown(store.dispose);
+    final AppProvider store = AppProvider(
+      storage: MemoryAppStorage(),
+      settings: SettingsController(),
+      theme: ThemeController(),
+      tasks: <TaskItem>[
+        TaskItem(
+          id: 'task-migrate',
+          title: 'Tugas yang dimigrasikan',
+          categories: const <String>['Pribadi'],
+          deadline: 'Besok',
+        ),
+      ],
+      transactions: const <TransactionItem>[],
+      profile: ProfileData.initial,
+      preferences: prefs,
+      activeUserId: userId,
+      cloudRepository: cloud,
+    );
+    addTearDown(store.dispose);
 
-      await store.connectCloud();
+    await store.connectCloud();
 
-      // Flag migrasi harus tersimpan di SharedPreferences
-      expect(
-        prefs.getBool('aturaja_cloud_migrated_$userId'),
-        isTrue,
-      );
-    },
-  );
+    // Flag migrasi harus tersimpan di SharedPreferences
+    expect(prefs.getBool('aturaja_cloud_migrated_$userId'), isTrue);
+  });
 
   test('deleteAllUserData menghapus data lokal dan cloud', () async {
     final FakeCloudRepository cloud = FakeCloudRepository();

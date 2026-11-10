@@ -87,8 +87,8 @@ class _HomeScreenState extends State<HomeScreen> {
       showRoast = true;
     });
     try {
-      final RoastingAiService service =
-          _roastingAiService ??= RoastingAiService();
+      final RoastingAiService service = _roastingAiService ??=
+          RoastingAiService();
       roastMessage = await service.generate(
         totalExpense: app.totalExpense,
         pendingTasks: app.pendingTaskCount,
@@ -233,7 +233,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         Padding(
                           padding: const EdgeInsets.only(bottom: AppSpacing.md),
                           child: Text(
-                            formatRupiah(app.balance),
+                            formatRupiahSigned(app.balance),
                             style: AppTypography.hero(c.text),
                           ),
                         ),
