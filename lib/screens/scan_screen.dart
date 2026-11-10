@@ -267,6 +267,9 @@ class _ScanScreenState extends State<ScanScreen>
 
   Future<void> _confirmScan() async {
     if (isProcessing) return;
+    final AppProvider app = context.read<AppProvider>();
+    final String transactionTime = TimeOfDay.now().format(context);
+    final NavigatorState navigator = Navigator.of(context);
     final String rawValue = amountController.text.replaceAll(
       RegExp(r'[^0-9]'),
       '',
@@ -290,22 +293,24 @@ class _ScanScreenState extends State<ScanScreen>
         throw StateError('nominal berubah');
       }
       if (!mounted) return;
+      final String transactionId = newDocumentId();
 
       final TransactionItem transaction = TransactionItem(
-        id: newDocumentId(),
+        id: transactionId,
         label: merchantController.text.trim().isEmpty
             ? 'Belanja di Indomaret'
             : merchantController.text.trim(),
         amount: -amount,
         cat: _category,
-        time: TimeOfDay.now().format(context),
+        time: transactionTime,
         date: dateController.text.trim().isEmpty
             ? 'Hari ini'
             : dateController.text.trim(),
         receiptImagePath: _receiptImagePath,
       );
-      context.read<AppProvider>().addTransaction(transaction);
-      Navigator.of(context).pop<TransactionItem>(transaction);
+      app.addTransaction(transaction);
+      if (!mounted) return;
+      navigator.pop<TransactionItem>(transaction);
     } catch (_) {
       if (!mounted) return;
       setState(() {
