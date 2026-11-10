@@ -112,7 +112,7 @@ GoRouter createAppRouter({
           final TaskItem? task = state.extra as TaskItem?;
           return TaskFormScreen(
             taskToEdit: task,
-            nextTaskId: app.nextTaskId,
+            nextTaskId: app.newTaskId,
             onSave: (TaskItem saved) {
               final bool isUpdate = app.tasks.any(
                 (TaskItem item) => item.id == saved.id,
@@ -170,9 +170,7 @@ GoRouter createAppRouter({
       GoRoute(
         path: AppRoutes.cloudBackup,
         builder: (BuildContext context, GoRouterState state) {
-          return CloudBackupScreen(
-            settings: context.read<AppProvider>().settings,
-          );
+          return CloudBackupScreen(app: context.read<AppProvider>());
         },
       ),
       GoRoute(
@@ -263,7 +261,7 @@ GoRouter createAppRouter({
                     builder: (BuildContext context, AppProvider app, _) {
                       return TaskScreen(
                         tasks: app.tasks,
-                        nextTaskId: app.nextTaskId,
+                        nextTaskId: app.newTaskId,
                         onAddTask: () => context.push(AppRoutes.taskForm),
                         onToggleTask: app.toggleTask,
                         onSaveTask: app.upsertTask,
@@ -290,6 +288,7 @@ GoRouter createAppRouter({
                             .where((TaskItem task) => task.done)
                             .length,
                         totalSavings: app.balance,
+                        cloudBackupStatus: app.cloudBackupStatus,
                         onLogout: context.read<AuthProvider>().signOut,
                       );
                     },
@@ -305,9 +304,8 @@ GoRouter createAppRouter({
 }
 
 Future<void> _openBrainDump(BuildContext context) async {
-  final List<TransactionItem>? notes = await context.push<List<TransactionItem>>(
-    AppRoutes.brainDump,
-  );
+  final List<TransactionItem>? notes = await context
+      .push<List<TransactionItem>>(AppRoutes.brainDump);
   if (notes == null || notes.isEmpty || !context.mounted) {
     return;
   }

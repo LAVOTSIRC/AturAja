@@ -44,11 +44,11 @@ IconData categoryIcon(String category) {
 
 class TaskScreen extends StatefulWidget {
   final List<TaskItem> tasks;
-  final int nextTaskId;
+  final String nextTaskId;
   final VoidCallback? onAddTask;
-  final ValueChanged<int>? onToggleTask;
+  final ValueChanged<String>? onToggleTask;
   final ValueChanged<TaskItem>? onSaveTask;
-  final ValueChanged<int>? onDeleteTask;
+  final ValueChanged<String>? onDeleteTask;
 
   const TaskScreen({
     super.key,
@@ -101,7 +101,7 @@ class _TaskScreenState extends State<TaskScreen> {
     );
   }
 
-  void _toggleDone(int id) {
+  void _toggleDone(String id) {
     final task = list.firstWhere((t) => t.id == id, orElse: () => list.first);
     final isDoneNow = !task.done;
     _showMessage(
@@ -123,7 +123,7 @@ class _TaskScreenState extends State<TaskScreen> {
     );
   }
 
-  void _deleteTask(int id) {
+  void _deleteTask(String id) {
     final task = list.firstWhere((t) => t.id == id, orElse: () => list.first);
     widget.onDeleteTask?.call(id);
     _showMessage('Tugas "${task.title}" telah dihapus.', isError: true);
@@ -1286,7 +1286,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
 /// Dedicated Full-Screen Page for Creating or Editing a Task with AI Brain Dump
 class TaskFormScreen extends StatefulWidget {
   final TaskItem? taskToEdit;
-  final int nextTaskId;
+  final String nextTaskId;
   final ValueChanged<TaskItem> onSave;
 
   const TaskFormScreen({
@@ -1330,9 +1330,8 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
   DateTime? _parseBrainDumpDateTime(String text) {
     final String lower = text.toLowerCase();
     final DateTime now = DateTime.now();
-    final Match? dateMatch = RegExp(
-      r'\btanggal\s+(\d{1,2})\s+bulan\s+ini\b',
-    ).firstMatch(lower);
+    final Match? dateMatch = RegExp(r'\btanggal\s+(\d{1,2})\s+bulan\s+ini\b')
+        .firstMatch(lower);
     final Match? timeMatch = RegExp(
       r'\bjam\s+(\d{1,2})(?::(\d{2}))?\s*(pagi|siang|sore|malam)?\b',
     ).firstMatch(lower);
@@ -1472,10 +1471,10 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
         (final String date, null) => date,
         _ when aiDueDate != null =>
           '${aiDueDate.year.toString().padLeft(4, '0')}-'
-          '${aiDueDate.month.toString().padLeft(2, '0')}-'
-          '${aiDueDate.day.toString().padLeft(2, '0')}, '
-          '${aiDueDate.hour.toString().padLeft(2, '0')}:'
-          '${aiDueDate.minute.toString().padLeft(2, '0')}',
+              '${aiDueDate.month.toString().padLeft(2, '0')}-'
+              '${aiDueDate.day.toString().padLeft(2, '0')}, '
+              '${aiDueDate.hour.toString().padLeft(2, '0')}:'
+              '${aiDueDate.minute.toString().padLeft(2, '0')}',
         _ => 'Hari ini, 23:59',
       };
       final String normalizedTitle = item.title.trim().toLowerCase();
@@ -1492,7 +1491,8 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
         selectedCategories = categories;
         deadlineController.text = deadline;
         selectedDueDate = aiDueDate;
-        descriptionController.text = item.description ??
+        descriptionController.text =
+            item.description ??
             'Pada ${deadline.toLowerCase()}, ${title.toLowerCase()}.';
         inputMode = TaskInputMode.manual;
       });

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
+import '../data/id_generator.dart';
 import '../data/models.dart';
 import '../providers/app_provider.dart';
 import '../theme/app_colors.dart';
@@ -319,7 +320,7 @@ class _FinanceScreenState extends State<FinanceScreen> {
                               );
                               return;
                             }
-                            final newId = DateTime.now().millisecondsSinceEpoch;
+                            final newId = newDocumentId();
                             final resolvedCatKey = isIncome
                                 ? 'income'
                                 : _catKey(selectedCategory);
