@@ -9,6 +9,8 @@ class ThemeController extends ChangeNotifier {
 
   AppColors get colors => isDark ? AppColors.dark : AppColors.light;
 
+  void resetToDefaults() => setDark(true);
+
   void setDark(bool value) {
     if (isDark == value) {
       return;
