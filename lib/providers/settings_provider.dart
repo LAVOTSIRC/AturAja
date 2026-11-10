@@ -55,6 +55,20 @@ class SettingsController extends ChangeNotifier {
     return biometricLockEnabled ? 'Biometrik aktif' : 'Biometrik nonaktif';
   }
 
+  void resetToDefaults() {
+    deadlineNotificationsEnabled = true;
+    budgetAlertsEnabled = true;
+    roastingAiEnabled = true;
+    autoBackupEnabled = true;
+    isCloudSyncing = false;
+    monthlyBudgetLimit = 1200000;
+    biometricLockEnabled = true;
+    pinWasUpdated = false;
+    accountDeletionRequested = false;
+    lastSyncedAt = DateTime.now().subtract(const Duration(minutes: 10));
+    notifyListeners();
+  }
+
   void setDeadlineNotifications(bool value) {
     if (deadlineNotificationsEnabled == value) {
       return;

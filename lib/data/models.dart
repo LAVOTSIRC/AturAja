@@ -189,6 +189,13 @@ class ProfileData {
     avatarLabel: 'ZR',
   );
 
+  static const ProfileData empty = ProfileData(
+    fullName: '',
+    nim: '',
+    program: '',
+    avatarLabel: '',
+  );
+
   ProfileData copyWith({
     String? fullName,
     String? nim,

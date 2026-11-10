@@ -68,7 +68,10 @@ Build release memakai Play Integrity untuk Android dan App Attest untuk iOS.
 
 Tanpa langkah tersebut, build Android akan gagal pada plugin Google Services dan
 aplikasi tidak dapat melakukan autentikasi. File `env.json` tidak digunakan pada
-modul autentikasi ini.
+modul autentikasi ini. File hasil generate seperti
+`android/app/google-services.json` dan `lib/firebase_options.dart` bersifat
+environment-specific dan tidak di-commit; masing-masing developer perlu
+menyiapkannya secara lokal.
 
 ## Cara Menjalankan
 
@@ -120,8 +123,13 @@ dart run flutter_native_splash:create
 Data demo awal didefinisikan di `lib/data/models.dart`. Setelah aplikasi
 dijalankan pertama kali, perubahan tugas, transaksi, profil, pengaturan, dan
 tema disimpan secara lokal melalui `SharedPreferences` dan tetap ada setelah
-restart. Status login tidak lagi disimpan sebagai flag lokal; sesi dikelola
-oleh Firebase Authentication.
+restart. Data lokal dipisahkan berdasarkan UID Firebase, jadi akun yang berbeda
+tidak saling melihat tugas atau transaksi. Akun baru dimulai dari data kosong,
+sedangkan data lama dari versi sebelumnya dimigrasikan ke akun pertama yang
+masuk. Data ini belum disinkronkan antar perangkat; sinkronisasi cloud
+memerlukan Firestore dan belum termasuk dalam modul autentikasi ini. Status
+login tidak lagi disimpan sebagai flag lokal; sesi dikelola oleh Firebase
+Authentication.
 
 ### Data keuangan
 

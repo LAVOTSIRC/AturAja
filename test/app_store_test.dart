@@ -1,4 +1,7 @@
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:aturaja/data/app_store.dart';
 import 'package:aturaja/data/models.dart';
@@ -306,5 +309,84 @@ void main() {
     await afterDelete.load();
 
     expect(afterDelete.tasks, isEmpty);
+  });
+
+  test('AppProvider memisahkan data lokal per akun Firebase', () async {
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+    final AppProvider store = await AppProvider.loadPersistent(
+      userId: 'firebase-uid-a',
+    );
+    addTearDown(store.dispose);
+
+    expect(store.tasks, isEmpty);
+    expect(store.transactions, isEmpty);
+    expect(store.profile.fullName, isEmpty);
+
+    final TaskItem taskA = TaskItem(
+      id: 101,
+      title: 'Tugas akun A',
+      categories: const <String>['Pribadi'],
+      deadline: 'Besok',
+      dueDate: DateTime(2026, 11, 7, 9),
+    );
+    store.addTask(taskA);
+    await store.save();
+
+    await store.switchUser('firebase-uid-b');
+    expect(store.tasks, isEmpty);
+    expect(store.transactions, isEmpty);
+
+    final TaskItem taskB = TaskItem(
+      id: 202,
+      title: 'Tugas akun B',
+      categories: const <String>['Tugas Kuliah'],
+      deadline: 'Lusa',
+      dueDate: DateTime(2026, 11, 8, 9),
+    );
+    store.addTask(taskB);
+    await store.save();
+
+    await store.switchUser('firebase-uid-a');
+    expect(store.tasks.any((TaskItem task) => task.id == taskA.id), isTrue);
+    expect(store.tasks.any((TaskItem task) => task.id == taskB.id), isFalse);
+  });
+
+  test('data lama dimigrasikan ke akun pertama yang masuk', () async {
+    final TaskItem legacyTask = TaskItem(
+      id: 303,
+      title: 'Tugas sebelum pemisahan akun',
+      categories: const <String>['Pribadi'],
+      deadline: 'Besok',
+      dueDate: DateTime(2026, 11, 7, 9),
+    );
+    final String legacyData = jsonEncode(<String, dynamic>{
+      'version': 1,
+      'tasks': <Map<String, dynamic>>[legacyTask.toJson()],
+      'transactions': <Map<String, dynamic>>[],
+      'profile': ProfileData.initial.toJson(),
+      'settings': <String, dynamic>{},
+      'theme': <String, dynamic>{},
+    });
+    SharedPreferences.setMockInitialValues(<String, Object>{
+      SharedPreferencesAppStorage.legacyStorageKey: legacyData,
+    });
+
+    final AppProvider store = await AppProvider.loadPersistent(
+      userId: 'firebase-uid-migrated',
+    );
+    addTearDown(store.dispose);
+
+    expect(store.tasks.single.id, legacyTask.id);
+    final SharedPreferences preferences = await SharedPreferences.getInstance();
+    expect(
+      preferences.getString(
+        SharedPreferencesAppStorage.storageKeyFor('firebase-uid-migrated'),
+      ),
+      isNotNull,
+    );
+    expect(
+      preferences.getString(SharedPreferencesAppStorage.legacyStorageKey),
+      isNull,
+    );
   });
 }
