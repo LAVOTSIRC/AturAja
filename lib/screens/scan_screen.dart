@@ -5,6 +5,7 @@ import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../data/id_generator.dart';
 import '../data/models.dart';
 import '../providers/app_provider.dart';
 import '../services/receipt_camera.dart';
@@ -291,7 +292,7 @@ class _ScanScreenState extends State<ScanScreen>
       if (!mounted) return;
 
       final TransactionItem transaction = TransactionItem(
-        id: DateTime.now().millisecondsSinceEpoch,
+        id: newDocumentId(),
         label: merchantController.text.trim().isEmpty
             ? 'Belanja di Indomaret'
             : merchantController.text.trim(),

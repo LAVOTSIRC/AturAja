@@ -72,6 +72,7 @@ class ProfileScreen extends StatefulWidget {
   final int completedTaskCount;
   final int totalSavings;
   final int streakDays;
+  final String? cloudBackupStatus;
 
   const ProfileScreen({
     super.key,
@@ -82,6 +83,7 @@ class ProfileScreen extends StatefulWidget {
     this.completedTaskCount = 12,
     this.totalSavings = 874000,
     this.streakDays = 7,
+    this.cloudBackupStatus,
   });
 
   static const settingItems = [
@@ -520,7 +522,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final SettingsController settings = widget.settings;
     return switch (item.destination) {
       _SettingsDestination.notifications => settings.notificationStatus,
-      _SettingsDestination.cloud => settings.cloudBackupStatus,
+      _SettingsDestination.cloud =>
+        widget.cloudBackupStatus ?? settings.cloudBackupStatus,
       _SettingsDestination.budget =>
         '${formatRupiah(settings.monthlyBudgetLimit)}/bulan',
       _SettingsDestination.nlp => settings.nlpModelStatus,

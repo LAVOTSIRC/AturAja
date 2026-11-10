@@ -1,1 +1,26 @@
-{"flutter":{"platforms":{"android":{"default":{"projectId":"aturaja-ai","appId":"1:244541621271:android:11424ec60d7c96c41dc852","fileOutput":"android/app/google-services.json"}},"dart":{"lib/firebase_options.dart":{"projectId":"aturaja-ai","configurations":{"android":"1:244541621271:android:11424ec60d7c96c41dc852","ios":"1:244541621271:ios:f0f5428c872f1dd21dc852"}}}}}}
+{
+  "firestore": {
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
+  },
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "aturaja-ai",
+          "appId": "1:244541621271:android:11424ec60d7c96c41dc852",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "aturaja-ai",
+          "configurations": {
+            "android": "1:244541621271:android:11424ec60d7c96c41dc852",
+            "ios": "1:244541621271:ios:f0f5428c872f1dd21dc852"
+          }
+        }
+      }
+    }
+  }
+}

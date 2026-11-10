@@ -54,7 +54,7 @@ class CategoryDetailScreen extends StatefulWidget {
   final Color categoryColor;
   final List<TransactionItem> transactions;
   final void Function(TransactionItem updated)? onTransactionUpdated;
-  final void Function(int id)? onTransactionDeleted;
+  final void Function(String id)? onTransactionDeleted;
   final void Function(TransactionItem restored)? onTransactionRestored;
 
   const CategoryDetailScreen({

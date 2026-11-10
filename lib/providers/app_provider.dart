@@ -5,6 +5,8 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../data/app_storage.dart';
+import '../data/cloud_repository.dart';
+import '../data/id_generator.dart';
 import '../data/models.dart';
 import 'settings_provider.dart';
 import 'theme_provider.dart';
@@ -13,16 +15,29 @@ class AppProvider extends ChangeNotifier {
   AppStorage storage;
   final SettingsController settings;
   final ThemeController theme;
+  final CloudRepository? cloudRepository;
 
   final SharedPreferences? preferences;
   String? activeUserId;
   Future<void> _switchChain = Future<void>.value();
+  Future<void> _cloudWriteChain = Future<void>.value();
+
+  StreamSubscription<List<TaskItem>>? _tasksSubscription;
+  StreamSubscription<List<TransactionItem>>? _transactionsSubscription;
+  StreamSubscription<ProfileData?>? _profileSubscription;
+  StreamSubscription<CloudMeta>? _metaSubscription;
+  String? _connectedUserId;
 
   List<TaskItem> tasks;
   List<TransactionItem> _transactions;
   ProfileData profile;
 
   bool _isLoading = false;
+  bool _isManualSyncing = false;
+  bool _hasPendingCloudWrites = false;
+  String? _cloudError;
+  DateTime? _lastSyncedAt;
+
   Future<void> _saveChain = Future<void>.value();
 
   AppProvider({
@@ -34,6 +49,7 @@ class AppProvider extends ChangeNotifier {
     required this.profile,
     this.preferences,
     this.activeUserId,
+    this.cloudRepository,
   }) : tasks = List<TaskItem>.of(tasks),
        _transactions = List<TransactionItem>.of(
          transactions ?? sampleTransactions,
@@ -46,6 +62,8 @@ class AppProvider extends ChangeNotifier {
     List<TaskItem>? tasks,
     List<TransactionItem>? transactions,
     ProfileData? profile,
+    String? activeUserId,
+    CloudRepository? cloudRepository,
   }) {
     return AppProvider(
       storage: MemoryAppStorage(),
@@ -54,6 +72,8 @@ class AppProvider extends ChangeNotifier {
       tasks: tasks ?? sampleTasks,
       transactions: transactions,
       profile: profile ?? ProfileData.initial,
+      activeUserId: activeUserId,
+      cloudRepository: cloudRepository,
     );
   }
 
@@ -61,7 +81,10 @@ class AppProvider extends ChangeNotifier {
   ///
   /// Akun yang belum punya data akan dimulai dari state kosong. Data lama dari
   /// versi sebelum pemisahan akun dimigrasikan ke akun pertama yang masuk.
-  static Future<AppProvider> loadPersistent({String? userId}) async {
+  static Future<AppProvider> loadPersistent({
+    String? userId,
+    CloudRepository? cloudRepository,
+  }) async {
     final SharedPreferences preferences = await SharedPreferences.getInstance();
     if (userId != null) {
       await _migrateLegacyData(preferences, userId);
@@ -76,10 +99,61 @@ class AppProvider extends ChangeNotifier {
       profile: isGuest ? ProfileData.initial : ProfileData.empty,
       preferences: preferences,
       activeUserId: userId,
+      cloudRepository: cloudRepository,
     );
     await provider.load();
+    if (!isGuest && cloudRepository != null) {
+      await provider.connectCloud();
+    }
     return provider;
   }
+
+  /// Kunci SharedPreferences yang menyimpan flag migrasi cloud per user.
+  static String _migrationFlagKey(String userId) =>
+      'aturaja_cloud_migrated_$userId';
+
+  bool get canUseCloud =>
+      cloudRepository != null &&
+      activeUserId != null &&
+      activeUserId!.trim().isNotEmpty;
+
+  bool get isCloudSyncing => _isManualSyncing || _hasPendingCloudWrites;
+
+  /// True jika ada perubahan lokal yang belum dikonfirmasi server Firestore.
+  bool get hasPendingCloudWrites => _hasPendingCloudWrites;
+
+  DateTime? get lastSyncedAt => _lastSyncedAt;
+
+  String? get cloudError => _cloudError;
+
+  String get cloudSyncStatus {
+    if (!canUseCloud) {
+      return 'Belum terhubung';
+    }
+    if (isCloudSyncing) {
+      return 'Menyinkronkan...';
+    }
+    if (_cloudError != null) {
+      return 'Gagal sinkron';
+    }
+    final DateTime? syncedAt = _lastSyncedAt;
+    if (syncedAt == null) {
+      return 'Belum pernah';
+    }
+    final int minutes = DateTime.now().difference(syncedAt).inMinutes;
+    if (minutes <= 0) {
+      return 'Baru saja';
+    }
+    if (minutes == 1) {
+      return 'Sinkron 1 mnt lalu';
+    }
+    return 'Sinkron $minutes mnt lalu';
+  }
+
+  String get cloudBackupStatus =>
+      '$cloudSyncStatus | ${settings.autoBackupEnabled ? 'Auto' : 'Manual'}';
+
+  String get newTaskId => newDocumentId();
 
   /// Berganti penyimpanan saat akun Firebase berubah.
   Future<void> switchUser(String? userId) {
@@ -98,6 +172,7 @@ class AppProvider extends ChangeNotifier {
 
     // Simpan dulu data akun sebelumnya sebelum mengganti key penyimpanan.
     await save();
+    await _disconnectCloud();
     if (userId != null) {
       await _migrateLegacyData(prefs, userId);
     }
@@ -108,6 +183,152 @@ class AppProvider extends ChangeNotifier {
     _resetState(seedSampleData: userId == null || userId.trim().isEmpty);
     notifyListeners();
     await load();
+    if (userId != null && cloudRepository != null) {
+      await connectCloud();
+    }
+  }
+
+  /// Menghubungkan provider ke Firestore dan memigrasikan data lokal sekali.
+  Future<void> connectCloud() async {
+    final CloudRepository? repository = cloudRepository;
+    final String? userId = activeUserId?.trim();
+    if (repository == null || userId == null || userId.isEmpty) {
+      return;
+    }
+    if (_connectedUserId == userId) {
+      return;
+    }
+
+    await _disconnectCloud();
+    _connectedUserId = userId;
+    _isManualSyncing = true;
+    _cloudError = null;
+    notifyListeners();
+
+    // Jika user pernah berhasil migrasi sebelumnya, subscribe tetap
+    // dijalankan walau migrasi kali ini gagal (mis. offline), supaya
+    // cache offline Firestore masih bisa melayani data.
+    final bool previouslyMigrated =
+        preferences?.getBool(_migrationFlagKey(userId)) ?? false;
+
+    try {
+      final bool migrated = await repository.migrateLocalIfCloudEmpty(
+        userId,
+        tasks: List<TaskItem>.of(tasks),
+        transactions: List<TransactionItem>.of(_transactions),
+        profile: profile,
+      );
+      if (migrated) {
+        _setLastSyncedAt(DateTime.now());
+        await preferences?.setBool(_migrationFlagKey(userId), true);
+      }
+      _subscribeToCloud(repository, userId);
+    } catch (error) {
+      _cloudError = _messageFor(error);
+      debugPrint('Gagal menghubungkan Firestore: $error');
+      if (previouslyMigrated) {
+        _subscribeToCloud(repository, userId);
+      }
+    } finally {
+      _isManualSyncing = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> syncCloudNow() async {
+    final CloudRepository? repository = cloudRepository;
+    final String? userId = activeUserId?.trim();
+    if (repository == null || userId == null || userId.isEmpty) {
+      throw StateError(
+        'Masuk ke akun terlebih dahulu untuk mencadangkan data.',
+      );
+    }
+    if (_isManualSyncing) {
+      return;
+    }
+
+    _isManualSyncing = true;
+    _cloudError = null;
+    notifyListeners();
+    try {
+      await repository.saveAll(
+        userId,
+        tasks: List<TaskItem>.of(tasks),
+        transactions: List<TransactionItem>.of(_transactions),
+        profile: profile,
+      );
+      _setLastSyncedAt(DateTime.now());
+      if (_connectedUserId != userId) {
+        _connectedUserId = userId;
+        _subscribeToCloud(repository, userId);
+      }
+    } catch (error) {
+      _cloudError = _messageFor(error);
+      rethrow;
+    } finally {
+      _isManualSyncing = false;
+      notifyListeners();
+    }
+  }
+
+  void _subscribeToCloud(CloudRepository repository, String userId) {
+    _tasksSubscription = repository.watchTasks(userId).listen((
+      List<TaskItem> value,
+    ) {
+      tasks = List<TaskItem>.of(value);
+      notifyListeners();
+      unawaited(save());
+    }, onError: _handleCloudStreamError);
+    _transactionsSubscription = repository.watchTransactions(userId).listen((
+      List<TransactionItem> value,
+    ) {
+      _transactions = List<TransactionItem>.of(value);
+      notifyListeners();
+      unawaited(save());
+    }, onError: _handleCloudStreamError);
+    _profileSubscription = repository.watchProfile(userId).listen((
+      ProfileData? value,
+    ) {
+      if (value == null) {
+        return;
+      }
+      profile = value;
+      notifyListeners();
+      unawaited(save());
+    }, onError: _handleCloudStreamError);
+    _metaSubscription = repository.watchMeta(userId).listen((CloudMeta value) {
+      _hasPendingCloudWrites = value.hasPendingWrites;
+      if (value.lastSyncedAt != null) {
+        _lastSyncedAt = value.lastSyncedAt;
+        settings.setCloudLastSyncedAt(value.lastSyncedAt);
+      }
+      _cloudError = null;
+      notifyListeners();
+    }, onError: _handleCloudStreamError);
+  }
+
+  void _handleCloudStreamError(Object error) {
+    _cloudError = _messageFor(error);
+    _hasPendingCloudWrites = false;
+    debugPrint('Stream Firestore gagal: $error');
+    notifyListeners();
+  }
+
+  Future<void> _disconnectCloud() async {
+    await _tasksSubscription?.cancel();
+    await _transactionsSubscription?.cancel();
+    await _profileSubscription?.cancel();
+    await _metaSubscription?.cancel();
+    _tasksSubscription = null;
+    _transactionsSubscription = null;
+    _profileSubscription = null;
+    _metaSubscription = null;
+    _connectedUserId = null;
+    _hasPendingCloudWrites = false;
+    _isManualSyncing = false;
+    _cloudError = null;
+    _lastSyncedAt = null;
+    settings.setCloudLastSyncedAt(null);
   }
 
   static Future<void> _migrateLegacyData(
@@ -177,14 +398,6 @@ class AppProvider extends ChangeNotifier {
   }).toList();
 
   int get todayTaskCount => todayTasks.length;
-
-  int get nextTaskId {
-    if (tasks.isEmpty) return 1;
-    return tasks
-            .map((TaskItem t) => t.id)
-            .reduce((int a, int b) => a > b ? a : b) +
-        1;
-  }
 
   Future<void> load() async {
     _isLoading = true;
@@ -270,83 +483,177 @@ class AppProvider extends ChangeNotifier {
     return _saveChain;
   }
 
-  void addTask(TaskItem task) {
+  Future<void> addTask(TaskItem task) {
     tasks = <TaskItem>[...tasks, task];
     _changed();
+    return _enqueueCloudWrite(
+      (CloudRepository repository, String userId) =>
+          repository.saveTask(userId, task),
+    );
   }
 
-  void upsertTask(TaskItem task) {
+  Future<void> upsertTask(TaskItem task) {
     final int index = tasks.indexWhere((TaskItem item) => item.id == task.id);
     if (index < 0) {
-      addTask(task);
-      return;
+      return addTask(task);
     }
     final List<TaskItem> next = List<TaskItem>.of(tasks);
     next[index] = task;
     tasks = next;
     _changed();
+    return _enqueueCloudWrite(
+      (CloudRepository repository, String userId) =>
+          repository.saveTask(userId, task),
+    );
   }
 
-  void toggleTask(int id) {
-    tasks = tasks
-        .map(
-          (TaskItem task) =>
-              task.id == id ? task.copyWith(done: !task.done) : task,
-        )
-        .toList();
+  Future<void> toggleTask(String id) {
+    TaskItem? updated;
+    tasks = tasks.map((TaskItem task) {
+      if (task.id != id) {
+        return task;
+      }
+      updated = task.copyWith(done: !task.done);
+      return updated!;
+    }).toList();
     _changed();
+    if (updated == null) {
+      return Future<void>.value();
+    }
+    final TaskItem task = updated!;
+    return _enqueueCloudWrite(
+      (CloudRepository repository, String userId) =>
+          repository.saveTask(userId, task),
+    );
   }
 
-  void deleteTask(int id) {
+  Future<void> deleteTask(String id) {
     tasks = tasks.where((TaskItem task) => task.id != id).toList();
     _changed();
+    return _enqueueCloudWrite(
+      (CloudRepository repository, String userId) =>
+          repository.deleteTask(userId, id),
+    );
   }
 
-  void addTransaction(TransactionItem transaction) {
+  Future<void> addTransaction(TransactionItem transaction) {
     _transactions = <TransactionItem>[transaction, ..._transactions];
     _changed();
+    return _enqueueCloudWrite(
+      (CloudRepository repository, String userId) =>
+          repository.saveTransaction(userId, transaction),
+    );
   }
 
-  void updateTransaction(TransactionItem transaction) {
+  Future<void> updateTransaction(TransactionItem transaction) {
     final int index = _transactions.indexWhere(
       (TransactionItem item) => item.id == transaction.id,
     );
     if (index < 0) {
-      return;
+      return Future<void>.value();
     }
     final List<TransactionItem> next = List<TransactionItem>.of(_transactions);
     next[index] = transaction;
     _transactions = next;
     _changed();
+    return _enqueueCloudWrite(
+      (CloudRepository repository, String userId) =>
+          repository.saveTransaction(userId, transaction),
+    );
   }
 
-  void deleteTransaction(int id) {
+  Future<void> deleteTransaction(String id) {
     final List<TransactionItem> next = _transactions
         .where((TransactionItem item) => item.id != id)
         .toList();
     if (next.length == _transactions.length) {
-      return;
+      return Future<void>.value();
     }
     _transactions = next;
     _changed();
+    return _enqueueCloudWrite(
+      (CloudRepository repository, String userId) =>
+          repository.deleteTransaction(userId, id),
+    );
   }
 
-  void restoreTransaction(TransactionItem transaction, {int? index}) {
+  Future<void> restoreTransaction(TransactionItem transaction, {int? index}) {
     if (_transactions.any(
       (TransactionItem item) => item.id == transaction.id,
     )) {
-      return;
+      return Future<void>.value();
     }
     final List<TransactionItem> next = List<TransactionItem>.of(_transactions);
     final int insertIndex = (index ?? 0).clamp(0, next.length);
     next.insert(insertIndex, transaction);
     _transactions = next;
     _changed();
+    return _enqueueCloudWrite(
+      (CloudRepository repository, String userId) =>
+          repository.saveTransaction(userId, transaction),
+    );
   }
 
-  void updateProfile(ProfileData value) {
+  Future<void> deleteAllUserData() async {
+    final CloudRepository? repository = cloudRepository;
+    final String? userId = activeUserId?.trim();
+    if (repository != null && userId != null && userId.isNotEmpty) {
+      await repository.deleteAllUserData(userId);
+    }
+    await _disconnectCloud();
+    tasks = <TaskItem>[];
+    _transactions = <TransactionItem>[];
+    profile = ProfileData.empty;
+    settings.resetToDefaults();
+    theme.resetToDefaults();
+    _changed();
+    await save();
+  }
+
+  Future<void> updateProfile(ProfileData value) {
     profile = value;
     _changed();
+    return _enqueueCloudWrite(
+      (CloudRepository repository, String userId) =>
+          repository.saveProfile(userId, value),
+    );
+  }
+
+  Future<void> _enqueueCloudWrite(
+    Future<void> Function(CloudRepository repository, String userId) action,
+  ) {
+    final CloudRepository? repository = cloudRepository;
+    final String? userId = activeUserId?.trim();
+    if (!settings.autoBackupEnabled ||
+        repository == null ||
+        userId == null ||
+        userId.isEmpty) {
+      return Future<void>.value();
+    }
+
+    _cloudWriteChain = _cloudWriteChain.then((_) async {
+      try {
+        await action(repository, userId);
+        _cloudError = null;
+        _setLastSyncedAt(DateTime.now());
+      } catch (error) {
+        _cloudError = _messageFor(error);
+        debugPrint('Gagal menulis ke Firestore: $error');
+      } finally {
+        notifyListeners();
+      }
+    });
+    return _cloudWriteChain;
+  }
+
+  void _setLastSyncedAt(DateTime value) {
+    _lastSyncedAt = value;
+    settings.setCloudLastSyncedAt(value);
+  }
+
+  String _messageFor(Object error) {
+    final String message = error.toString().replaceFirst('Exception: ', '');
+    return message.length > 120 ? '${message.substring(0, 117)}...' : message;
   }
 
   void _onDependencyChanged() {
@@ -363,6 +670,10 @@ class AppProvider extends ChangeNotifier {
 
   @override
   void dispose() {
+    unawaited(_tasksSubscription?.cancel());
+    unawaited(_transactionsSubscription?.cancel());
+    unawaited(_profileSubscription?.cancel());
+    unawaited(_metaSubscription?.cancel());
     settings.removeListener(_onDependencyChanged);
     theme.removeListener(_onDependencyChanged);
     settings.dispose();
