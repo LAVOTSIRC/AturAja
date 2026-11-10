@@ -108,15 +108,15 @@ class _HomeScreenState extends State<HomeScreen> {
 
   String _fallbackRoast(AppProvider app) {
     if (app.pendingTaskCount > 0 && app.totalExpense > app.budgetLimit) {
-      return 'Tugas masih menumpuk, pengeluaran juga lewat anggaran. Produktifnya jangan cuma di wishlist.';
+      return 'Dek, tugas masih menumpuk dan pengeluaran sudah lewat anggaran. Jangan cuma sibuk merencanakan; pilih satu tugas, kerjakan sekarang, lalu kendalikan checkout berikutnya.';
     }
     if (app.pendingTaskCount > 0) {
-      return '${app.pendingTaskCount} tugas masih menunggu. Jangan sampai to-do list lebih rajin daripada kamu.';
+      return 'Dek, ${app.pendingTaskCount} tugas masih menunggu. To-do list-mu sudah rajin mengingatkan, sekarang giliran kamu mulai satu tugas dan tuntaskan.';
     }
     if (app.totalExpense > app.budgetLimit) {
-      return 'Pengeluaran sudah melewati anggaran. Dompetmu butuh rapat evaluasi, bukan checkout lagi.';
+      return 'Dek, pengeluaran sudah melewati anggaran. Dompetmu tidak butuh alasan baru; tahan checkout dan cek lagi prioritasmu sebelum menambah transaksi.';
     }
-    return 'Tugas aman dan anggaran terkendali. Pertahankan, jangan sampai besok balik panik lagi.';
+    return 'Dek, tugas dan anggaranmu sedang terkendali. Jangan terlena; pertahankan kebiasaan ini supaya besok tidak kembali panik di menit terakhir.';
   }
 
   List<_QuickActionData> get quickActions => [
@@ -345,15 +345,15 @@ class _HomeScreenState extends State<HomeScreen> {
                                 children: [
                                   Text(
                                     urgentTasks.isEmpty
-                                        ? 'Tidak ada deadline mendesak'
-                                        : '${urgentTasks.length} tugas deadline mendesak',
+                                        ? 'Tidak ada tenggat dalam 24 jam'
+                                        : '${urgentTasks.length} tugas perlu segera dikerjakan',
                                     style: AppTypography.caption(c.onAlert)
                                         .copyWith(fontWeight: FontWeight.w600),
                                   ),
                                   const SizedBox(height: AppSpacing.xxs),
                                   Text(
                                     urgentTasks.isEmpty
-                                        ? 'Semua tugas masih terkendali.'
+                                        ? 'Belum ada tugas aktif yang jatuh tempo dalam 24 jam.'
                                         : urgentTasks
                                               .take(2)
                                               .map(
