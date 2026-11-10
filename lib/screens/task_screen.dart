@@ -196,7 +196,7 @@ class _TaskScreenState extends State<TaskScreen> {
   }
 
   List<TaskItem> get _filteredList {
-    return list.where((t) {
+    final List<TaskItem> filtered = list.where((t) {
       // 1. Status Filter
       bool matchesStatus = true;
       switch (activeFilter) {
@@ -222,6 +222,23 @@ class _TaskScreenState extends State<TaskScreen> {
 
       return matchesStatus && matchesCategory;
     }).toList();
+    filtered.sort((TaskItem a, TaskItem b) {
+      if (a.done != b.done) {
+        return a.done ? 1 : -1;
+      }
+      if (!a.done && a.urgent != b.urgent) {
+        return a.urgent ? -1 : 1;
+      }
+      final DateTime? aDate = a.dueDate;
+      final DateTime? bDate = b.dueDate;
+      if (aDate != null && bDate != null) {
+        return aDate.compareTo(bDate);
+      }
+      if (aDate != null) return -1;
+      if (bDate != null) return 1;
+      return a.id.compareTo(b.id);
+    });
+    return filtered;
   }
 
   @override

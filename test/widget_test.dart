@@ -412,7 +412,15 @@ void main() {
     await tester.tap(find.byTooltip('Tugas'));
     await tester.pumpAndSettle();
 
-    final TaskItem firstTask = app.tasks.first;
+    final TaskItem firstTask = app.tasks
+        .where((TaskItem task) => !task.done)
+        .reduce((TaskItem a, TaskItem b) {
+          final DateTime? aDate = a.dueDate;
+          final DateTime? bDate = b.dueDate;
+          if (aDate == null) return b;
+          if (bDate == null) return a;
+          return aDate.isBefore(bDate) ? a : b;
+        });
     final int before = app.tasks.length;
 
     final Finder firstTaskTile = find.byTooltip('Buka detail tugas').first;
