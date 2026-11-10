@@ -1,0 +1,127 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isOwner(userId) {
+      return request.auth != null && request.auth.uid == userId;
+    }
+
+    function isString(value, maxLength) {
+      return value is string && value.size() <= maxLength;
+    }
+
+    function isOptionalString(value, maxLength) {
+      return value == null || isString(value, maxLength);
+    }
+
+    function hasTimestamps(data) {
+      return data.createdAt is timestamp && data.updatedAt is timestamp;
+    }
+
+    function validTask(data) {
+      return data.keys().hasAll([
+          'title',
+          'categories',
+          'description',
+          'deadline',
+          'dueDate',
+          'done',
+          'legacyId',
+          'schemaVersion',
+          'createdAt',
+          'updatedAt'
+        ])
+        && isString(data.title, 200)
+        && data.categories is list
+        && data.categories.size() <= 10
+        && isString(data.description, 5000)
+        && isString(data.deadline, 200)
+        && (data.dueDate == null || data.dueDate is timestamp)
+        && data.done is bool
+        && isOptionalString(data.legacyId, 200)
+        && data.schemaVersion is int
+        && hasTimestamps(data);
+    }
+
+    function validTransaction(data) {
+      return data.keys().hasAll([
+          'label',
+          'amount',
+          'cat',
+          'time',
+          'date',
+          'consumtive',
+          'receiptImagePath',
+          'legacyId',
+          'schemaVersion',
+          'createdAt',
+          'updatedAt'
+        ])
+        && isString(data.label, 200)
+        && data.amount is int
+        && data.amount >= -1000000000
+        && data.amount <= 1000000000
+        && isString(data.cat, 50)
+        && isString(data.time, 20)
+        && isString(data.date, 50)
+        && data.consumtive is bool
+        && isOptionalString(data.receiptImagePath, 2000)
+        && isOptionalString(data.legacyId, 200)
+        && data.schemaVersion is int
+        && hasTimestamps(data);
+    }
+
+    function validProfile(data) {
+      return data.keys().hasAll([
+          'fullName',
+          'nim',
+          'program',
+          'avatarLabel',
+          'schemaVersion',
+          'updatedAt'
+        ])
+        && isString(data.fullName, 200)
+        && isString(data.nim, 50)
+        && isString(data.program, 200)
+        && isString(data.avatarLabel, 20)
+        && data.schemaVersion is int
+        && data.updatedAt is timestamp;
+    }
+
+    function validMeta(data) {
+      return data.schemaVersion is int && data.updatedAt is timestamp;
+    }
+
+    match /users/{userId} {
+      allow read, write: if isOwner(userId);
+
+      match /profile/{documentId} {
+        allow read, delete: if isOwner(userId);
+        allow create, update: if isOwner(userId) && validProfile(request.resource.data);
+      }
+
+      match /settings/{documentId} {
+        allow read, write: if isOwner(userId);
+      }
+
+      match /tasks/{documentId} {
+        allow read, delete: if isOwner(userId);
+        allow create, update: if isOwner(userId) && validTask(request.resource.data);
+      }
+
+      match /transactions/{documentId} {
+        allow read, delete: if isOwner(userId);
+        allow create, update: if isOwner(userId) && validTransaction(request.resource.data);
+      }
+
+      match /meta/{documentId} {
+        allow read, delete: if isOwner(userId);
+        allow create, update: if isOwner(userId) && validMeta(request.resource.data);
+      }
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
