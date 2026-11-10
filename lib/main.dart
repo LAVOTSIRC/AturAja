@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import 'config/routes.dart';
+import 'data/firestore_repository.dart';
 import 'providers/app_provider.dart';
 import 'providers/auth_provider.dart';
 import 'providers/settings_provider.dart';
@@ -32,6 +33,7 @@ Future<void> main() async {
   await auth.initialize();
   final AppProvider app = await AppProvider.loadPersistent(
     userId: auth.user?.uid,
+    cloudRepository: FirestoreCloudRepository(),
   );
   auth.addListener(() {
     unawaited(app.switchUser(auth.user?.uid));
