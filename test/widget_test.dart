@@ -864,6 +864,7 @@ void main() {
 
       expect(find.text('Konfirmasi & Catat'), findsOneWidget);
 
+      await tester.ensureVisible(find.text('Konfirmasi & Catat'));
       await tester.tap(find.text('Konfirmasi & Catat'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 650));
