@@ -1,8 +1,9 @@
-import 'dart:io' show Platform;
+import 'dart:io';
 
 import 'package:camera/camera.dart';
 import 'package:flutter/foundation.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 /// Error yang bisa ditampilkan langsung ke pengguna saat kamera gagal dibuka.
@@ -109,7 +110,17 @@ class ReceiptCamera {
       source: ImageSource.gallery,
       imageQuality: 90,
     );
-    return photo?.path;
+    if (photo == null) return null;
+
+    final Directory directory = await getApplicationDocumentsDirectory();
+    final String extension = photo.path.contains('.')
+        ? photo.path.substring(photo.path.lastIndexOf('.'))
+        : '.jpg';
+    final File copy = File(
+      '${directory.path}/receipt_${DateTime.now().microsecondsSinceEpoch}$extension',
+    );
+    await File(photo.path).copy(copy.path);
+    return copy.path;
   }
 
   static Future<void> openSettings() => openAppSettings();
