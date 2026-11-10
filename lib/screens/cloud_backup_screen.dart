@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../providers/settings_provider.dart';
+import '../providers/app_provider.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_typography.dart';
@@ -8,9 +8,9 @@ import '../theme/theme_scope.dart';
 import '../widgets/common.dart';
 
 class CloudBackupScreen extends StatefulWidget {
-  final SettingsController settings;
+  final AppProvider app;
 
-  const CloudBackupScreen({super.key, required this.settings});
+  const CloudBackupScreen({super.key, required this.app});
 
   @override
   State<CloudBackupScreen> createState() => _CloudBackupScreenState();
@@ -18,22 +18,42 @@ class CloudBackupScreen extends StatefulWidget {
 
 class _CloudBackupScreenState extends State<CloudBackupScreen> {
   Future<void> _syncNow() async {
-    await widget.settings.syncCloud();
-    if (!mounted) {
+    final AppProvider app = widget.app;
+    if (!app.canUseCloud) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Masuk ke akun terlebih dahulu untuk mencadangkan data.',
+          ),
+        ),
+      );
       return;
     }
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Cadangan cloud berhasil disinkronkan.')),
-    );
+    try {
+      await app.syncCloudNow();
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Cadangan cloud berhasil disinkronkan.')),
+      );
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Gagal menyinkronkan cloud: $error')),
+      );
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final SettingsController settings = widget.settings;
+    final AppProvider app = widget.app;
     return SettingsDetailScaffold(
       title: 'Cadangan Cloud',
       child: AnimatedBuilder(
-        animation: settings,
+        animation: app,
         builder: (BuildContext context, Widget? child) {
           final AppColors c = ThemeScope.of(context).colors;
           return SingleChildScrollView(
@@ -62,15 +82,21 @@ class _CloudBackupScreenState extends State<CloudBackupScreen> {
                             width: AppSpacing.iconBox,
                             height: AppSpacing.iconBox,
                             decoration: BoxDecoration(
-                              color: c.successDim,
+                              color: app.cloudError == null
+                                  ? c.successDim
+                                  : c.expenseDim,
                               borderRadius: BorderRadius.circular(
                                 AppSpacing.sm,
                               ),
                             ),
                             child: Icon(
-                              Icons.cloud_done_outlined,
+                              app.cloudError == null
+                                  ? Icons.cloud_done_outlined
+                                  : Icons.cloud_off_outlined,
                               size: AppSpacing.iconSmall,
-                              color: c.success,
+                              color: app.cloudError == null
+                                  ? c.success
+                                  : c.expense,
                             ),
                           ),
                           const SizedBox(width: AppSpacing.sm),
@@ -84,9 +110,34 @@ class _CloudBackupScreenState extends State<CloudBackupScreen> {
                                 ),
                                 const SizedBox(height: AppSpacing.xxs),
                                 Text(
-                                  settings.cloudSyncStatus,
+                                  app.cloudSyncStatus,
                                   style: AppTypography.label(c.text),
                                 ),
+                                if (app.hasPendingCloudWrites &&
+                                    !app.isCloudSyncing) ...[  
+                                  const SizedBox(height: AppSpacing.xxs),
+                                  Row(
+                                    children: [
+                                      Icon(
+                                        Icons.upload_outlined,
+                                        size: 13,
+                                        color: c.textMuted,
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        'Perubahan menunggu dikirim',
+                                        style: AppTypography.meta(c.textMuted),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                                if (app.cloudError != null) ...[
+                                  const SizedBox(height: AppSpacing.xxs),
+                                  Text(
+                                    app.cloudError!,
+                                    style: AppTypography.meta(c.expense),
+                                  ),
+                                ],
                               ],
                             ),
                           ),
@@ -97,15 +148,15 @@ class _CloudBackupScreenState extends State<CloudBackupScreen> {
                       Material(
                         color: c.transparent,
                         child: SwitchListTile(
-                          value: settings.autoBackupEnabled,
-                          onChanged: settings.setAutoBackup,
+                          value: app.settings.autoBackupEnabled,
+                          onChanged: app.settings.setAutoBackup,
                           contentPadding: EdgeInsets.zero,
                           title: Text(
                             'Auto-backup',
                             style: AppTypography.label(c.text),
                           ),
                           subtitle: Text(
-                            'Cadangkan otomatis saat aplikasi digunakan.',
+                            'Cadangkan otomatis setiap ada perubahan data.',
                             style: AppTypography.meta(c.textMuted),
                           ),
                           secondary: Icon(Icons.sync, color: c.blue),
@@ -120,7 +171,7 @@ class _CloudBackupScreenState extends State<CloudBackupScreen> {
                 const SectionLabel('Tindakan'),
                 AppCard(
                   padding: const EdgeInsets.all(AppSpacing.md),
-                  child: settings.isCloudSyncing
+                  child: app.isCloudSyncing
                       ? AppProcessingState(
                           message: 'Menyinkronkan data ke cloud...',
                           color: c.blue,
@@ -129,14 +180,14 @@ class _CloudBackupScreenState extends State<CloudBackupScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'Periksa koneksi sebelum menyinkronkan seluruh data lokal.',
+                              'Unggah seluruh data lokal ke Firestore. Data cloud yang sudah ada tidak dihapus.',
                               style: AppTypography.meta(c.textMuted),
                             ),
                             const SizedBox(height: AppSpacing.md),
                             SizedBox(
                               width: double.infinity,
                               child: PressableScale(
-                                onTap: _syncNow,
+                                onTap: app.canUseCloud ? _syncNow : null,
                                 semanticLabel: 'Sinkronkan cloud sekarang',
                                 tooltip: 'Sinkronkan sekarang',
                                 child: Container(
@@ -145,14 +196,20 @@ class _CloudBackupScreenState extends State<CloudBackupScreen> {
                                   ),
                                   alignment: Alignment.center,
                                   decoration: BoxDecoration(
-                                    color: c.blue,
+                                    color: app.canUseCloud
+                                        ? c.blue
+                                        : c.surfaceHigh,
                                     borderRadius: BorderRadius.circular(
                                       AppSpacing.sm,
                                     ),
                                   ),
                                   child: Text(
                                     'Sinkronkan Sekarang',
-                                    style: AppTypography.button(c.onAccent),
+                                    style: AppTypography.button(
+                                      app.canUseCloud
+                                          ? c.onAccent
+                                          : c.textMuted,
+                                    ),
                                   ),
                                 ),
                               ),

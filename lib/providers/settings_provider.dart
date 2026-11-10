@@ -5,13 +5,11 @@ class SettingsController extends ChangeNotifier {
   bool budgetAlertsEnabled = true;
   bool roastingAiEnabled = true;
   bool autoBackupEnabled = true;
-  bool isCloudSyncing = false;
   int monthlyBudgetLimit = 1200000;
   bool biometricLockEnabled = true;
   bool pinWasUpdated = false;
   bool accountDeletionRequested = false;
-  DateTime? lastSyncedAt = DateTime.now().subtract(const Duration(minutes: 10));
-  bool _isDisposed = false;
+  DateTime? lastSyncedAt;
 
   int get activeNotificationCount =>
       (deadlineNotificationsEnabled ? 1 : 0) +
@@ -26,9 +24,6 @@ class SettingsController extends ChangeNotifier {
   }
 
   String get cloudSyncStatus {
-    if (isCloudSyncing) {
-      return 'Menyinkronkan...';
-    }
     final DateTime? syncedAt = lastSyncedAt;
     if (syncedAt == null) {
       return 'Belum pernah';
@@ -60,12 +55,11 @@ class SettingsController extends ChangeNotifier {
     budgetAlertsEnabled = true;
     roastingAiEnabled = true;
     autoBackupEnabled = true;
-    isCloudSyncing = false;
     monthlyBudgetLimit = 1200000;
     biometricLockEnabled = true;
     pinWasUpdated = false;
     accountDeletionRequested = false;
-    lastSyncedAt = DateTime.now().subtract(const Duration(minutes: 10));
+    lastSyncedAt = null;
     notifyListeners();
   }
 
@@ -101,18 +95,11 @@ class SettingsController extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> syncCloud() async {
-    if (isCloudSyncing || _isDisposed) {
+  void setCloudLastSyncedAt(DateTime? value) {
+    if (lastSyncedAt == value) {
       return;
     }
-    isCloudSyncing = true;
-    notifyListeners();
-    await Future<void>.delayed(const Duration(milliseconds: 900));
-    if (_isDisposed) {
-      return;
-    }
-    lastSyncedAt = DateTime.now();
-    isCloudSyncing = false;
+    lastSyncedAt = value;
     notifyListeners();
   }
 
@@ -179,13 +166,6 @@ class SettingsController extends ChangeNotifier {
     if (syncedAt != null) {
       lastSyncedAt = DateTime.tryParse(syncedAt) ?? lastSyncedAt;
     }
-    isCloudSyncing = false;
     notifyListeners();
-  }
-
-  @override
-  void dispose() {
-    _isDisposed = true;
-    super.dispose();
   }
 }
