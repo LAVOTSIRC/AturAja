@@ -265,6 +265,50 @@ class _ScanScreenState extends State<ScanScreen>
     }
   }
 
+  Future<void> _pickReceiptFromGallery() async {
+    if (isProcessing || _isCameraInitializing) return;
+    setState(() {
+      isProcessing = true;
+      errorMessage = null;
+    });
+    try {
+      final String? path = await ReceiptCamera.pickFromGallery();
+      if (!mounted || path == null) {
+        if (mounted) setState(() => isProcessing = false);
+        return;
+      }
+      setState(() {
+        isProcessing = false;
+        _receiptImagePath = path;
+        step = _ScanStep.confirm;
+      });
+      await _releaseCamera();
+      final ReceiptOcrResult result = await _ocrService.recognizeFile(path);
+      if (!mounted) return;
+      setState(() {
+        if (result.merchant.isNotEmpty) {
+          merchantController.text = result.merchant;
+        }
+        if (result.total != null) {
+          amountController.text = result.total.toString();
+        }
+        if (result.date != null) {
+          dateController.text = _shortDate(result.date!);
+        }
+        errorMessage = null;
+      });
+    } on ReceiptOcrException catch (error) {
+      if (mounted) setState(() => errorMessage = error.message);
+    } catch (error) {
+      if (mounted) {
+        setState(() {
+          isProcessing = false;
+          errorMessage = 'Foto dari galeri tidak dapat diproses: $error';
+        });
+      }
+    }
+  }
+
   Future<void> _confirmScan() async {
     if (isProcessing) return;
     final AppProvider app = context.read<AppProvider>();
@@ -686,6 +730,15 @@ class _ScanScreenState extends State<ScanScreen>
                         'Ambil Foto Struk',
                         style: AppTypography.meta(
                           Colors.white.withValues(alpha: 0.7),
+                        ),
+                      ),
+                      const SizedBox(height: AppSpacing.xs),
+                      TextButton.icon(
+                        onPressed: _pickReceiptFromGallery,
+                        icon: const Icon(Icons.photo_library_outlined),
+                        label: const Text('Pilih dari galeri'),
+                        style: TextButton.styleFrom(
+                          foregroundColor: Colors.white,
                         ),
                       ),
                     ],
