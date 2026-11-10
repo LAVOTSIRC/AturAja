@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 
+import 'package:aturaja/data/cloud_repository.dart';
 import 'package:aturaja/data/models.dart';
 import 'package:aturaja/data/settings_controller.dart';
 import 'package:aturaja/main.dart';
@@ -23,6 +24,7 @@ import 'package:aturaja/theme/theme_scope.dart';
 import 'package:aturaja/widgets/quick_add_modal.dart';
 
 import 'helpers/fake_auth_service.dart';
+import 'helpers/fake_cloud_repository.dart';
 
 Future<AppProvider> pumpApp(
   WidgetTester tester, {
@@ -30,8 +32,16 @@ Future<AppProvider> pumpApp(
   bool isLoggedIn = true,
   bool settle = true,
   List<TransactionItem>? transactions,
+  CloudRepository? cloudRepository,
 }) async {
-  final AppProvider app = AppProvider.inMemory(transactions: transactions);
+  final AppProvider app = AppProvider.inMemory(
+    transactions: transactions,
+    activeUserId: cloudRepository == null ? null : testAuthUser.uid,
+    cloudRepository: cloudRepository,
+  );
+  if (cloudRepository != null) {
+    await app.connectCloud();
+  }
   final FakeAuthService authService = FakeAuthService(
     initialUser: isLoggedIn ? testAuthUser : null,
   );
@@ -518,7 +528,9 @@ void main() {
   testWidgets('Cloud sync shows progress and updates the Profile preview', (
     WidgetTester tester,
   ) async {
-    await pumpApp(tester);
+    final FakeCloudRepository cloud = FakeCloudRepository();
+    addTearDown(cloud.dispose);
+    await pumpApp(tester, cloudRepository: cloud);
     await tester.tap(find.byTooltip('Profil'));
     await tester.pumpAndSettle();
     await openProfileSetting(tester, 'Cadangan Cloud');
@@ -534,6 +546,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Baru saja'), findsOneWidget);
     expect(find.text('Cadangan cloud berhasil disinkronkan.'), findsOneWidget);
+    expect(cloud.profile?.fullName, ProfileData.initial.fullName);
     await returnFromSetting(tester);
     expect(find.text('Baru saja | Manual'), findsOneWidget);
   });
@@ -916,7 +929,7 @@ void main() {
       initialLocation: '/finance',
       transactions: const <TransactionItem>[
         TransactionItem(
-          id: 9003,
+          id: 'tx-9003',
           label: 'Belanja di Indomaret',
           amount: -28500,
           cat: 'belanja',
@@ -937,14 +950,14 @@ void main() {
         initialLocation: '/finance',
         transactions: const <TransactionItem>[
           TransactionItem(
-            id: 9001,
+            id: 'tx-9001',
             label: 'Makan siang kantin',
             amount: -50000,
             cat: 'food',
             time: '12:00',
           ),
           TransactionItem(
-            id: 9002,
+            id: 'tx-9002',
             label: 'Nonton bioskop',
             amount: -50000,
             cat: 'entertainment',
