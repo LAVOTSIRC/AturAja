@@ -4,14 +4,23 @@ class ReceiptOcrResult {
   final String merchant;
   final int? total;
   final DateTime? date;
+  final List<ReceiptItem> items;
   final String rawText;
 
   const ReceiptOcrResult({
     required this.merchant,
     required this.total,
     required this.date,
+    this.items = const <ReceiptItem>[],
     required this.rawText,
   });
+}
+
+class ReceiptItem {
+  final String name;
+  final int amount;
+
+  const ReceiptItem({required this.name, required this.amount});
 }
 
 class ReceiptOcrException implements Exception {
@@ -36,18 +45,37 @@ class ReceiptParser {
       merchant: _merchant(lines),
       total: _total(lines),
       date: _date(rawText, baseDate),
+      items: _items(lines),
       rawText: rawText,
     );
   }
 
   static String _merchant(List<String> lines) {
+    const List<String> knownMerchants = <String>[
+      'alfamart',
+      'indomaret',
+      'superindo',
+      'hypermart',
+      'minimarket',
+      'l convenience',
+    ];
+    for (final String line in lines) {
+      final String normalized = line.toLowerCase();
+      for (final String merchant in knownMerchants) {
+        if (normalized.contains(merchant)) {
+          return line.replaceAll(RegExp(r'[^A-Za-z0-9 &.-]'), '').trim();
+        }
+      }
+    }
+
     for (final String line in lines.take(5)) {
       final String normalized = line.toLowerCase();
       if (_containsDate(normalized) ||
           normalized.contains('total') ||
           normalized.contains('kasir') ||
           normalized.contains('telp') ||
-          _extractAmount(line) != null) {
+          _extractAmount(line) != null ||
+          _looksLikeProductLine(line, lines)) {
         continue;
       }
       final String cleaned = line.replaceAll(
@@ -64,28 +92,134 @@ class ReceiptParser {
     return '';
   }
 
-  static int? _total(List<String> lines) {
-    final List<String> priorityLines = lines
-        .where(
-          (String line) => RegExp(
-            r'\b(grand\s*total|total\s*bayar|total|amount\s*due|jumlah)\b',
-            caseSensitive: false,
-          ).hasMatch(line),
-        )
-        .toList();
-    for (final String line in <String>[
-      ...priorityLines.reversed,
-      ...lines.reversed,
-    ]) {
+  static List<ReceiptItem> _items(List<String> lines) {
+    final List<ReceiptItem> items = <ReceiptItem>[];
+    String? pendingName;
+    for (final String line in lines) {
+      if (_totalLabel.hasMatch(line) ||
+          _containsDate(line) ||
+          _isReceiptMetadata(line)) {
+        continue;
+      }
+
       final int? amount = _extractAmount(line);
-      if (amount != null && (priorityLines.isNotEmpty || amount > 0)) {
+      if (amount == null || amount < 1000) {
+        if (_isProductName(line)) pendingName = line;
+        continue;
+      }
+
+      final String name = _removeAmount(line);
+      if (_isQuantityOnly(name)) {
+        if (pendingName != null) {
+          items.add(ReceiptItem(name: pendingName, amount: amount));
+          pendingName = null;
+        }
+      } else if (_isProductName(name)) {
+        items.add(ReceiptItem(name: name, amount: amount));
+        pendingName = null;
+      } else if (pendingName != null) {
+        items.add(ReceiptItem(name: pendingName, amount: amount));
+        pendingName = null;
+      }
+    }
+    return items;
+  }
+
+  static bool _looksLikeProductLine(String line, List<String> lines) {
+    final int index = lines.indexOf(line);
+    return index >= 0 &&
+        index + 1 < lines.length &&
+        _isQuantityOnly(lines[index + 1]);
+  }
+
+  static bool _isReceiptMetadata(String line) {
+    final String normalized = line.toLowerCase();
+    return normalized.contains('kasir') ||
+        normalized.contains('telp') ||
+        normalized.contains('nomor') ||
+        normalized.contains('alamat') ||
+        normalized.contains('terima kasih');
+  }
+
+  static bool _isQuantityOnly(String value) =>
+      RegExp(r'^\s*\d+\s*x?\s*$', caseSensitive: false).hasMatch(value);
+
+  static bool _isProductName(String value) {
+    final String cleaned = value.trim();
+    return cleaned.length >= 2 &&
+        !RegExp(r'^\d+$').hasMatch(cleaned) &&
+        !_isQuantityOnly(cleaned);
+  }
+
+  static String _removeAmount(String line) {
+    final RegExpMatch? match = RegExp(
+      r'(?:rp\.?\s*)?[\d][\d\s.,]*\s*$',
+      caseSensitive: false,
+    ).firstMatch(line);
+    if (match == null) return line.trim();
+    return line
+        .substring(0, match.start)
+        .replaceFirst(RegExp(r'\s+\d+\s*x?\s*$', caseSensitive: false), '')
+        .trim();
+  }
+
+  static int? _total(List<String> lines) {
+    final List<String> priorityLines =
+        lines.where((String line) => _totalLabel.hasMatch(line)).toList()
+          ..sort((String a, String b) {
+            final int scoreDifference =
+                _totalLabelScore(b) - _totalLabelScore(a);
+            return scoreDifference != 0
+                ? scoreDifference
+                : -lines.indexOf(a) + lines.indexOf(b);
+          });
+
+    // Once a total label is found, never fall back to item quantities,
+    // dates, or phone numbers elsewhere on the receipt.
+    for (final String line in priorityLines) {
+      final int? amount = _extractAmount(line);
+      if (amount != null && amount > 0) {
         return amount;
       }
     }
-    return null;
+
+    // Some small receipts omit the word "total". In that case prefer the
+    // largest currency-like number, while ignoring date-only lines.
+    int? largestAmount;
+    for (final String line in lines) {
+      if (_containsDate(line)) continue;
+      final int? amount = _extractAmount(line);
+      if (amount != null && amount >= 1000) {
+        largestAmount = largestAmount == null || amount > largestAmount
+            ? amount
+            : largestAmount;
+      }
+    }
+    return largestAmount;
+  }
+
+  static final RegExp _totalLabel = RegExp(
+    r'\b(grand\s*total|total\s*bayar|total|amount\s*due|jumlah|subtotal)\b',
+    caseSensitive: false,
+  );
+
+  static int _totalLabelScore(String line) {
+    final String normalized = line.toLowerCase().replaceAll(
+      RegExp(r'\s+'),
+      ' ',
+    );
+    if (normalized.contains('grand total') ||
+        normalized.contains('total bayar')) {
+      return 3;
+    }
+    if (normalized.contains('total')) return 2;
+    return 1;
   }
 
   static int? _extractAmount(String line) {
+    if (_containsDate(line)) {
+      line = line.replaceAll(RegExp(r'\b\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b'), ' ');
+    }
     final Iterable<RegExpMatch> matches = RegExp(
       r'(?:rp\.?\s*)?(\d[\d\s.,]*)',
       caseSensitive: false,
@@ -102,7 +236,10 @@ class ReceiptParser {
   }
 
   static int? _parseAmount(String value) {
-    final String compact = value.replaceAll(' ', '');
+    String compact = value.replaceAll(' ', '');
+    while (compact.contains('..') || compact.contains(',,')) {
+      compact = compact.replaceAll('..', '.').replaceAll(',,', ',');
+    }
     if (compact.isEmpty || !RegExp(r'^\d[\d.,]*$').hasMatch(compact)) {
       return null;
     }

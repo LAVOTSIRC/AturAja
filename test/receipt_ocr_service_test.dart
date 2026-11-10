@@ -31,6 +31,35 @@ void main() {
     expect(result.total, 350000);
   });
 
+  test('ignores receipt date and item quantity when reading a total', () {
+    final ReceiptOcrResult result = ReceiptParser.parse(
+      'Alfamart\n'
+      'Cimory\n'
+      '1x 2.000\n'
+      'Cimory hazelnut\n'
+      '1x 9.000\n'
+      'AQUA 600 ML 1 5.000\n'
+      'Tanggal 10/11/2026\n'
+      'TOTAL BAYAR: Rp 28.500',
+    );
+
+    expect(result.merchant, 'Alfamart');
+    expect(result.total, 28500);
+    expect(result.date, DateTime(2026, 11, 10));
+    expect(
+      result.items.map((ReceiptItem item) => item.name),
+      containsAll(<String>['Cimory', 'Cimory hazelnut']),
+    );
+  });
+
+  test('accepts spaces and repeated separators from noisy OCR', () {
+    final ReceiptOcrResult result = ReceiptParser.parse(
+      'Warung\nTOTAL 28.. 500',
+    );
+
+    expect(result.total, 28500);
+  });
+
   test('returns nullable fields when text is too incomplete', () {
     final ReceiptOcrResult result = ReceiptParser.parse('struk buram');
 
