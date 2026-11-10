@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
@@ -14,11 +16,10 @@ import 'theme/app_colors.dart';
 import 'theme/app_spacing.dart';
 import 'theme/app_typography.dart';
 import 'theme/theme_scope.dart';
-import 'firebase_options.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  await Firebase.initializeApp();
   await FirebaseAppCheck.instance.activate(
     providerAndroid: kDebugMode
         ? const AndroidDebugProvider()
@@ -27,9 +28,14 @@ Future<void> main() async {
         ? const AppleDebugProvider()
         : const AppleAppAttestProvider(),
   );
-  final AppProvider app = await AppProvider.loadPersistent();
   final AuthProvider auth = AuthProvider(service: FirebaseAuthService());
   await auth.initialize();
+  final AppProvider app = await AppProvider.loadPersistent(
+    userId: auth.user?.uid,
+  );
+  auth.addListener(() {
+    unawaited(app.switchUser(auth.user?.uid));
+  });
   runApp(
     MultiProvider(
       providers: [

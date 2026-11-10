@@ -74,6 +74,7 @@ key.properties
 # API keys / OAuth client IDs. Ask the project owner for these files.
 /android/app/google-services.json
 /ios/Runner/GoogleService-Info.plist
+/lib/firebase_options.dart
 
 # Kotlin/Gradle build cache generated locally.
 /android/.kotlin/
