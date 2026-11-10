@@ -2,8 +2,9 @@
 
 AturAja adalah aplikasi mobile untuk membantu mahasiswa mengatur tugas,
 keuangan, dan rutinitas harian dalam satu tempat. Project ini dibuat dengan
-Flutter, menggunakan data lokal/dummy untuk kebutuhan demonstrasi, dan
-autentikasi Firebase untuk login email/password serta Google Sign-In.
+Flutter, memakai penyimpanan lokal sebagai cache, sinkronisasi data ke Cloud
+Firestore, dan autentikasi Firebase untuk login email/password serta Google
+Sign-In.
 
 ## Setup
 
@@ -65,6 +66,14 @@ Build release memakai Play Integrity untuk Android dan App Attest untuk iOS.
    Google Sign-In Android dapat meminta ID token. Jika belum ada, tambahkan
    aplikasi web pada project Firebase lalu unduh ulang file konfigurasi.
 5. Jalankan `flutter pub get` setelah mengambil perubahan dependency.
+6. Buat database **Cloud Firestore** mode Native di region `asia-southeast2`
+   untuk project `aturaja-ai`.
+7. Deploy aturan dan indeks Firestore dari root project:
+
+   ```bash
+   firebase use aturaja-ai
+   firebase deploy --only firestore:rules,firestore:indexes
+   ```
 
 Tanpa langkah tersebut, build Android akan gagal pada plugin Google Services dan
 aplikasi tidak dapat melakukan autentikasi. File `env.json` tidak digunakan pada
@@ -72,6 +81,30 @@ modul autentikasi ini. File hasil generate seperti
 `android/app/google-services.json` dan `lib/firebase_options.dart` bersifat
 environment-specific dan tidak di-commit; masing-masing developer perlu
 menyiapkannya secara lokal.
+
+### Struktur data Firestore
+
+Data disimpan di bawah dokumen pengguna yang hanya bisa diakses pemiliknya:
+
+```text
+users/{uid}/
+  profile/main
+  settings/app        # disiapkan; pengaturan saat ini masih lokal
+  tasks/{taskId}
+  transactions/{transactionId}
+  meta/state
+```
+
+ID dokumen memakai String. Data lokal lama yang masih memakai ID angka
+dipertahankan lewat field `legacyId` saat migrasi. Migrasi lokal ke cloud hanya
+berjalan sekali, yaitu ketika dokumen `profile/main` dan `meta/state` belum ada.
+Tugas dan transaksi menyimpan `createdAt` serta `updatedAt` memakai
+`serverTimestamp()` Firestore. Persistence offline Firestore juga diaktifkan.
+
+Aturan keamanan Firestore diuji dengan emulator memakai perintah pada tabel
+**Command Run**. Test tersebut memastikan pemilik bisa membaca/menulis datanya,
+pengguna lain ditolak, pengguna tanpa login ditolak, dan dokumen dengan field
+wajib yang tidak valid ditolak.
 
 ## Cara Menjalankan
 
@@ -106,7 +139,9 @@ Gunakan tombol **Daftar** untuk membuat akun email/password baru, atau tombol
 | `flutter run`                             | Menjalankan aplikasi pada device/emulator aktif.               |
 | `flutter run -d <device_id>`              | Menjalankan aplikasi pada device tertentu.                     |
 | `flutter analyze`                         | Memeriksa error dan lint Dart/Flutter.                         |
-| `flutter test`                            | Menjalankan widget test.                                       |
+| `flutter test`                            | Menjalankan seluruh test Dart/Flutter.                         |
+| `npm --prefix test/rules install`         | Memasang dependency test aturan Firestore.                     |
+| `firebase emulators:exec --only firestore --project demo-aturaja "npm --prefix test/rules test"` | Menguji `firestore.rules` di emulator. |
 | `flutter build apk --debug`               | Membuat APK debug.                                             |
 | `flutter build apk --release`             | Membuat APK release dengan signing debug untuk kebutuhan demo. |
 | `dart run tool/generate_splash_icon.dart` | Membuat ulang asset icon splash Android 12+.                   |
@@ -126,10 +161,15 @@ tema disimpan secara lokal melalui `SharedPreferences` dan tetap ada setelah
 restart. Data lokal dipisahkan berdasarkan UID Firebase, jadi akun yang berbeda
 tidak saling melihat tugas atau transaksi. Akun baru dimulai dari data kosong,
 sedangkan data lama dari versi sebelumnya dimigrasikan ke akun pertama yang
-masuk. Data ini belum disinkronkan antar perangkat; sinkronisasi cloud
-memerlukan Firestore dan belum termasuk dalam modul autentikasi ini. Status
-login tidak lagi disimpan sebagai flag lokal; sesi dikelola oleh Firebase
-Authentication.
+masuk.
+
+Tugas, transaksi, dan profil juga disinkronkan ke Cloud Firestore. Perubahan
+lokal langsung ditulis ke Firestore saat auto-backup aktif, dan snapshot cloud
+diterapkan kembali secara real-time. Tombol **Sinkronkan Sekarang** mengunggah
+seluruh data lokal tanpa menghapus data cloud yang sudah ada. Status sinkron di
+halaman Cadangan Cloud berasal dari metadata Firestore, bukan status simulasi.
+Pengaturan dan tema tetap disimpan lokal. Status login tidak disimpan sebagai
+flag lokal; sesi dikelola oleh Firebase Authentication.
 
 ### Data keuangan
 
@@ -213,7 +253,7 @@ menyediakan tombol menuju pengaturan izin.
 Dari tab **Profil**, skenario yang tersedia adalah:
 
 - Mengaktifkan/nonaktifkan notifikasi deadline, limit anggaran, dan Roasting AI.
-- Menjalankan sinkronisasi cloud simulasi.
+- Menjalankan sinkronisasi Cloud Firestore dan melihat status sinkron terakhir.
 - Mengubah limit anggaran.
 - Mengaktifkan/nonaktifkan kunci biometrik.
 - Membuka simulasi NLP.
