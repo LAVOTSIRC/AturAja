@@ -23,6 +23,18 @@ String _shortDate(DateTime date) {
   return '${twoDigits(date.day)}/${twoDigits(date.month)}/${date.year}';
 }
 
+String _formatReceiptAmount(int amount) {
+  final String digits = amount.toString();
+  final StringBuffer formatted = StringBuffer();
+  for (int index = 0; index < digits.length; index++) {
+    if (index > 0 && (digits.length - index) % 3 == 0) {
+      formatted.write('.');
+    }
+    formatted.write(digits[index]);
+  }
+  return formatted.toString();
+}
+
 class ScanScreen extends StatefulWidget {
   const ScanScreen({super.key});
 
@@ -48,6 +60,7 @@ class _ScanScreenState extends State<ScanScreen>
   bool _isCameraInitializing = false;
   String? errorMessage;
   String? _receiptImagePath;
+  ReceiptOcrResult? _ocrResult;
   CameraController? _cameraController;
   int _cameraSession = 0;
 
@@ -241,6 +254,7 @@ class _ScanScreenState extends State<ScanScreen>
           if (result.date != null) {
             dateController.text = _shortDate(result.date!);
           }
+          _ocrResult = result;
           errorMessage = null;
         });
       } on ReceiptOcrException catch (error) {
@@ -295,6 +309,7 @@ class _ScanScreenState extends State<ScanScreen>
         if (result.date != null) {
           dateController.text = _shortDate(result.date!);
         }
+        _ocrResult = result;
         errorMessage = null;
       });
     } on ReceiptOcrException catch (error) {
@@ -370,6 +385,7 @@ class _ScanScreenState extends State<ScanScreen>
       isProcessing = false;
       errorMessage = null;
       _receiptImagePath = null;
+      _ocrResult = null;
       merchantController.text = 'Belanja di Indomaret';
       amountController.text = '28500';
       dateController.text = 'Hari ini';
@@ -378,7 +394,26 @@ class _ScanScreenState extends State<ScanScreen>
     if (!_scanLineController.isAnimating) {
       _scanLineController.repeat(reverse: true);
     }
+
     unawaited(_initializeCamera());
+  }
+
+  List<Widget> _buildReceiptItemLines(AppColors c) {
+    final List<ReceiptItem> items = _ocrResult?.items ?? const <ReceiptItem>[];
+    if (items.isEmpty) {
+      return <Widget>[
+        Text(
+          'Detail produk tidak terbaca',
+          style: AppTypography.mono(c.textMuted),
+        ),
+      ];
+    }
+    return items.take(5).map((ReceiptItem item) {
+      return Text(
+        '${item.name} ......... ${_formatReceiptAmount(item.amount)}',
+        style: AppTypography.mono(c.textSub),
+      );
+    }).toList();
   }
 
   @override
@@ -882,18 +917,7 @@ class _ScanScreenState extends State<ScanScreen>
                         '${merchantController.text.toUpperCase()} · ${dateController.text}',
                         style: AppTypography.mono(c.textSub),
                       ),
-                      Text(
-                        'Aqua 600ml ......... 5.000',
-                        style: AppTypography.mono(c.textSub),
-                      ),
-                      Text(
-                        'Roti Tawar ......... 12.500',
-                        style: AppTypography.mono(c.textSub),
-                      ),
-                      Text(
-                        'Chitato ............ 11.000',
-                        style: AppTypography.mono(c.textSub),
-                      ),
+                      ..._buildReceiptItemLines(c),
                       Padding(
                         padding: const EdgeInsets.only(top: AppSpacing.xxs),
                         child: Container(
@@ -904,7 +928,8 @@ class _ScanScreenState extends State<ScanScreen>
                       Padding(
                         padding: const EdgeInsets.only(top: AppSpacing.xxs),
                         child: Text(
-                          'TOTAL .............. 28.500',
+                          'TOTAL .............. '
+                          '${_formatReceiptAmount(int.tryParse(amountController.text) ?? 0)}',
                           style: AppTypography.mono(c.text)
                               .copyWith(fontWeight: FontWeight.w600),
                         ),
@@ -923,7 +948,10 @@ class _ScanScreenState extends State<ScanScreen>
                           style: AppTypography.micro(c.textMuted),
                         ),
                         const SizedBox(height: AppSpacing.xxs),
-                        Text('Rp28.500', style: AppTypography.display(c.text)),
+                        Text(
+                          'Rp${_formatReceiptAmount(int.tryParse(amountController.text) ?? 0)}',
+                          style: AppTypography.display(c.text),
+                        ),
                       ],
                     ),
                     const SizedBox(width: AppSpacing.md),
