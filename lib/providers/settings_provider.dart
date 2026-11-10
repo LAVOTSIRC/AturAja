@@ -41,7 +41,7 @@ class SettingsController extends ChangeNotifier {
   String get cloudBackupStatus =>
       '$cloudSyncStatus | ${autoBackupEnabled ? 'Auto' : 'Manual'}';
 
-  String get nlpModelStatus => 'Model lokal v2.1';
+  String get nlpModelStatus => 'Demo NLP lokal';
 
   String get privacyStatus {
     if (accountDeletionRequested) {
