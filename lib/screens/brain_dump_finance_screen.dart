@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
+import '../data/id_generator.dart';
 import '../data/models.dart';
 import '../providers/app_provider.dart';
 import '../services/brain_dump_ai_service.dart';
@@ -351,13 +352,12 @@ class _BrainDumpFinanceScreenState extends State<BrainDumpFinanceScreen> {
       return;
     }
 
-    final int timestamp = DateTime.now().millisecondsSinceEpoch;
     final List<TransactionItem> notes = parsedItems.indexed.map((
       (int, BrainDumpItem) entry,
     ) {
       final BrainDumpItem item = entry.$2;
       return TransactionItem(
-        id: timestamp + entry.$1,
+        id: newDocumentId(),
         label: item.title,
         amount: item.type == BrainDumpItemType.income
             ? item.amount!
