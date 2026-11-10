@@ -1,10 +1,12 @@
 import 'dart:async';
 
+import 'package:firebase_ai/firebase_ai.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../data/models.dart';
 import '../providers/app_provider.dart';
+import '../services/roasting_ai_service.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_typography.dart';
@@ -50,6 +52,9 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   bool showRoast = false;
+  bool isRoastLoading = false;
+  String? roastMessage;
+  RoastingAiService? _roastingAiService;
   late final Timer _greetingTimer;
 
   @override
@@ -71,6 +76,47 @@ class _HomeScreenState extends State<HomeScreen> {
   void _showMessage(String message) {
     ScaffoldMessenger.maybeOf(context)
         ?.showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  Future<void> _showRoasting(AppProvider app) async {
+    if (!app.settings.roastingAiEnabled || isRoastLoading) {
+      return;
+    }
+    setState(() {
+      isRoastLoading = true;
+      showRoast = true;
+    });
+    try {
+      final RoastingAiService service =
+          _roastingAiService ??= RoastingAiService();
+      roastMessage = await service.generate(
+        totalExpense: app.totalExpense,
+        pendingTasks: app.pendingTaskCount,
+        transactionCount: app.transactions.length,
+      );
+    } on FirebaseAIException {
+      roastMessage = _fallbackRoast(app);
+    } on TimeoutException {
+      roastMessage = _fallbackRoast(app);
+    } on FormatException {
+      roastMessage = _fallbackRoast(app);
+    }
+    if (mounted) {
+      setState(() => isRoastLoading = false);
+    }
+  }
+
+  String _fallbackRoast(AppProvider app) {
+    if (app.pendingTaskCount > 0 && app.totalExpense > app.budgetLimit) {
+      return 'Tugas masih menumpuk, pengeluaran juga lewat anggaran. Produktifnya jangan cuma di wishlist.';
+    }
+    if (app.pendingTaskCount > 0) {
+      return '${app.pendingTaskCount} tugas masih menunggu. Jangan sampai to-do list lebih rajin daripada kamu.';
+    }
+    if (app.totalExpense > app.budgetLimit) {
+      return 'Pengeluaran sudah melewati anggaran. Dompetmu butuh rapat evaluasi, bukan checkout lagi.';
+    }
+    return 'Tugas aman dan anggaran terkendali. Pertahankan, jangan sampai besok balik panik lagi.';
   }
 
   List<_QuickActionData> get quickActions => [
@@ -151,13 +197,16 @@ class _HomeScreenState extends State<HomeScreen> {
                           tooltip: 'Notifikasi',
                           semanticLabel: 'Buka notifikasi',
                           showDot: true,
-                          onTap: () => setState(() => showRoast = true),
+                          onTap: () => unawaited(_showRoasting(app)),
                         ),
                       ],
                     ),
                   ),
-                  if (showRoast)
+                  if (showRoast && app.settings.roastingAiEnabled)
                     RoastingToast(
+                      message: isRoastLoading
+                          ? 'Roasting sedang dipanaskan...'
+                          : (roastMessage ?? _fallbackRoast(app)),
                       onClose: () => setState(() => showRoast = false),
                     ),
                   Container(
