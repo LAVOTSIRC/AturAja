@@ -13,12 +13,13 @@ class RoastingAiService {
     generationConfig: GenerationConfig(
       responseMimeType: 'text/plain',
       temperature: 0.8,
-      maxOutputTokens: 120,
+      maxOutputTokens: 220,
     ),
     systemInstruction: Content.system(
       'Kamu adalah Roasting AI ringan untuk aplikasi produktivitas mahasiswa. '
-      'Tulis satu kalimat roasting dalam Bahasa Indonesia yang lucu, singkat, '
-      'dan tidak menghina identitas, kondisi fisik, atau hal sensitif. '
+      'Tulis 2 sampai 3 kalimat roasting dalam Bahasa Indonesia yang lucu, '
+      'tegas, dan menyentil kebiasaan menunda. Boleh memakai sapaan "dek", '
+      'tetapi jangan menghina identitas, kondisi fisik, keluarga, atau hal sensitif. '
       'Gunakan hanya data ringkasan yang diberikan. Jangan mengarang fakta.',
     ),
   );
@@ -33,7 +34,8 @@ class RoastingAiService {
           Content.text(
             'Ringkasan pengguna: pengeluaran Rp$totalExpense, '
             '$pendingTasks tugas belum selesai, dan $transactionCount '
-            'transaksi tercatat. Buat satu roasting produktif.',
+            'transaksi tercatat. Buat roasting 2 sampai 3 kalimat yang '
+            'menusuk kebiasaan menunda tetapi tetap memotivasi.',
           ),
         ])
         .timeout(const Duration(seconds: 8));
