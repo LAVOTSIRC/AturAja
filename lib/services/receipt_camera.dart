@@ -2,6 +2,7 @@ import 'dart:io' show Platform;
 
 import 'package:camera/camera.dart';
 import 'package:flutter/foundation.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 /// Error yang bisa ditampilkan langsung ke pengguna saat kamera gagal dibuka.
@@ -101,6 +102,14 @@ class ReceiptCamera {
         'Gagal mengambil foto (${error.code}). Coba lagi.',
       );
     }
+  }
+
+  static Future<String?> pickFromGallery() async {
+    final XFile? photo = await ImagePicker().pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 90,
+    );
+    return photo?.path;
   }
 
   static Future<void> openSettings() => openAppSettings();
