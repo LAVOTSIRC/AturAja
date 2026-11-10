@@ -288,8 +288,13 @@ GoRouter createAppRouter({
                             .where((TaskItem task) => task.done)
                             .length,
                         totalSavings: app.balance,
+                        onLogout: () async {
+                          await app.save();
+                          if (context.mounted) {
+                            await context.read<AuthProvider>().signOut();
+                          }
+                        },
                         cloudBackupStatus: app.cloudBackupStatus,
-                        onLogout: context.read<AuthProvider>().signOut,
                       );
                     },
                   );

@@ -12,3 +12,8 @@ String formatRupiah(num value) {
   }
   return 'Rp$buffer';
 }
+
+String formatRupiahSigned(num value) {
+  final String sign = value < 0 ? '-' : '';
+  return '$sign${formatRupiah(value)}';
+}

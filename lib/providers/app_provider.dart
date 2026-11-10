@@ -11,6 +11,27 @@ import '../data/models.dart';
 import 'settings_provider.dart';
 import 'theme_provider.dart';
 
+int _compareTransactionsNewestFirst(TransactionItem a, TransactionItem b) {
+  final DateTime? aCreated = a.createdAt;
+  final DateTime? bCreated = b.createdAt;
+  if (aCreated != null && bCreated != null) {
+    return bCreated.compareTo(aCreated);
+  }
+  if (aCreated != null) {
+    return -1;
+  }
+  if (bCreated != null) {
+    return 1;
+  }
+
+  final int? aId = int.tryParse(a.id.split('-').first);
+  final int? bId = int.tryParse(b.id.split('-').first);
+  if (aId != null && bId != null) {
+    return bId.compareTo(aId);
+  }
+  return 0;
+}
+
 class AppProvider extends ChangeNotifier {
   AppStorage storage;
   final SettingsController settings;
@@ -362,8 +383,13 @@ class AppProvider extends ChangeNotifier {
   List<TransactionItem> get transactions =>
       List<TransactionItem>.unmodifiable(_transactions);
 
-  List<TransactionItem> get recentTransactions =>
-      _transactions.take(4).toList();
+  List<TransactionItem> get recentTransactions {
+    final List<TransactionItem> sorted = List<TransactionItem>.of(
+      _transactions,
+    );
+    sorted.sort(_compareTransactionsNewestFirst);
+    return sorted.take(4).toList();
+  }
 
   int get totalIncome => _transactions
       .where((TransactionItem item) => item.amount > 0)
@@ -537,11 +563,14 @@ class AppProvider extends ChangeNotifier {
   }
 
   Future<void> addTransaction(TransactionItem transaction) {
-    _transactions = <TransactionItem>[transaction, ..._transactions];
+    final TransactionItem stored = transaction.createdAt == null
+        ? transaction.copyWith(createdAt: DateTime.now())
+        : transaction;
+    _transactions = <TransactionItem>[stored, ..._transactions];
     _changed();
     return _enqueueCloudWrite(
       (CloudRepository repository, String userId) =>
-          repository.saveTransaction(userId, transaction),
+          repository.saveTransaction(userId, stored),
     );
   }
 
