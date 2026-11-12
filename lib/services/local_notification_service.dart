@@ -30,8 +30,7 @@ abstract interface class AppNotificationService {
 /// Notifikasi lokal untuk pengingat deadline dan peringatan anggaran.
 ///
 /// Jadwal disimpan oleh plugin Android/iOS sehingga tetap muncul walau
-/// aplikasi sedang ditutup. Waktu jadwal dikirim dalam UTC agar tidak
-/// bergantung pada konfigurasi zona waktu perangkat.
+/// aplikasi sedang ditutup. Deadline mengikuti waktu lokal Indonesia.
 class LocalNotificationService implements AppNotificationService {
   LocalNotificationService({FlutterLocalNotificationsPlugin? plugin})
     : _plugin = plugin ?? FlutterLocalNotificationsPlugin();
@@ -50,6 +49,9 @@ class LocalNotificationService implements AppNotificationService {
     }
 
     tz_data.initializeTimeZones();
+    // Deadline dipilih sebagai waktu lokal Indonesia. Tanpa lokasi ini,
+    // package timezone memakai UTC sebagai default dan jadwal bisa bergeser.
+    tz.setLocalLocation(tz.getLocation('Asia/Jakarta'));
 
     const AndroidInitializationSettings androidSettings =
         AndroidInitializationSettings('@mipmap/ic_launcher');
@@ -118,11 +120,12 @@ class LocalNotificationService implements AppNotificationService {
     }
 
     try {
+      final Duration remaining = task.dueDate!.difference(scheduledAt);
       await _plugin.zonedSchedule(
         id: _taskNotificationId(task.id),
         title: 'Deadline tugas',
-        body: '${task.title} akan mencapai tenggat dalam 1 jam.',
-        scheduledDate: tz.TZDateTime.from(scheduledAt.toUtc(), tz.UTC),
+        body: '${task.title} ${reminderBodyFor(remaining)}',
+        scheduledDate: tz.TZDateTime.from(scheduledAt, tz.local),
         notificationDetails: const NotificationDetails(
           android: AndroidNotificationDetails(
             _channelId,
@@ -220,6 +223,17 @@ class LocalNotificationService implements AppNotificationService {
       return oneHourBefore;
     }
     return now.add(const Duration(minutes: 1));
+  }
+
+  @visibleForTesting
+  static String reminderBodyFor(Duration remaining) {
+    if (remaining.inHours >= 1) {
+      return 'akan mencapai tenggat dalam 1 jam.';
+    }
+    if (remaining.inMinutes <= 1) {
+      return 'akan mencapai tenggat dalam kurang dari 1 menit.';
+    }
+    return 'akan mencapai tenggat dalam ${remaining.inMinutes} menit.';
   }
 
   static int _taskNotificationId(String taskId) =>
