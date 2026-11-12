@@ -80,6 +80,21 @@ void main() {
       );
     });
 
+    test('uses an accurate message for near and far deadlines', () {
+      expect(
+        LocalNotificationService.reminderBodyFor(const Duration(hours: 1)),
+        'akan mencapai tenggat dalam 1 jam.',
+      );
+      expect(
+        LocalNotificationService.reminderBodyFor(const Duration(minutes: 30)),
+        'akan mencapai tenggat dalam 30 menit.',
+      );
+      expect(
+        LocalNotificationService.reminderBodyFor(const Duration(minutes: 1)),
+        'akan mencapai tenggat dalam kurang dari 1 menit.',
+      );
+    });
+
     test('does not schedule overdue, completed, or undated tasks', () {
       expect(
         LocalNotificationService.reminderTimeFor(
