@@ -411,6 +411,16 @@ class AppProvider extends ChangeNotifier {
       .where((TransactionItem item) => item.amount < 0)
       .fold(0, (int sum, TransactionItem item) => sum + item.amount.abs());
 
+  int get monthlyExpense {
+    final DateTime now = DateTime.now();
+    return _transactions
+        .where(
+          (TransactionItem item) =>
+              item.amount < 0 && _transactionIsInMonth(item, now),
+        )
+        .fold(0, (int sum, TransactionItem item) => sum + item.amount.abs());
+  }
+
   int get balance => totalIncome - totalExpense;
 
   int get budgetLimit => settings.monthlyBudgetLimit;
@@ -749,13 +759,46 @@ class AppProvider extends ChangeNotifier {
     try {
       await service.check(
         userId: activeUserId,
-        spent: totalExpense,
+        spent: monthlyExpense,
         limit: settings.monthlyBudgetLimit,
         enabled: settings.budgetAlertsEnabled,
       );
     } catch (error) {
       debugPrint('Gagal memeriksa peringatan anggaran: $error');
     }
+  }
+
+  static bool _transactionIsInMonth(TransactionItem transaction, DateTime now) {
+    final DateTime? createdAt = transaction.createdAt;
+    if (createdAt != null) {
+      return createdAt.year == now.year && createdAt.month == now.month;
+    }
+
+    final DateTime? parsedDate = DateTime.tryParse(transaction.date);
+    if (parsedDate != null) {
+      return parsedDate.year == now.year && parsedDate.month == now.month;
+    }
+
+    final RegExpMatch? legacyDate = RegExp(
+      r'^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$',
+    ).firstMatch(transaction.date.trim());
+    if (legacyDate != null) {
+      final int? day = int.tryParse(legacyDate.group(1)!);
+      final int? month = int.tryParse(legacyDate.group(2)!);
+      final int? year = int.tryParse(legacyDate.group(3)!);
+      if (day == null || month == null || year == null) {
+        return false;
+      }
+      final DateTime candidate = DateTime(year, month, day);
+      return candidate.year == now.year &&
+          candidate.month == now.month &&
+          candidate.day == day;
+    }
+
+    final String normalized = transaction.date.trim().toLowerCase();
+    return normalized == 'hari ini' ||
+        (normalized == 'kemarin' &&
+            DateTime(now.year, now.month, now.day - 1).month == now.month);
   }
 
   Future<void> _enqueueCloudWrite(
