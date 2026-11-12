@@ -8,6 +8,8 @@ import '../data/app_storage.dart';
 import '../data/cloud_repository.dart';
 import '../data/id_generator.dart';
 import '../data/models.dart';
+import '../services/budget_alert_service.dart';
+import '../services/local_notification_service.dart';
 import 'settings_provider.dart';
 import 'theme_provider.dart';
 
@@ -37,6 +39,8 @@ class AppProvider extends ChangeNotifier {
   final SettingsController settings;
   final ThemeController theme;
   final CloudRepository? cloudRepository;
+  final AppNotificationService? notifications;
+  final BudgetAlertService? budgetAlerts;
 
   final SharedPreferences? preferences;
   String? activeUserId;
@@ -71,6 +75,8 @@ class AppProvider extends ChangeNotifier {
     this.preferences,
     this.activeUserId,
     this.cloudRepository,
+    this.notifications,
+    this.budgetAlerts,
   }) : tasks = List<TaskItem>.of(tasks),
        _transactions = List<TransactionItem>.of(
          transactions ?? sampleTransactions,
@@ -105,6 +111,8 @@ class AppProvider extends ChangeNotifier {
   static Future<AppProvider> loadPersistent({
     String? userId,
     CloudRepository? cloudRepository,
+    AppNotificationService? notifications,
+    BudgetAlertService? budgetAlerts,
   }) async {
     final SharedPreferences preferences = await SharedPreferences.getInstance();
     if (userId != null) {
@@ -121,6 +129,8 @@ class AppProvider extends ChangeNotifier {
       preferences: preferences,
       activeUserId: userId,
       cloudRepository: cloudRepository,
+      notifications: notifications,
+      budgetAlerts: budgetAlerts,
     );
     await provider.load();
     if (!isGuest && cloudRepository != null) {
@@ -299,6 +309,7 @@ class AppProvider extends ChangeNotifier {
       tasks = List<TaskItem>.of(value);
       notifyListeners();
       unawaited(save());
+      unawaited(_syncTaskReminders());
     }, onError: _handleCloudStreamError);
     _transactionsSubscription = repository.watchTransactions(userId).listen((
       List<TransactionItem> value,
@@ -306,6 +317,7 @@ class AppProvider extends ChangeNotifier {
       _transactions = List<TransactionItem>.of(value);
       notifyListeners();
       unawaited(save());
+      unawaited(_checkBudgetAlert());
     }, onError: _handleCloudStreamError);
     _profileSubscription = repository.watchProfile(userId).listen((
       ProfileData? value,
@@ -432,6 +444,8 @@ class AppProvider extends ChangeNotifier {
       if (raw == null || raw.trim().isEmpty) {
         _isLoading = false;
         await save();
+        unawaited(_syncTaskReminders());
+        unawaited(_checkBudgetAlert());
         return;
       }
 
@@ -482,6 +496,8 @@ class AppProvider extends ChangeNotifier {
       _isLoading = false;
     }
     notifyListeners();
+    unawaited(_syncTaskReminders());
+    unawaited(_checkBudgetAlert());
   }
 
   Map<String, dynamic> toJson() => <String, dynamic>{
@@ -512,6 +528,7 @@ class AppProvider extends ChangeNotifier {
   Future<void> addTask(TaskItem task) {
     tasks = <TaskItem>[...tasks, task];
     _changed();
+    unawaited(_syncTaskReminders());
     return _enqueueCloudWrite(
       (CloudRepository repository, String userId) =>
           repository.saveTask(userId, task),
@@ -527,6 +544,7 @@ class AppProvider extends ChangeNotifier {
     next[index] = task;
     tasks = next;
     _changed();
+    unawaited(_syncTaskReminders());
     return _enqueueCloudWrite(
       (CloudRepository repository, String userId) =>
           repository.saveTask(userId, task),
@@ -543,6 +561,7 @@ class AppProvider extends ChangeNotifier {
       return updated!;
     }).toList();
     _changed();
+    unawaited(_syncTaskReminders());
     if (updated == null) {
       return Future<void>.value();
     }
@@ -556,6 +575,7 @@ class AppProvider extends ChangeNotifier {
   Future<void> deleteTask(String id) {
     tasks = tasks.where((TaskItem task) => task.id != id).toList();
     _changed();
+    unawaited(notifications?.cancelTaskReminder(id));
     return _enqueueCloudWrite(
       (CloudRepository repository, String userId) =>
           repository.deleteTask(userId, id),
@@ -568,6 +588,7 @@ class AppProvider extends ChangeNotifier {
         : transaction;
     _transactions = <TransactionItem>[stored, ..._transactions];
     _changed();
+    unawaited(_checkBudgetAlert());
     return _enqueueCloudWrite(
       (CloudRepository repository, String userId) =>
           repository.saveTransaction(userId, stored),
@@ -585,6 +606,7 @@ class AppProvider extends ChangeNotifier {
     next[index] = transaction;
     _transactions = next;
     _changed();
+    unawaited(_checkBudgetAlert());
     return _enqueueCloudWrite(
       (CloudRepository repository, String userId) =>
           repository.saveTransaction(userId, transaction),
@@ -600,6 +622,7 @@ class AppProvider extends ChangeNotifier {
     }
     _transactions = next;
     _changed();
+    unawaited(_checkBudgetAlert());
     return _enqueueCloudWrite(
       (CloudRepository repository, String userId) =>
           repository.deleteTransaction(userId, id),
@@ -617,6 +640,7 @@ class AppProvider extends ChangeNotifier {
     next.insert(insertIndex, transaction);
     _transactions = next;
     _changed();
+    unawaited(_checkBudgetAlert());
     return _enqueueCloudWrite(
       (CloudRepository repository, String userId) =>
           repository.saveTransaction(userId, transaction),
@@ -630,6 +654,7 @@ class AppProvider extends ChangeNotifier {
       await repository.deleteAllUserData(userId);
     }
     await _disconnectCloud();
+    await notifications?.cancelAllTaskReminders();
     tasks = <TaskItem>[];
     _transactions = <TransactionItem>[];
     profile = ProfileData.empty;
@@ -639,6 +664,17 @@ class AppProvider extends ChangeNotifier {
     await save();
   }
 
+  /// Menghapus salinan lokal akun aktif setelah akun Firebase dihapus.
+  Future<void> clearLocalAccountData() async {
+    final SharedPreferences? prefs = preferences;
+    final String? userId = activeUserId?.trim();
+    if (prefs == null || userId == null || userId.isEmpty) {
+      return;
+    }
+    await prefs.remove(SharedPreferencesAppStorage.storageKeyFor(userId));
+    await prefs.remove(_migrationFlagKey(userId));
+  }
+
   Future<void> updateProfile(ProfileData value) {
     profile = value;
     _changed();
@@ -646,6 +682,80 @@ class AppProvider extends ChangeNotifier {
       (CloudRepository repository, String userId) =>
           repository.saveProfile(userId, value),
     );
+  }
+
+  Future<bool> requestNotificationPermission() async {
+    final AppNotificationService? service = notifications;
+    if (service == null) {
+      return true;
+    }
+    return service.requestPermissions();
+  }
+
+  Future<bool> setDeadlineNotifications(bool value) async {
+    if (value) {
+      final bool granted = await requestNotificationPermission();
+      if (!granted) {
+        return false;
+      }
+    }
+    settings.setDeadlineNotifications(value);
+    if (value) {
+      await _syncTaskReminders();
+    } else {
+      await notifications?.cancelAllTaskReminders();
+    }
+    return true;
+  }
+
+  Future<bool> setBudgetAlerts(bool value) async {
+    if (value) {
+      final bool granted = await requestNotificationPermission();
+      if (!granted) {
+        return false;
+      }
+    }
+    settings.setBudgetAlerts(value);
+    if (value) {
+      await _checkBudgetAlert();
+    }
+    return true;
+  }
+
+  Future<void> _syncTaskReminders() async {
+    final AppNotificationService? service = notifications;
+    if (service == null) {
+      return;
+    }
+    try {
+      final String? userId = activeUserId?.trim();
+      if (userId == null ||
+          userId.isEmpty ||
+          !settings.deadlineNotificationsEnabled) {
+        await service.cancelAllTaskReminders();
+        return;
+      }
+      await service.rescheduleTaskReminders(tasks);
+    } catch (error) {
+      debugPrint('Gagal menyinkronkan pengingat tugas: $error');
+    }
+  }
+
+  Future<void> _checkBudgetAlert() async {
+    final BudgetAlertService? service = budgetAlerts;
+    if (service == null) {
+      return;
+    }
+    try {
+      await service.check(
+        userId: activeUserId,
+        spent: totalExpense,
+        limit: settings.monthlyBudgetLimit,
+        enabled: settings.budgetAlertsEnabled,
+      );
+    } catch (error) {
+      debugPrint('Gagal memeriksa peringatan anggaran: $error');
+    }
   }
 
   Future<void> _enqueueCloudWrite(
@@ -690,6 +800,8 @@ class AppProvider extends ChangeNotifier {
     if (!_isLoading) {
       unawaited(save());
     }
+    unawaited(_syncTaskReminders());
+    unawaited(_checkBudgetAlert());
   }
 
   void _changed() {

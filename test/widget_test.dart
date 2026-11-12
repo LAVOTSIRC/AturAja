@@ -23,8 +23,10 @@ import 'package:aturaja/services/receipt_camera.dart';
 import 'package:aturaja/theme/theme_scope.dart';
 import 'package:aturaja/widgets/quick_add_modal.dart';
 
+import 'helpers/fake_app_lock_service.dart';
 import 'helpers/fake_auth_service.dart';
 import 'helpers/fake_cloud_repository.dart';
+import 'helpers/fake_data_export_service.dart';
 
 Future<AppProvider> pumpApp(
   WidgetTester tester, {
@@ -33,12 +35,16 @@ Future<AppProvider> pumpApp(
   bool settle = true,
   List<TransactionItem>? transactions,
   CloudRepository? cloudRepository,
+  FakeAppLockService? appLockService,
+  FakeDataExportService? exportService,
+  bool appLockEnabled = false,
 }) async {
   final AppProvider app = AppProvider.inMemory(
     transactions: transactions,
     activeUserId: cloudRepository == null ? null : testAuthUser.uid,
     cloudRepository: cloudRepository,
   );
+  app.settings.setBiometricLock(appLockEnabled);
   if (cloudRepository != null) {
     await app.connectCloud();
   }
@@ -60,7 +66,11 @@ Future<AppProvider> pumpApp(
         ChangeNotifierProvider<ThemeController>.value(value: app.theme),
         ChangeNotifierProvider<SettingsController>.value(value: app.settings),
       ],
-      child: MyApp(initialLocation: initialLocation),
+      child: MyApp(
+        initialLocation: initialLocation,
+        appLockService: appLockService ?? FakeAppLockService(),
+        exportService: exportService ?? FakeDataExportService(),
+      ),
     ),
   );
   if (settle) {
@@ -102,6 +112,11 @@ Future<void> returnFromSetting(WidgetTester tester) async {
   await tester.pumpAndSettle();
 }
 
+Finder textFieldWithLabel(String label) => find.byWidgetPredicate(
+  (Widget widget) =>
+      widget is TextField && widget.decoration?.labelText == label,
+);
+
 void main() {
   test('Home greeting follows the time of day', () {
     expect(greetingForHour(6), 'Selamat pagi');
@@ -123,6 +138,28 @@ void main() {
 
     expect(find.textContaining('Atur'), findsWidgets);
     expect(find.textContaining('Aja'), findsWidgets);
+  });
+
+  testWidgets('App lock requires PIN on launch', (WidgetTester tester) async {
+    final FakeAppLockService lockService = FakeAppLockService()..pin = '1234';
+    await pumpApp(tester, appLockService: lockService, appLockEnabled: true);
+
+    expect(find.text('AturAja terkunci'), findsOneWidget);
+    await tester.enterText(textFieldWithLabel('PIN aplikasi'), '0000');
+    await tester.tap(find.text('Buka dengan PIN'));
+    await tester.pumpAndSettle();
+    expect(find.text('PIN salah. Coba lagi.'), findsOneWidget);
+
+    await tester.enterText(textFieldWithLabel('PIN aplikasi'), '1234');
+    await tester.tap(find.text('Buka dengan PIN'));
+    await tester.pumpAndSettle();
+    expect(find.text('AturAja terkunci'), findsNothing);
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    await tester.pump();
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pumpAndSettle();
+    expect(find.text('AturAja terkunci'), findsOneWidget);
   });
 
   testWidgets('Home quick actions invoke matching callbacks', (
@@ -412,15 +449,22 @@ void main() {
     await tester.tap(find.byTooltip('Tugas'));
     await tester.pumpAndSettle();
 
-    final TaskItem firstTask = app.tasks
-        .where((TaskItem task) => !task.done)
-        .reduce((TaskItem a, TaskItem b) {
-          final DateTime? aDate = a.dueDate;
-          final DateTime? bDate = b.dueDate;
-          if (aDate == null) return b;
-          if (bDate == null) return a;
-          return aDate.isBefore(bDate) ? a : b;
-        });
+    final List<TaskItem> pendingTasks =
+        app.tasks.where((TaskItem task) => !task.done).toList()
+          ..sort((TaskItem a, TaskItem b) {
+            if (a.urgent != b.urgent) {
+              return a.urgent ? -1 : 1;
+            }
+            final DateTime? aDate = a.dueDate;
+            final DateTime? bDate = b.dueDate;
+            if (aDate != null && bDate != null) {
+              return aDate.compareTo(bDate);
+            }
+            if (aDate != null) return -1;
+            if (bDate != null) return 1;
+            return a.id.compareTo(b.id);
+          });
+    final TaskItem firstTask = pendingTasks.first;
     final int before = app.tasks.length;
 
     final Finder firstTaskTile = find.byTooltip('Buka detail tugas').first;
@@ -527,7 +571,7 @@ void main() {
 
     expect(find.byType(Switch), findsNWidgets(3));
     await tester.tap(find.byType(Switch).first);
-    await tester.pump();
+    await tester.pumpAndSettle();
     await returnFromSetting(tester);
 
     expect(find.text('2 dari 3 kategori aktif'), findsOneWidget);
@@ -645,31 +689,37 @@ void main() {
 
     await openProfileSetting(tester, 'Privasi & Keamanan');
     await tester.tap(find.byType(Switch));
+    await tester.pumpAndSettle();
+    expect(find.text('Buat PIN aplikasi'), findsOneWidget);
+    await tester.enterText(textFieldWithLabel('PIN baru'), '12');
+    await tester.enterText(textFieldWithLabel('Konfirmasi PIN'), '12');
+    await tester.tap(find.widgetWithText(TextButton, 'Simpan PIN'));
     await tester.pump();
+    expect(find.text('PIN harus terdiri dari 4-6 digit.'), findsOneWidget);
+    await tester.enterText(textFieldWithLabel('PIN baru'), '1234');
+    await tester.enterText(textFieldWithLabel('Konfirmasi PIN'), '1234');
+    await tester.tap(find.widgetWithText(TextButton, 'Simpan PIN'));
+    await tester.pumpAndSettle();
     await returnFromSetting(tester);
-    expect(find.text('Biometrik nonaktif'), findsOneWidget);
+    expect(find.text('Biometrik aktif'), findsOneWidget);
 
     await openProfileSetting(tester, 'Privasi & Keamanan');
     await tester.tap(find.text('Ubah PIN'));
     await tester.pumpAndSettle();
-    await tester.enterText(find.byType(TextField), '12');
-    await tester.tap(find.widgetWithText(TextButton, 'Simpan PIN'));
-    await tester.pump();
-    expect(find.text('PIN harus terdiri dari 4–6 digit.'), findsOneWidget);
-    await tester.enterText(find.byType(TextField), '1234');
+    expect(find.text('Verifikasi PIN'), findsOneWidget);
+    await tester.enterText(textFieldWithLabel('PIN saat ini'), '1234');
+    await tester.tap(find.widgetWithText(TextButton, 'Lanjut'));
+    await tester.pumpAndSettle();
+    await tester.enterText(textFieldWithLabel('PIN baru'), '5678');
+    await tester.enterText(textFieldWithLabel('Konfirmasi PIN'), '5678');
     await tester.tap(find.widgetWithText(TextButton, 'Simpan PIN'));
     await tester.pumpAndSettle();
-    expect(find.text('PIN telah diperbarui.'), findsOneWidget);
+    expect(find.text('PIN aplikasi berhasil diperbarui.'), findsOneWidget);
 
     await tester.ensureVisible(find.text('Ekspor data'));
     await tester.tap(find.text('Ekspor data'));
-    await tester.pump();
-    expect(find.text('Menyiapkan data...'), findsOneWidget);
-    await tester.pump(const Duration(milliseconds: 700));
     await tester.pumpAndSettle();
-    expect(find.text('Pratinjau Ekspor Data'), findsOneWidget);
-    await tester.tap(find.text('Tutup'));
-    await tester.pumpAndSettle();
+    expect(find.textContaining('File ekspor dibuat'), findsOneWidget);
 
     await tester.ensureVisible(find.text('Hapus akun'));
     await tester.tap(find.text('Hapus akun'));
@@ -677,23 +727,13 @@ void main() {
     expect(find.text('Hapus akun AturAja?'), findsOneWidget);
     await tester.tap(find.widgetWithText(TextButton, 'Batal'));
     await tester.pumpAndSettle();
-    expect(
-      find.text('Permintaan penghapusan akun sudah dicatat.'),
-      findsNothing,
-    );
+    expect(find.byType(LoginScreen), findsNothing);
 
     await tester.tap(find.text('Hapus akun'));
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(TextButton, 'Hapus Akun'));
-    await tester.pump();
-    expect(find.text('Menghapus akun...'), findsOneWidget);
-    await tester.pump(const Duration(milliseconds: 700));
     await tester.pumpAndSettle();
-    expect(find.text('Permintaan hapus akun telah dicatat.'), findsOneWidget);
-    expect(
-      find.text('Permintaan penghapusan akun sudah dicatat.'),
-      findsOneWidget,
-    );
+    expect(find.byType(LoginScreen), findsOneWidget);
   });
 
   testWidgets('Profile edit validates and updates the displayed identity', (

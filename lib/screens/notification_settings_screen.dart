@@ -9,8 +9,38 @@ import '../widgets/common.dart';
 
 class NotificationSettingsScreen extends StatelessWidget {
   final SettingsController settings;
+  final Future<bool> Function(bool value)? onDeadlineChanged;
+  final Future<bool> Function(bool value)? onBudgetAlertsChanged;
 
-  const NotificationSettingsScreen({super.key, required this.settings});
+  const NotificationSettingsScreen({
+    super.key,
+    required this.settings,
+    this.onDeadlineChanged,
+    this.onBudgetAlertsChanged,
+  });
+
+  Future<void> _applyToggle(
+    BuildContext context, {
+    required Future<bool> Function(bool value)? handler,
+    required ValueChanged<bool> fallback,
+    required bool value,
+  }) async {
+    if (handler == null) {
+      fallback(value);
+      return;
+    }
+    final bool applied = await handler(value);
+    if (!applied && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Izin notifikasi diperlukan. Aktifkan izin notifikasi AturAja '
+            'di pengaturan perangkat.',
+          ),
+        ),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -41,7 +71,12 @@ class NotificationSettingsScreen extends StatelessWidget {
                   title: 'Deadline Tugas',
                   subtitle: 'Pengingat sebelum tugas mencapai tenggat.',
                   value: settings.deadlineNotificationsEnabled,
-                  onChanged: settings.setDeadlineNotifications,
+                  onChanged: (bool value) => _applyToggle(
+                    context,
+                    handler: onDeadlineChanged,
+                    fallback: settings.setDeadlineNotifications,
+                    value: value,
+                  ),
                 ),
                 const SizedBox(height: AppSpacing.md),
                 const SectionLabel('Peringatan Anggaran'),
@@ -50,7 +85,12 @@ class NotificationSettingsScreen extends StatelessWidget {
                   title: 'Budget Alert',
                   subtitle: 'Peringatan saat pengeluaran mendekati limit.',
                   value: settings.budgetAlertsEnabled,
-                  onChanged: settings.setBudgetAlerts,
+                  onChanged: (bool value) => _applyToggle(
+                    context,
+                    handler: onBudgetAlertsChanged,
+                    fallback: settings.setBudgetAlerts,
+                    value: value,
+                  ),
                 ),
                 const SizedBox(height: AppSpacing.md),
                 const SectionLabel('Roasting AI'),
