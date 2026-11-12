@@ -1387,6 +1387,44 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
     return DateTime(date.year, date.month, date.day, hour, minute);
   }
 
+  DateTime? _parseDeadlineText(String text) {
+    final String lower = text.trim().toLowerCase();
+    final DateTime now = DateTime.now();
+    final RegExpMatch? timeMatch = RegExp(r'(\d{1,2}):(\d{2})')
+        .firstMatch(lower);
+    final int hour = int.tryParse(timeMatch?.group(1) ?? '') ?? 23;
+    final int minute = int.tryParse(timeMatch?.group(2) ?? '') ?? 59;
+    if (hour > 23 || minute > 59) {
+      return null;
+    }
+
+    DateTime date = DateTime(now.year, now.month, now.day);
+    if (lower.contains('besok')) {
+      date = date.add(const Duration(days: 1));
+    } else if (lower.contains('lusa')) {
+      date = date.add(const Duration(days: 2));
+    } else {
+      final RegExpMatch? numericDate = RegExp(
+        r'(\d{1,2})[/-](\d{1,2})(?:[/-](\d{4}))?',
+      ).firstMatch(lower);
+      if (numericDate != null) {
+        final int? day = int.tryParse(numericDate.group(1)!);
+        final int? month = int.tryParse(numericDate.group(2)!);
+        final int year = int.tryParse(numericDate.group(3) ?? '') ?? now.year;
+        if (day == null || month == null) {
+          return null;
+        }
+        date = DateTime(year, month, day);
+      } else if (!lower.contains('hari ini') &&
+          !lower.contains('today') &&
+          !lower.contains('23:59') &&
+          !lower.contains('08:00')) {
+        return null;
+      }
+    }
+    return DateTime(date.year, date.month, date.day, hour, minute);
+  }
+
   @override
   void initState() {
     super.initState();
@@ -1399,8 +1437,7 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
     descriptionController = TextEditingController(text: t?.description ?? '');
     brainDumpController = TextEditingController();
     selectedCategories = List.of(t?.categories ?? ['Tugas Kuliah']);
-    selectedDueDate =
-        t?.dueDate ?? DateTime.now().add(const Duration(hours: 12));
+    selectedDueDate = t?.dueDate ?? _parseDeadlineText(deadlineController.text);
   }
 
   @override
@@ -2251,6 +2288,13 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
                                   child: TextField(
                                     controller: deadlineController,
                                     style: AppTypography.bodyLarge(c.text),
+                                    onChanged: (String value) {
+                                      final DateTime? parsed =
+                                          _parseDeadlineText(value);
+                                      if (parsed != null) {
+                                        selectedDueDate = parsed;
+                                      }
+                                    },
                                     decoration: _cleanInputDecoration(
                                       c,
                                       hintText: 'misal: Besok, 08:00',
