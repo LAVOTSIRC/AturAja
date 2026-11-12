@@ -141,6 +141,50 @@ void main() {
       expect(service.signOutCalls, 1);
     });
 
+    test('deleteAccount menghapus sesi dan memanggil service', () async {
+      final FakeAuthService service = FakeAuthService(
+        initialUser: testAuthUser,
+      );
+      final AuthProvider auth = AuthProvider(service: service);
+      addTearDown(() {
+        auth.dispose();
+        service.dispose();
+      });
+      await auth.initialize();
+
+      await auth.deleteAccount();
+
+      expect(auth.status, AuthStatus.unauthenticated);
+      expect(auth.user, isNull);
+      expect(service.deleteAccountCalls, 1);
+    });
+
+    test('deleteAccount meneruskan requires-recent-login', () async {
+      final FakeAuthService service = FakeAuthService(initialUser: testAuthUser)
+        ..failure = const AuthFailure(
+          'requires-recent-login',
+          'Silakan login ulang.',
+        );
+      final AuthProvider auth = AuthProvider(service: service);
+      addTearDown(() {
+        auth.dispose();
+        service.dispose();
+      });
+      await auth.initialize();
+
+      await expectLater(
+        auth.deleteAccount(),
+        throwsA(
+          isA<AuthFailure>().having(
+            (AuthFailure failure) => failure.code,
+            'code',
+            'requires-recent-login',
+          ),
+        ),
+      );
+      expect(auth.isAuthenticated, isTrue);
+    });
+
     test('AuthFailure dari service diteruskan tanpa mengubah sesi', () async {
       final FakeAuthService service = FakeAuthService()
         ..failure = const AuthFailure('wrong-password', 'Kata sandi salah.');
