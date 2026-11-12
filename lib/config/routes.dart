@@ -5,6 +5,8 @@ import 'package:provider/provider.dart';
 import '../data/models.dart';
 import '../providers/app_provider.dart';
 import '../providers/auth_provider.dart';
+import '../services/app_lock_service.dart';
+import '../services/data_export_service.dart';
 import '../screens/brain_dump_finance_screen.dart';
 import '../screens/budget_limit_screen.dart';
 import '../screens/category_detail_screen.dart';
@@ -45,6 +47,8 @@ class AppRoutes {
 GoRouter createAppRouter({
   String initialLocation = AppRoutes.splash,
   required AuthProvider auth,
+  AppLockService? appLockService,
+  DataExportService? exportService,
 }) {
   return GoRouter(
     initialLocation: initialLocation,
@@ -162,8 +166,11 @@ GoRouter createAppRouter({
       GoRoute(
         path: AppRoutes.notificationSettings,
         builder: (BuildContext context, GoRouterState state) {
+          final AppProvider app = context.read<AppProvider>();
           return NotificationSettingsScreen(
-            settings: context.read<AppProvider>().settings,
+            settings: app.settings,
+            onDeadlineChanged: app.setDeadlineNotifications,
+            onBudgetAlertsChanged: app.setBudgetAlerts,
           );
         },
       ),
@@ -192,8 +199,13 @@ GoRouter createAppRouter({
       GoRoute(
         path: AppRoutes.privacySecurity,
         builder: (BuildContext context, GoRouterState state) {
+          final AppProvider app = context.read<AppProvider>();
           return PrivacySecurityScreen(
-            settings: context.read<AppProvider>().settings,
+            settings: app.settings,
+            app: app,
+            auth: context.read<AuthProvider>(),
+            appLockService: appLockService,
+            exportService: exportService,
           );
         },
       ),
