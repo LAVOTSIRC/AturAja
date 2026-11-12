@@ -19,6 +19,7 @@ class FakeAuthService implements AuthService {
   AuthUser? _currentUser;
   AuthFailure? failure;
   int signOutCalls = 0;
+  int deleteAccountCalls = 0;
   int googleSignInCalls = 0;
   String? lastEmail;
   String? lastPassword;
@@ -85,6 +86,16 @@ class FakeAuthService implements AuthService {
   @override
   Future<void> signOut() async {
     signOutCalls++;
+    _currentUser = null;
+    _controller.add(null);
+  }
+
+  @override
+  Future<void> deleteAccount() async {
+    deleteAccountCalls++;
+    if (failure != null) {
+      throw failure!;
+    }
     _currentUser = null;
     _controller.add(null);
   }
