@@ -6,6 +6,7 @@ import 'package:timezone/data/latest.dart' as tz_data;
 import 'package:timezone/timezone.dart' as tz;
 
 import '../data/models.dart';
+import 'notification_diag_log.dart';
 import 'notification_ids.dart';
 
 /// Kontrak layanan notifikasi agar provider dan test tidak bergantung langsung
@@ -40,6 +41,13 @@ abstract interface class AppNotificationService {
   });
 
   Future<void> cancelNotification(int id);
+
+  /// Meminta akses exact alarm via Android Intent ke Settings.
+  /// Mengembalikan [true] jika izin sudah tersedia SEBELUM membuka settings
+  /// (tidak perlu interaksi pengguna). Mengembalikan [false] jika layar settings
+  /// dibuka untuk meminta pengguna mengaktifkan secara manual.
+  /// Hanya berlaku untuk Android. Platform lain selalu return [true].
+  Future<bool> requestExactAlarmPermissionIfNeeded();
 }
 
 /// Kemampuan opsional untuk membersihkan Daily Roasting milik akun lain.
@@ -103,32 +111,58 @@ class LocalNotificationService
     try {
       await _plugin.initialize(settings: settings);
       _initialized = true;
+
+      // Pastikan channel notifikasi terdaftar di Android
+      if (!kIsWeb && Platform.isAndroid) {
+        final AndroidFlutterLocalNotificationsPlugin? android = _plugin
+            .resolvePlatformSpecificImplementation<
+                AndroidFlutterLocalNotificationsPlugin>();
+        await android?.createNotificationChannel(
+          const AndroidNotificationChannel(
+            _channelId,
+            _channelName,
+            description: _channelDescription,
+            importance: Importance.high,
+          ),
+        );
+      }
     } catch (error) {
       debugPrint('Gagal menginisialisasi notifikasi lokal: $error');
     }
   }
 
-  /// Memakai offset lokal perangkat, bukan zona hardcoded.
+  /// Memakai zona waktu IANA yang valid dan dikenali oleh platform Android/Java
+  /// sesuai offset perangkat (WIB, WITA, WIT, atau zona lain).
   @visibleForTesting
   static void applyDeviceLocalTimeZone({DateTime? now}) {
     final DateTime localNow = now ?? DateTime.now();
-    final String abbreviation = localNow.timeZoneName.trim().isEmpty
-        ? 'Local'
-        : localNow.timeZoneName.trim();
-    tz.setLocalLocation(
-      tz.Location(
-        'DeviceLocal',
-        const <int>[tz.minTime],
-        const <int>[0],
-        <tz.TimeZone>[
-          tz.TimeZone(
-            localNow.timeZoneOffset,
-            isDst: false,
-            abbreviation: abbreviation,
-          ),
-        ],
-      ),
-    );
+    final Duration offset = localNow.timeZoneOffset;
+    final int hours = offset.inHours;
+
+    String locationName;
+    if (hours == 7) {
+      locationName = 'Asia/Jakarta'; // WIB (UTC+7)
+    } else if (hours == 8) {
+      locationName = 'Asia/Makassar'; // WITA (UTC+8)
+    } else if (hours == 9) {
+      locationName = 'Asia/Jayapura'; // WIT (UTC+9)
+    } else if (hours == 0) {
+      locationName = 'UTC';
+    } else {
+      final int invHours = -hours;
+      final String sign = invHours >= 0 ? '+' : '-';
+      locationName = 'Etc/GMT$sign${invHours.abs()}';
+    }
+
+    try {
+      tz.setLocalLocation(tz.getLocation(locationName));
+    } catch (_) {
+      try {
+        tz.setLocalLocation(tz.getLocation('Asia/Jakarta'));
+      } catch (_) {
+        tz.setLocalLocation(tz.UTC);
+      }
+    }
   }
 
   @override
@@ -188,12 +222,19 @@ class LocalNotificationService
       ' scheduledAt=${scheduledAt?.toIso8601String() ?? "null (skipped)"}',
     );
 
+    final int notifId = taskNotificationId(task.id);
     if (scheduledAt == null) {
       debugPrint('[NotifDiag] Skipping: no reminder time (overdue, done, or no dueDate)');
+      NotificationDiagLog.instance.add(
+        category: 'task',
+        notifId: notifId,
+        mode: '-',
+        result: 'skipped',
+        message: 'Dilewati: deadline lewat, tugas selesai, atau tanpa dueDate.',
+      );
       return;
     }
 
-    final int notifId = taskNotificationId(task.id);
     final Duration remaining = task.dueDate!.difference(scheduledAt);
 
     // Determine whether exact alarms are available on this device.
@@ -223,6 +264,14 @@ class LocalNotificationService
         payload: 'task:${task.id}',
       );
       debugPrint('[NotifDiag] Scheduled notif id=$notifId at $scheduledAt (mode=$scheduleMode)');
+      NotificationDiagLog.instance.add(
+        category: 'task',
+        notifId: notifId,
+        scheduledAt: scheduledAt,
+        mode: scheduleMode == AndroidScheduleMode.exactAllowWhileIdle ? 'exact' : 'inexact',
+        result: 'scheduled',
+        message: 'Dijadwalkan pada $scheduledAt (mode=${scheduleMode.name})',
+      );
 
       // Verify the notification is actually pending.
       final List<PendingNotificationRequest> pending =
@@ -231,14 +280,32 @@ class LocalNotificationService
       debugPrint('[NotifDiag] Verification: notif id=$notifId found in pending=$found (total pending=${pending.length})');
     } catch (error) {
       debugPrint('[NotifDiag] FAILED to schedule notif id=$notifId: $error');
+      NotificationDiagLog.instance.add(
+        category: 'task',
+        notifId: notifId,
+        scheduledAt: scheduledAt,
+        mode: scheduleMode == AndroidScheduleMode.exactAllowWhileIdle ? 'exact' : 'inexact',
+        result: 'error',
+        message: 'Gagal menjadwalkan: $error',
+      );
+      rethrow;
     }
   }
 
   @override
   Future<void> cancelTaskReminder(String taskId) async {
     await initialize();
+    final int notifId = taskNotificationId(taskId);
     try {
-      await _plugin.cancel(id: taskNotificationId(taskId));
+      await _plugin.cancel(id: notifId);
+      NotificationDiagLog.instance.removeSchedule(notifId);
+      NotificationDiagLog.instance.add(
+        category: 'task',
+        notifId: notifId,
+        mode: '-',
+        result: 'cancelled',
+        message: 'Pengingat tugas $taskId dibatalkan.',
+      );
     } catch (error) {
       debugPrint('Gagal membatalkan pengingat tugas $taskId: $error');
     }
@@ -249,7 +316,11 @@ class LocalNotificationService
     await initialize();
     await cancelAllTaskReminders();
     for (final TaskItem task in tasks) {
-      await scheduleTaskReminder(task);
+      try {
+        await scheduleTaskReminder(task);
+      } catch (error) {
+        debugPrint('Gagal menjadwalkan tugas ${task.id}: $error');
+      }
     }
   }
 
@@ -264,6 +335,7 @@ class LocalNotificationService
       for (final PendingNotificationRequest request in pending) {
         if ((request.payload ?? '').startsWith('task:')) {
           await _plugin.cancel(id: request.id);
+          NotificationDiagLog.instance.removeSchedule(request.id);
         }
       }
     } catch (error) {
@@ -278,14 +350,31 @@ class LocalNotificationService
     required String body,
   }) async {
     await initialize();
-    // Let errors propagate so callers can decide whether to record success.
-    await _plugin.show(
-      id: id,
-      title: title,
-      body: body,
-      notificationDetails: _details(),
-      payload: 'budget',
-    );
+    try {
+      await _plugin.show(
+        id: id,
+        title: title,
+        body: body,
+        notificationDetails: _details(),
+        payload: 'budget',
+      );
+      NotificationDiagLog.instance.add(
+        category: 'budget',
+        notifId: id,
+        mode: 'immediate',
+        result: 'shown',
+        message: 'Budget alert ditampilkan ($title)',
+      );
+    } catch (error) {
+      NotificationDiagLog.instance.add(
+        category: 'budget',
+        notifId: id,
+        mode: 'immediate',
+        result: 'error',
+        message: 'Gagal menampilkan budget alert: $error',
+      );
+      rethrow;
+    }
   }
 
   @override
@@ -298,6 +387,14 @@ class LocalNotificationService
   }) async {
     await initialize();
     if (!scheduledAt.isAfter(DateTime.now())) {
+      NotificationDiagLog.instance.add(
+        category: 'daily',
+        notifId: id,
+        scheduledAt: scheduledAt,
+        mode: 'inexact',
+        result: 'skipped',
+        message: 'Waktu Daily Roasting sudah lewat.',
+      );
       return false;
     }
     try {
@@ -311,9 +408,25 @@ class LocalNotificationService
         androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
         payload: payload,
       );
+      NotificationDiagLog.instance.add(
+        category: 'daily',
+        notifId: id,
+        scheduledAt: scheduledAt,
+        mode: 'inexact',
+        result: 'scheduled',
+        message: 'Daily Roasting dijadwalkan pada $scheduledAt.',
+      );
       return true;
     } catch (error) {
       debugPrint('Gagal menjadwalkan Daily Roasting: $error');
+      NotificationDiagLog.instance.add(
+        category: 'daily',
+        notifId: id,
+        scheduledAt: scheduledAt,
+        mode: 'inexact',
+        result: 'error',
+        message: 'Gagal menjadwalkan Daily Roasting: $error',
+      );
       return false;
     }
   }
@@ -323,8 +436,112 @@ class LocalNotificationService
     await initialize();
     try {
       await _plugin.cancel(id: id);
+      NotificationDiagLog.instance.removeSchedule(id);
+      NotificationDiagLog.instance.add(
+        category: 'general',
+        notifId: id,
+        mode: '-',
+        result: 'cancelled',
+        message: 'Notifikasi $id dibatalkan.',
+      );
     } catch (error) {
       debugPrint('Gagal membatalkan notifikasi $id: $error');
+    }
+  }
+
+  bool get isInitialized => _initialized;
+
+  Future<bool> areNotificationsEnabled() async {
+    if (kIsWeb) return false;
+    if (Platform.isAndroid) {
+      final AndroidFlutterLocalNotificationsPlugin? android = _plugin
+          .resolvePlatformSpecificImplementation<
+              AndroidFlutterLocalNotificationsPlugin>();
+      return await android?.areNotificationsEnabled() ?? false;
+    }
+    return true;
+  }
+
+  Future<bool> canScheduleExactNotifications() async {
+    if (kIsWeb) return false;
+    if (Platform.isAndroid) {
+      final AndroidFlutterLocalNotificationsPlugin? android = _plugin
+          .resolvePlatformSpecificImplementation<
+              AndroidFlutterLocalNotificationsPlugin>();
+      return await android?.canScheduleExactNotifications() ?? false;
+    }
+    return true;
+  }
+
+  Future<List<PendingNotificationRequest>> getPendingNotificationRequests() async {
+    return _plugin.pendingNotificationRequests();
+  }
+
+  Future<List<AndroidNotificationChannel>?> getNotificationChannels() async {
+    if (kIsWeb) return null;
+    if (Platform.isAndroid) {
+      final AndroidFlutterLocalNotificationsPlugin? android = _plugin
+          .resolvePlatformSpecificImplementation<
+              AndroidFlutterLocalNotificationsPlugin>();
+      return await android?.getNotificationChannels();
+    }
+    return null;
+  }
+
+  Future<void> showTestNotification({
+    required int id,
+    required String title,
+    required String body,
+    String? payload,
+  }) async {
+    await initialize();
+    try {
+      await _plugin.show(
+        id: id,
+        title: title,
+        body: body,
+        notificationDetails: _details(),
+        payload: payload ?? 'debug:test',
+      );
+      NotificationDiagLog.instance.add(
+        category: 'test',
+        notifId: id,
+        mode: 'immediate',
+        result: 'shown',
+        message: 'Test notification berhasil ditampilkan ($title).',
+      );
+    } catch (error) {
+      NotificationDiagLog.instance.add(
+        category: 'test',
+        notifId: id,
+        mode: 'immediate',
+        result: 'error',
+        message: 'Gagal menampilkan test notification: $error',
+      );
+      rethrow;
+    }
+  }
+
+  @override
+  Future<bool> requestExactAlarmPermissionIfNeeded() async {
+    if (kIsWeb) return true;
+    if (!Platform.isAndroid) return true;
+
+    try {
+      final AndroidFlutterLocalNotificationsPlugin? android = _plugin
+          .resolvePlatformSpecificImplementation<
+              AndroidFlutterLocalNotificationsPlugin>();
+      final bool? canExact = await android?.canScheduleExactNotifications();
+      if (canExact == true) {
+        return true;
+      }
+      // Request via Settings intent (Android 12+ / API 31+).
+      await android?.requestExactAlarmsPermission();
+      debugPrint('[NotifDiag] requestExactAlarmPermissionIfNeeded: opened Settings for exact alarm permission.');
+      return false;
+    } catch (error) {
+      debugPrint('[NotifDiag] requestExactAlarmPermissionIfNeeded error: $error');
+      return false;
     }
   }
 
