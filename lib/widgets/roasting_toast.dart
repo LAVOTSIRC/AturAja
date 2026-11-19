@@ -7,9 +7,14 @@ import '../theme/theme_scope.dart';
 import 'common.dart';
 
 class RoastingToast extends StatelessWidget {
+  final String message;
   final VoidCallback onClose;
 
-  const RoastingToast({super.key, required this.onClose});
+  const RoastingToast({
+    super.key,
+    required this.message,
+    required this.onClose,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -51,7 +56,7 @@ class RoastingToast extends StatelessWidget {
                 ),
                 const SizedBox(height: AppSpacing.xxs),
                 Text(
-                  'Bro, lu habis duit buat Spotify & kopi tapi Laporan Praktikum belum kelar? Prioritas lu dimana bestie?',
+                  message,
                   style: AppTypography.caption(c.textSub).copyWith(height: 1.5),
                 ),
               ],

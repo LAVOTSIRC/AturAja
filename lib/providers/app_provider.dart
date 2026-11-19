@@ -8,14 +8,39 @@ import '../data/app_storage.dart';
 import '../data/cloud_repository.dart';
 import '../data/id_generator.dart';
 import '../data/models.dart';
+import '../services/budget_alert_service.dart';
+import '../services/local_notification_service.dart';
 import 'settings_provider.dart';
 import 'theme_provider.dart';
+
+int _compareTransactionsNewestFirst(TransactionItem a, TransactionItem b) {
+  final DateTime? aCreated = a.createdAt;
+  final DateTime? bCreated = b.createdAt;
+  if (aCreated != null && bCreated != null) {
+    return bCreated.compareTo(aCreated);
+  }
+  if (aCreated != null) {
+    return -1;
+  }
+  if (bCreated != null) {
+    return 1;
+  }
+
+  final int? aId = int.tryParse(a.id.split('-').first);
+  final int? bId = int.tryParse(b.id.split('-').first);
+  if (aId != null && bId != null) {
+    return bId.compareTo(aId);
+  }
+  return 0;
+}
 
 class AppProvider extends ChangeNotifier {
   AppStorage storage;
   final SettingsController settings;
   final ThemeController theme;
   final CloudRepository? cloudRepository;
+  final AppNotificationService? notifications;
+  final BudgetAlertService? budgetAlerts;
 
   final SharedPreferences? preferences;
   String? activeUserId;
@@ -50,6 +75,8 @@ class AppProvider extends ChangeNotifier {
     this.preferences,
     this.activeUserId,
     this.cloudRepository,
+    this.notifications,
+    this.budgetAlerts,
   }) : tasks = List<TaskItem>.of(tasks),
        _transactions = List<TransactionItem>.of(
          transactions ?? sampleTransactions,
@@ -84,6 +111,8 @@ class AppProvider extends ChangeNotifier {
   static Future<AppProvider> loadPersistent({
     String? userId,
     CloudRepository? cloudRepository,
+    AppNotificationService? notifications,
+    BudgetAlertService? budgetAlerts,
   }) async {
     final SharedPreferences preferences = await SharedPreferences.getInstance();
     if (userId != null) {
@@ -100,6 +129,8 @@ class AppProvider extends ChangeNotifier {
       preferences: preferences,
       activeUserId: userId,
       cloudRepository: cloudRepository,
+      notifications: notifications,
+      budgetAlerts: budgetAlerts,
     );
     await provider.load();
     if (!isGuest && cloudRepository != null) {
@@ -278,6 +309,7 @@ class AppProvider extends ChangeNotifier {
       tasks = List<TaskItem>.of(value);
       notifyListeners();
       unawaited(save());
+      unawaited(_syncTaskReminders());
     }, onError: _handleCloudStreamError);
     _transactionsSubscription = repository.watchTransactions(userId).listen((
       List<TransactionItem> value,
@@ -285,6 +317,7 @@ class AppProvider extends ChangeNotifier {
       _transactions = List<TransactionItem>.of(value);
       notifyListeners();
       unawaited(save());
+      unawaited(_checkBudgetAlert());
     }, onError: _handleCloudStreamError);
     _profileSubscription = repository.watchProfile(userId).listen((
       ProfileData? value,
@@ -362,8 +395,13 @@ class AppProvider extends ChangeNotifier {
   List<TransactionItem> get transactions =>
       List<TransactionItem>.unmodifiable(_transactions);
 
-  List<TransactionItem> get recentTransactions =>
-      _transactions.take(4).toList();
+  List<TransactionItem> get recentTransactions {
+    final List<TransactionItem> sorted = List<TransactionItem>.of(
+      _transactions,
+    );
+    sorted.sort(_compareTransactionsNewestFirst);
+    return sorted.take(4).toList();
+  }
 
   int get totalIncome => _transactions
       .where((TransactionItem item) => item.amount > 0)
@@ -372,6 +410,16 @@ class AppProvider extends ChangeNotifier {
   int get totalExpense => _transactions
       .where((TransactionItem item) => item.amount < 0)
       .fold(0, (int sum, TransactionItem item) => sum + item.amount.abs());
+
+  int get monthlyExpense {
+    final DateTime now = DateTime.now();
+    return _transactions
+        .where(
+          (TransactionItem item) =>
+              item.amount < 0 && _transactionIsInMonth(item, now),
+        )
+        .fold(0, (int sum, TransactionItem item) => sum + item.amount.abs());
+  }
 
   int get balance => totalIncome - totalExpense;
 
@@ -406,6 +454,8 @@ class AppProvider extends ChangeNotifier {
       if (raw == null || raw.trim().isEmpty) {
         _isLoading = false;
         await save();
+        unawaited(_syncTaskReminders());
+        unawaited(_checkBudgetAlert());
         return;
       }
 
@@ -456,6 +506,8 @@ class AppProvider extends ChangeNotifier {
       _isLoading = false;
     }
     notifyListeners();
+    unawaited(_syncTaskReminders());
+    unawaited(_checkBudgetAlert());
   }
 
   Map<String, dynamic> toJson() => <String, dynamic>{
@@ -486,6 +538,7 @@ class AppProvider extends ChangeNotifier {
   Future<void> addTask(TaskItem task) {
     tasks = <TaskItem>[...tasks, task];
     _changed();
+    unawaited(_syncTaskReminders());
     return _enqueueCloudWrite(
       (CloudRepository repository, String userId) =>
           repository.saveTask(userId, task),
@@ -501,6 +554,7 @@ class AppProvider extends ChangeNotifier {
     next[index] = task;
     tasks = next;
     _changed();
+    unawaited(_syncTaskReminders());
     return _enqueueCloudWrite(
       (CloudRepository repository, String userId) =>
           repository.saveTask(userId, task),
@@ -517,6 +571,7 @@ class AppProvider extends ChangeNotifier {
       return updated!;
     }).toList();
     _changed();
+    unawaited(_syncTaskReminders());
     if (updated == null) {
       return Future<void>.value();
     }
@@ -530,6 +585,7 @@ class AppProvider extends ChangeNotifier {
   Future<void> deleteTask(String id) {
     tasks = tasks.where((TaskItem task) => task.id != id).toList();
     _changed();
+    unawaited(notifications?.cancelTaskReminder(id));
     return _enqueueCloudWrite(
       (CloudRepository repository, String userId) =>
           repository.deleteTask(userId, id),
@@ -537,11 +593,15 @@ class AppProvider extends ChangeNotifier {
   }
 
   Future<void> addTransaction(TransactionItem transaction) {
-    _transactions = <TransactionItem>[transaction, ..._transactions];
+    final TransactionItem stored = transaction.createdAt == null
+        ? transaction.copyWith(createdAt: DateTime.now())
+        : transaction;
+    _transactions = <TransactionItem>[stored, ..._transactions];
     _changed();
+    unawaited(_checkBudgetAlert());
     return _enqueueCloudWrite(
       (CloudRepository repository, String userId) =>
-          repository.saveTransaction(userId, transaction),
+          repository.saveTransaction(userId, stored),
     );
   }
 
@@ -556,6 +616,7 @@ class AppProvider extends ChangeNotifier {
     next[index] = transaction;
     _transactions = next;
     _changed();
+    unawaited(_checkBudgetAlert());
     return _enqueueCloudWrite(
       (CloudRepository repository, String userId) =>
           repository.saveTransaction(userId, transaction),
@@ -571,6 +632,7 @@ class AppProvider extends ChangeNotifier {
     }
     _transactions = next;
     _changed();
+    unawaited(_checkBudgetAlert());
     return _enqueueCloudWrite(
       (CloudRepository repository, String userId) =>
           repository.deleteTransaction(userId, id),
@@ -588,6 +650,7 @@ class AppProvider extends ChangeNotifier {
     next.insert(insertIndex, transaction);
     _transactions = next;
     _changed();
+    unawaited(_checkBudgetAlert());
     return _enqueueCloudWrite(
       (CloudRepository repository, String userId) =>
           repository.saveTransaction(userId, transaction),
@@ -601,6 +664,7 @@ class AppProvider extends ChangeNotifier {
       await repository.deleteAllUserData(userId);
     }
     await _disconnectCloud();
+    await notifications?.cancelAllTaskReminders();
     tasks = <TaskItem>[];
     _transactions = <TransactionItem>[];
     profile = ProfileData.empty;
@@ -610,6 +674,17 @@ class AppProvider extends ChangeNotifier {
     await save();
   }
 
+  /// Menghapus salinan lokal akun aktif setelah akun Firebase dihapus.
+  Future<void> clearLocalAccountData() async {
+    final SharedPreferences? prefs = preferences;
+    final String? userId = activeUserId?.trim();
+    if (prefs == null || userId == null || userId.isEmpty) {
+      return;
+    }
+    await prefs.remove(SharedPreferencesAppStorage.storageKeyFor(userId));
+    await prefs.remove(_migrationFlagKey(userId));
+  }
+
   Future<void> updateProfile(ProfileData value) {
     profile = value;
     _changed();
@@ -617,6 +692,113 @@ class AppProvider extends ChangeNotifier {
       (CloudRepository repository, String userId) =>
           repository.saveProfile(userId, value),
     );
+  }
+
+  Future<bool> requestNotificationPermission() async {
+    final AppNotificationService? service = notifications;
+    if (service == null) {
+      return true;
+    }
+    return service.requestPermissions();
+  }
+
+  Future<bool> setDeadlineNotifications(bool value) async {
+    if (value) {
+      final bool granted = await requestNotificationPermission();
+      if (!granted) {
+        return false;
+      }
+    }
+    settings.setDeadlineNotifications(value);
+    if (value) {
+      await _syncTaskReminders();
+    } else {
+      await notifications?.cancelAllTaskReminders();
+    }
+    return true;
+  }
+
+  Future<bool> setBudgetAlerts(bool value) async {
+    if (value) {
+      final bool granted = await requestNotificationPermission();
+      if (!granted) {
+        return false;
+      }
+    }
+    settings.setBudgetAlerts(value);
+    if (value) {
+      await _checkBudgetAlert();
+    }
+    return true;
+  }
+
+  Future<void> _syncTaskReminders() async {
+    final AppNotificationService? service = notifications;
+    if (service == null) {
+      return;
+    }
+    try {
+      final String? userId = activeUserId?.trim();
+      if (userId == null ||
+          userId.isEmpty ||
+          !settings.deadlineNotificationsEnabled) {
+        await service.cancelAllTaskReminders();
+        return;
+      }
+      await service.rescheduleTaskReminders(tasks);
+    } catch (error) {
+      debugPrint('Gagal menyinkronkan pengingat tugas: $error');
+    }
+  }
+
+  Future<void> _checkBudgetAlert() async {
+    final BudgetAlertService? service = budgetAlerts;
+    if (service == null) {
+      return;
+    }
+    try {
+      await service.check(
+        userId: activeUserId,
+        spent: monthlyExpense,
+        limit: settings.monthlyBudgetLimit,
+        enabled: settings.budgetAlertsEnabled,
+      );
+    } catch (error) {
+      debugPrint('Gagal memeriksa peringatan anggaran: $error');
+    }
+  }
+
+  static bool _transactionIsInMonth(TransactionItem transaction, DateTime now) {
+    final DateTime? createdAt = transaction.createdAt;
+    if (createdAt != null) {
+      return createdAt.year == now.year && createdAt.month == now.month;
+    }
+
+    final DateTime? parsedDate = DateTime.tryParse(transaction.date);
+    if (parsedDate != null) {
+      return parsedDate.year == now.year && parsedDate.month == now.month;
+    }
+
+    final RegExpMatch? legacyDate = RegExp(
+      r'^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$',
+    ).firstMatch(transaction.date.trim());
+    if (legacyDate != null) {
+      final int? day = int.tryParse(legacyDate.group(1)!);
+      final int? month = int.tryParse(legacyDate.group(2)!);
+      final int? year = int.tryParse(legacyDate.group(3)!);
+      if (day == null || month == null || year == null) {
+        return false;
+      }
+      final DateTime candidate = DateTime(year, month, day);
+      return candidate.year == now.year &&
+          candidate.month == now.month &&
+          candidate.day == day;
+    }
+
+    final String normalized = transaction.date.trim().toLowerCase();
+    return normalized == 'hari ini' ||
+        (normalized == 'kemarin' &&
+            DateTime(now.year, now.month, now.day - 1).month == now.month);
   }
 
   Future<void> _enqueueCloudWrite(
@@ -661,6 +843,8 @@ class AppProvider extends ChangeNotifier {
     if (!_isLoading) {
       unawaited(save());
     }
+    unawaited(_syncTaskReminders());
+    unawaited(_checkBudgetAlert());
   }
 
   void _changed() {

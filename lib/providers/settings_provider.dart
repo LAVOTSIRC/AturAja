@@ -6,7 +6,7 @@ class SettingsController extends ChangeNotifier {
   bool roastingAiEnabled = true;
   bool autoBackupEnabled = true;
   int monthlyBudgetLimit = 1200000;
-  bool biometricLockEnabled = true;
+  bool biometricLockEnabled = false;
   bool pinWasUpdated = false;
   bool accountDeletionRequested = false;
   DateTime? lastSyncedAt;
@@ -41,7 +41,7 @@ class SettingsController extends ChangeNotifier {
   String get cloudBackupStatus =>
       '$cloudSyncStatus | ${autoBackupEnabled ? 'Auto' : 'Manual'}';
 
-  String get nlpModelStatus => 'Model lokal v2.1';
+  String get nlpModelStatus => 'Demo NLP lokal';
 
   String get privacyStatus {
     if (accountDeletionRequested) {
@@ -56,7 +56,7 @@ class SettingsController extends ChangeNotifier {
     roastingAiEnabled = true;
     autoBackupEnabled = true;
     monthlyBudgetLimit = 1200000;
-    biometricLockEnabled = true;
+    biometricLockEnabled = false;
     pinWasUpdated = false;
     accountDeletionRequested = false;
     lastSyncedAt = null;

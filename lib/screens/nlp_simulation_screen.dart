@@ -160,7 +160,7 @@ class _NlpSimulationScreenState extends State<NlpSimulationScreen> {
                             ),
                             const SizedBox(height: AppSpacing.xxs),
                             Text(
-                              'Berjalan lokal di perangkat.',
+                              'Demo keyword matching lokal, bukan model AI produksi.',
                               style: AppTypography.meta(c.textMuted),
                             ),
                           ],
@@ -171,6 +171,12 @@ class _NlpSimulationScreenState extends State<NlpSimulationScreen> {
                 ),
                 const SizedBox(height: AppSpacing.lg),
                 const SectionLabel('Coba Brain Dump'),
+                Text(
+                  'Halaman ini hanya mendemonstrasikan klasifikasi sederhana. '
+                  'Brain Dump utama menggunakan Gemini.',
+                  style: AppTypography.meta(c.textMuted),
+                ),
+                const SizedBox(height: AppSpacing.sm),
                 AppCard(
                   padding: const EdgeInsets.all(AppSpacing.md),
                   child: Column(

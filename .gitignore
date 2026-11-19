@@ -75,6 +75,9 @@ key.properties
 /android/app/google-services.json
 /ios/Runner/GoogleService-Info.plist
 /lib/firebase_options.dart
+/android/key.properties
+/android/**/*.jks
+/android/**/*.keystore
 
 # Kotlin/Gradle build cache generated locally.
 /android/.kotlin/

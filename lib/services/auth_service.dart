@@ -33,6 +33,8 @@ abstract interface class AuthService {
   Future<AuthUser> signInWithGoogle();
 
   Future<void> signOut();
+
+  Future<void> deleteAccount();
 }
 
 /// Implementasi autentikasi Firebase untuk email/password dan Google Sign-In.
@@ -119,6 +121,29 @@ class FirebaseAuthService implements AuthService {
       }
     }
     await _auth.signOut();
+  }
+
+  @override
+  Future<void> deleteAccount() async {
+    final firebase.User? user = _auth.currentUser;
+    if (user == null) {
+      throw const AuthFailure(
+        'missing-user',
+        'Sesi pengguna tidak ditemukan. Silakan masuk ulang.',
+      );
+    }
+    try {
+      await user.delete();
+      if (_googleInitialized) {
+        try {
+          await _googleSignIn.signOut();
+        } catch (_) {
+          // Akun Firebase sudah terhapus; kegagalan reset Google tidak fatal.
+        }
+      }
+    } on firebase.FirebaseAuthException catch (error) {
+      throw _mapFirebaseException(error);
+    }
   }
 
   Future<void> _ensureGoogleInitialized() async {

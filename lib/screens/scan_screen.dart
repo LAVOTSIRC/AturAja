@@ -9,6 +9,7 @@ import '../data/id_generator.dart';
 import '../data/models.dart';
 import '../providers/app_provider.dart';
 import '../services/receipt_camera.dart';
+import '../services/receipt_ocr_service.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_typography.dart';
@@ -22,6 +23,18 @@ String _shortDate(DateTime date) {
   return '${twoDigits(date.day)}/${twoDigits(date.month)}/${date.year}';
 }
 
+String _formatReceiptAmount(int amount) {
+  final String digits = amount.toString();
+  final StringBuffer formatted = StringBuffer();
+  for (int index = 0; index < digits.length; index++) {
+    if (index > 0 && (digits.length - index) % 3 == 0) {
+      formatted.write('.');
+    }
+    formatted.write(digits[index]);
+  }
+  return formatted.toString();
+}
+
 class ScanScreen extends StatefulWidget {
   const ScanScreen({super.key});
 
@@ -32,13 +45,22 @@ class ScanScreen extends StatefulWidget {
 class _ScanScreenState extends State<ScanScreen>
     with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   _ScanStep step = _ScanStep.scan;
+  final TextEditingController merchantController = TextEditingController(
+    text: 'Belanja di Indomaret',
+  );
   final TextEditingController amountController = TextEditingController(
     text: '28500',
   );
+  final TextEditingController dateController = TextEditingController(
+    text: 'Hari ini',
+  );
+  final ReceiptOcrService _ocrService = ReceiptOcrService();
+  String _category = 'belanja';
   bool isProcessing = false;
   bool _isCameraInitializing = false;
   String? errorMessage;
   String? _receiptImagePath;
+  ReceiptOcrResult? _ocrResult;
   CameraController? _cameraController;
   int _cameraSession = 0;
 
@@ -70,6 +92,9 @@ class _ScanScreenState extends State<ScanScreen>
       unawaited(controller.dispose());
     }
     amountController.dispose();
+    merchantController.dispose();
+    dateController.dispose();
+    unawaited(_ocrService.close());
     _scanLineController.dispose();
     super.dispose();
   }
@@ -216,6 +241,26 @@ class _ScanScreenState extends State<ScanScreen>
         step = _ScanStep.confirm;
       });
       await _releaseCamera();
+      try {
+        final ReceiptOcrResult result = await _ocrService.recognizeFile(path);
+        if (!mounted) return;
+        setState(() {
+          if (result.merchant.isNotEmpty) {
+            merchantController.text = result.merchant;
+          }
+          if (result.total != null) {
+            amountController.text = result.total.toString();
+          }
+          if (result.date != null) {
+            dateController.text = _shortDate(result.date!);
+          }
+          _ocrResult = result;
+          errorMessage = null;
+        });
+      } on ReceiptOcrException catch (error) {
+        if (!mounted) return;
+        setState(() => errorMessage = error.message);
+      }
     } on ReceiptCameraException catch (error) {
       if (!mounted) return;
       setState(() {
@@ -234,8 +279,56 @@ class _ScanScreenState extends State<ScanScreen>
     }
   }
 
+  Future<void> _pickReceiptFromGallery() async {
+    if (isProcessing || _isCameraInitializing) return;
+    setState(() {
+      isProcessing = true;
+      errorMessage = null;
+    });
+    try {
+      final String? path = await ReceiptCamera.pickFromGallery();
+      if (!mounted || path == null) {
+        if (mounted) setState(() => isProcessing = false);
+        return;
+      }
+      setState(() {
+        isProcessing = false;
+        _receiptImagePath = path;
+        step = _ScanStep.confirm;
+      });
+      await _releaseCamera();
+      final ReceiptOcrResult result = await _ocrService.recognizeFile(path);
+      if (!mounted) return;
+      setState(() {
+        if (result.merchant.isNotEmpty) {
+          merchantController.text = result.merchant;
+        }
+        if (result.total != null) {
+          amountController.text = result.total.toString();
+        }
+        if (result.date != null) {
+          dateController.text = _shortDate(result.date!);
+        }
+        _ocrResult = result;
+        errorMessage = null;
+      });
+    } on ReceiptOcrException catch (error) {
+      if (mounted) setState(() => errorMessage = error.message);
+    } catch (error) {
+      if (mounted) {
+        setState(() {
+          isProcessing = false;
+          errorMessage = 'Foto dari galeri tidak dapat diproses: $error';
+        });
+      }
+    }
+  }
+
   Future<void> _confirmScan() async {
     if (isProcessing) return;
+    final AppProvider app = context.read<AppProvider>();
+    final String transactionTime = TimeOfDay.now().format(context);
+    final NavigatorState navigator = Navigator.of(context);
     final String rawValue = amountController.text.replaceAll(
       RegExp(r'[^0-9]'),
       '',
@@ -259,20 +352,24 @@ class _ScanScreenState extends State<ScanScreen>
         throw StateError('nominal berubah');
       }
       if (!mounted) return;
+      final String transactionId = newDocumentId();
 
-      // OCR masih disimulasikan, tetapi foto struk yang diambil dari kamera
-      // asli ikut disimpan pada transaksi.
       final TransactionItem transaction = TransactionItem(
-        id: newDocumentId(),
-        label: 'Belanja di Indomaret',
+        id: transactionId,
+        label: merchantController.text.trim().isEmpty
+            ? 'Belanja di Indomaret'
+            : merchantController.text.trim(),
         amount: -amount,
-        cat: 'belanja',
-        time: TimeOfDay.now().format(context),
-        date: 'Hari ini',
+        cat: _category,
+        time: transactionTime,
+        date: dateController.text.trim().isEmpty
+            ? 'Hari ini'
+            : dateController.text.trim(),
         receiptImagePath: _receiptImagePath,
       );
-      context.read<AppProvider>().addTransaction(transaction);
-      Navigator.of(context).pop<TransactionItem>(transaction);
+      app.addTransaction(transaction);
+      if (!mounted) return;
+      navigator.pop<TransactionItem>(transaction);
     } catch (_) {
       if (!mounted) return;
       setState(() {
@@ -288,11 +385,35 @@ class _ScanScreenState extends State<ScanScreen>
       isProcessing = false;
       errorMessage = null;
       _receiptImagePath = null;
+      _ocrResult = null;
+      merchantController.text = 'Belanja di Indomaret';
+      amountController.text = '28500';
+      dateController.text = 'Hari ini';
+      _category = 'belanja';
     });
     if (!_scanLineController.isAnimating) {
       _scanLineController.repeat(reverse: true);
     }
+
     unawaited(_initializeCamera());
+  }
+
+  List<Widget> _buildReceiptItemLines(AppColors c) {
+    final List<ReceiptItem> items = _ocrResult?.items ?? const <ReceiptItem>[];
+    if (items.isEmpty) {
+      return <Widget>[
+        Text(
+          'Detail produk tidak terbaca',
+          style: AppTypography.mono(c.textMuted),
+        ),
+      ];
+    }
+    return items.take(5).map((ReceiptItem item) {
+      return Text(
+        '${item.name} ......... ${_formatReceiptAmount(item.amount)}',
+        style: AppTypography.mono(c.textSub),
+      );
+    }).toList();
   }
 
   @override
@@ -646,6 +767,15 @@ class _ScanScreenState extends State<ScanScreen>
                           Colors.white.withValues(alpha: 0.7),
                         ),
                       ),
+                      const SizedBox(height: AppSpacing.xs),
+                      TextButton.icon(
+                        onPressed: _pickReceiptFromGallery,
+                        icon: const Icon(Icons.photo_library_outlined),
+                        label: const Text('Pilih dari galeri'),
+                        style: TextButton.styleFrom(
+                          foregroundColor: Colors.white,
+                        ),
+                      ),
                     ],
                   ),
           ),
@@ -784,21 +914,10 @@ class _ScanScreenState extends State<ScanScreen>
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'INDOMARET · ${_shortDate(DateTime.now())}',
+                        '${merchantController.text.toUpperCase()} · ${dateController.text}',
                         style: AppTypography.mono(c.textSub),
                       ),
-                      Text(
-                        'Aqua 600ml ......... 5.000',
-                        style: AppTypography.mono(c.textSub),
-                      ),
-                      Text(
-                        'Roti Tawar ......... 12.500',
-                        style: AppTypography.mono(c.textSub),
-                      ),
-                      Text(
-                        'Chitato ............ 11.000',
-                        style: AppTypography.mono(c.textSub),
-                      ),
+                      ..._buildReceiptItemLines(c),
                       Padding(
                         padding: const EdgeInsets.only(top: AppSpacing.xxs),
                         child: Container(
@@ -809,7 +928,8 @@ class _ScanScreenState extends State<ScanScreen>
                       Padding(
                         padding: const EdgeInsets.only(top: AppSpacing.xxs),
                         child: Text(
-                          'TOTAL .............. 28.500',
+                          'TOTAL .............. '
+                          '${_formatReceiptAmount(int.tryParse(amountController.text) ?? 0)}',
                           style: AppTypography.mono(c.text)
                               .copyWith(fontWeight: FontWeight.w600),
                         ),
@@ -828,7 +948,10 @@ class _ScanScreenState extends State<ScanScreen>
                           style: AppTypography.micro(c.textMuted),
                         ),
                         const SizedBox(height: AppSpacing.xxs),
-                        Text('Rp28.500', style: AppTypography.display(c.text)),
+                        Text(
+                          'Rp${_formatReceiptAmount(int.tryParse(amountController.text) ?? 0)}',
+                          style: AppTypography.display(c.text),
+                        ),
                       ],
                     ),
                     const SizedBox(width: AppSpacing.md),
@@ -864,9 +987,25 @@ class _ScanScreenState extends State<ScanScreen>
           ),
           const SizedBox(height: AppSpacing.sm),
           Text(
-            'Hasil OCR masih disimulasikan. Foto asli tetap disimpan bersama transaksi.',
+            'Periksa dan koreksi hasil OCR sebelum menyimpan transaksi.',
             style: AppTypography.micro(c.textMuted),
           ),
+          const SizedBox(height: AppSpacing.sm),
+          TextField(
+            controller: merchantController,
+            onChanged: (_) => _clearError(),
+            style: AppTypography.body(c.text),
+            decoration: InputDecoration(
+              labelText: 'Nama merchant',
+              filled: true,
+              fillColor: c.surface,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(AppSpacing.sm),
+                borderSide: BorderSide(color: c.borderAccent, width: 1.5),
+              ),
+            ),
+          ),
+          const SizedBox(height: AppSpacing.sm),
           const SizedBox(height: AppSpacing.xs),
           Text(
             'Koreksi nominal jika perlu',
@@ -895,6 +1034,49 @@ class _ScanScreenState extends State<ScanScreen>
                 borderSide: BorderSide(color: c.focus, width: 1.5),
               ),
             ),
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          TextField(
+            controller: dateController,
+            onChanged: (_) => _clearError(),
+            style: AppTypography.body(c.text),
+            decoration: InputDecoration(
+              labelText: 'Tanggal transaksi',
+              hintText: 'Contoh: 10/11/2026',
+              filled: true,
+              fillColor: c.surface,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(AppSpacing.sm),
+                borderSide: BorderSide(color: c.borderAccent, width: 1.5),
+              ),
+            ),
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          DropdownButtonFormField<String>(
+            initialValue: _category,
+            decoration: InputDecoration(
+              labelText: 'Kategori',
+              filled: true,
+              fillColor: c.surface,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(AppSpacing.sm),
+                borderSide: BorderSide(color: c.borderAccent, width: 1.5),
+              ),
+            ),
+            items: const <DropdownMenuItem<String>>[
+              DropdownMenuItem(value: 'belanja', child: Text('Belanja')),
+              DropdownMenuItem(value: 'food', child: Text('Makan & Minum')),
+              DropdownMenuItem(value: 'transport', child: Text('Transport')),
+              DropdownMenuItem(value: 'entertainment', child: Text('Hiburan')),
+              DropdownMenuItem(value: 'other', child: Text('Lainnya')),
+            ],
+            onChanged: isProcessing
+                ? null
+                : (String? value) {
+                    if (value != null) {
+                      setState(() => _category = value);
+                    }
+                  },
           ),
           if (errorMessage != null) ...[
             const SizedBox(height: AppSpacing.sm),

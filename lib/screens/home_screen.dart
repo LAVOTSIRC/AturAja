@@ -1,10 +1,12 @@
 import 'dart:async';
 
+import 'package:firebase_ai/firebase_ai.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../data/models.dart';
 import '../providers/app_provider.dart';
+import '../services/roasting_ai_service.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_typography.dart';
@@ -50,6 +52,9 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   bool showRoast = false;
+  bool isRoastLoading = false;
+  String? roastMessage;
+  RoastingAiService? _roastingAiService;
   late final Timer _greetingTimer;
 
   @override
@@ -71,6 +76,47 @@ class _HomeScreenState extends State<HomeScreen> {
   void _showMessage(String message) {
     ScaffoldMessenger.maybeOf(context)
         ?.showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  Future<void> _showRoasting(AppProvider app) async {
+    if (!app.settings.roastingAiEnabled || isRoastLoading) {
+      return;
+    }
+    setState(() {
+      isRoastLoading = true;
+      showRoast = true;
+    });
+    try {
+      final RoastingAiService service = _roastingAiService ??=
+          RoastingAiService();
+      roastMessage = await service.generate(
+        totalExpense: app.totalExpense,
+        pendingTasks: app.pendingTaskCount,
+        transactionCount: app.transactions.length,
+      );
+    } on FirebaseAIException {
+      roastMessage = _fallbackRoast(app);
+    } on TimeoutException {
+      roastMessage = _fallbackRoast(app);
+    } on FormatException {
+      roastMessage = _fallbackRoast(app);
+    }
+    if (mounted) {
+      setState(() => isRoastLoading = false);
+    }
+  }
+
+  String _fallbackRoast(AppProvider app) {
+    if (app.pendingTaskCount > 0 && app.totalExpense > app.budgetLimit) {
+      return 'Dek, tugas masih menumpuk dan pengeluaran sudah lewat anggaran. Jangan cuma sibuk merencanakan; pilih satu tugas, kerjakan sekarang, lalu kendalikan checkout berikutnya.';
+    }
+    if (app.pendingTaskCount > 0) {
+      return 'Dek, ${app.pendingTaskCount} tugas masih menunggu. To-do list-mu sudah rajin mengingatkan, sekarang giliran kamu mulai satu tugas dan tuntaskan.';
+    }
+    if (app.totalExpense > app.budgetLimit) {
+      return 'Dek, pengeluaran sudah melewati anggaran. Dompetmu tidak butuh alasan baru; tahan checkout dan cek lagi prioritasmu sebelum menambah transaksi.';
+    }
+    return 'Dek, tugas dan anggaranmu sedang terkendali. Jangan terlena; pertahankan kebiasaan ini supaya besok tidak kembali panik di menit terakhir.';
   }
 
   List<_QuickActionData> get quickActions => [
@@ -151,13 +197,16 @@ class _HomeScreenState extends State<HomeScreen> {
                           tooltip: 'Notifikasi',
                           semanticLabel: 'Buka notifikasi',
                           showDot: true,
-                          onTap: () => setState(() => showRoast = true),
+                          onTap: () => unawaited(_showRoasting(app)),
                         ),
                       ],
                     ),
                   ),
-                  if (showRoast)
+                  if (showRoast && app.settings.roastingAiEnabled)
                     RoastingToast(
+                      message: isRoastLoading
+                          ? 'Roasting sedang dipanaskan...'
+                          : (roastMessage ?? _fallbackRoast(app)),
                       onClose: () => setState(() => showRoast = false),
                     ),
                   Container(
@@ -184,7 +233,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         Padding(
                           padding: const EdgeInsets.only(bottom: AppSpacing.md),
                           child: Text(
-                            formatRupiah(app.balance),
+                            formatRupiahSigned(app.balance),
                             style: AppTypography.hero(c.text),
                           ),
                         ),
@@ -296,15 +345,15 @@ class _HomeScreenState extends State<HomeScreen> {
                                 children: [
                                   Text(
                                     urgentTasks.isEmpty
-                                        ? 'Tidak ada deadline mendesak'
-                                        : '${urgentTasks.length} tugas deadline mendesak',
+                                        ? 'Tidak ada tenggat dalam 24 jam'
+                                        : '${urgentTasks.length} tugas perlu segera dikerjakan',
                                     style: AppTypography.caption(c.onAlert)
                                         .copyWith(fontWeight: FontWeight.w600),
                                   ),
                                   const SizedBox(height: AppSpacing.xxs),
                                   Text(
                                     urgentTasks.isEmpty
-                                        ? 'Semua tugas masih terkendali.'
+                                        ? 'Belum ada tugas aktif yang jatuh tempo dalam 24 jam.'
                                         : urgentTasks
                                               .take(2)
                                               .map(
