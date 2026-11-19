@@ -60,11 +60,15 @@ void main() {
     expect(result.total, 28500);
   });
 
-  test('returns nullable fields when text is too incomplete', () {
+  test('returns nullable fields and hasFinancialInfo false when text has no financial or receipt info', () {
     final ReceiptOcrResult result = ReceiptParser.parse('struk buram');
 
     expect(result.merchant, 'struk buram');
     expect(result.total, isNull);
     expect(result.date, isNull);
+    expect(result.hasFinancialInfo, isFalse);
+
+    final ReceiptOcrResult valid = ReceiptParser.parse('INDOMARET\nTOTAL 15.000');
+    expect(valid.hasFinancialInfo, isTrue);
   });
 }

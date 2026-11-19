@@ -205,6 +205,41 @@ class _ScanScreenState extends State<ScanScreen>
     }
   }
 
+  void _showUndetectedReceiptAlert(String message) {
+    if (!mounted) return;
+    final AppColors c = ThemeScope.of(context).colors;
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            Icon(
+              Icons.warning_amber_rounded,
+              color: c.expense,
+              size: AppSpacing.iconSmall,
+            ),
+            const SizedBox(width: AppSpacing.xs),
+            Expanded(
+              child: Text(
+                'Struk atau informasi keuangan tidak terdeteksi pada gambar.',
+                style: AppTypography.label(c.text),
+              ),
+            ),
+          ],
+        ),
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: c.surface,
+        elevation: 6,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppSpacing.md),
+          side: BorderSide(color: c.expense, width: 1.5),
+        ),
+        margin: const EdgeInsets.all(AppSpacing.md),
+        duration: const Duration(seconds: 3),
+      ),
+    );
+  }
+
   Future<void> _captureReceipt() async {
     if (isProcessing || _isCameraInitializing) return;
 
@@ -259,7 +294,11 @@ class _ScanScreenState extends State<ScanScreen>
         });
       } on ReceiptOcrException catch (error) {
         if (!mounted) return;
-        setState(() => errorMessage = error.message);
+        setState(() {
+          _ocrResult = null;
+          errorMessage = error.message;
+        });
+        _showUndetectedReceiptAlert(error.message);
       }
     } on ReceiptCameraException catch (error) {
       if (!mounted) return;
@@ -313,7 +352,13 @@ class _ScanScreenState extends State<ScanScreen>
         errorMessage = null;
       });
     } on ReceiptOcrException catch (error) {
-      if (mounted) setState(() => errorMessage = error.message);
+      if (mounted) {
+        setState(() {
+          _ocrResult = null;
+          errorMessage = error.message;
+        });
+        _showUndetectedReceiptAlert(error.message);
+      }
     } catch (error) {
       if (mounted) {
         setState(() {
@@ -843,6 +888,10 @@ class _ScanScreenState extends State<ScanScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (errorMessage != null) ...[
+            AppErrorMessage(message: errorMessage!),
+            const SizedBox(height: AppSpacing.sm),
+          ],
           if (_receiptImagePath != null &&
               File(_receiptImagePath!).existsSync()) ...[
             ClipRRect(
@@ -882,20 +931,31 @@ class _ScanScreenState extends State<ScanScreen>
                       width: AppSpacing.iconSmall,
                       height: AppSpacing.iconSmall,
                       decoration: BoxDecoration(
-                        color: c.success,
+                        color: _ocrResult?.hasFinancialInfo == true
+                            ? c.success
+                            : c.warning,
                         shape: BoxShape.circle,
                       ),
                       child: Icon(
-                        Icons.check,
+                        _ocrResult?.hasFinancialInfo == true
+                            ? Icons.check
+                            : Icons.priority_high_rounded,
                         size: AppSpacing.sm,
                         color: c.onAccent,
                       ),
                     ),
                     const SizedBox(width: AppSpacing.xs),
-                    Text(
-                      'Foto struk berhasil diambil',
-                      style: AppTypography.meta(c.success)
-                          .copyWith(fontWeight: FontWeight.w600),
+                    Expanded(
+                      child: Text(
+                        _ocrResult?.hasFinancialInfo == true
+                            ? 'Foto struk berhasil diambil'
+                            : 'Informasi struk tidak terdeteksi — silakan periksa manual',
+                        style: AppTypography.meta(
+                          _ocrResult?.hasFinancialInfo == true
+                              ? c.success
+                              : c.warning,
+                        ).copyWith(fontWeight: FontWeight.w600),
+                      ),
                     ),
                   ],
                 ),
