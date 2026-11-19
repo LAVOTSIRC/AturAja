@@ -190,8 +190,6 @@ class _HomeScreenState extends State<HomeScreen> {
                             ],
                           ),
                         ),
-                        const ThemeToggleSwitch(),
-                        const SizedBox(width: AppSpacing.xs),
                         CircleIconButton(
                           icon: Icons.notifications_none,
                           tooltip: 'Notifikasi',
