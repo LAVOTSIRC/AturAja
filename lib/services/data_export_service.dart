@@ -106,6 +106,7 @@ class DataExportService {
     'done': task.done,
     'created_at': task.createdAt?.toIso8601String(),
     'updated_at': task.updatedAt?.toIso8601String(),
+    'completed_at': task.completedAt?.toIso8601String(),
   };
 
   static Map<String, dynamic> _transactionJson(TransactionItem transaction) =>
@@ -125,7 +126,7 @@ class DataExportService {
   static String _tasksCsv(List<TaskItem> tasks) {
     final StringBuffer buffer = StringBuffer('\uFEFF');
     buffer.write(
-      'id,title,categories,description,deadline,due_date,done,created_at,updated_at\r\n',
+      'id,title,categories,description,deadline,due_date,done,created_at,updated_at,completed_at\r\n',
     );
     for (final TaskItem task in tasks) {
       final String row = <String>[
@@ -138,6 +139,7 @@ class DataExportService {
         task.done ? 'true' : 'false',
         task.createdAt?.toIso8601String() ?? '',
         task.updatedAt?.toIso8601String() ?? '',
+        task.completedAt?.toIso8601String() ?? '',
       ].map(_csvCell).join(',');
       buffer.write('$row\r\n');
     }

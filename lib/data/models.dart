@@ -131,6 +131,7 @@ class TaskItem {
   final bool done;
   final DateTime? createdAt;
   final DateTime? updatedAt;
+  final DateTime? completedAt;
 
   TaskItem({
     required this.id,
@@ -144,6 +145,7 @@ class TaskItem {
     this.done = false,
     this.createdAt,
     this.updatedAt,
+    this.completedAt,
   }) : categories =
            categories ??
            (sub != null && sub.isNotEmpty ? [sub] : const ['Tugas Kuliah']);
@@ -189,6 +191,8 @@ class TaskItem {
     bool? done,
     DateTime? createdAt,
     DateTime? updatedAt,
+    DateTime? completedAt,
+    bool clearCompletedAt = false,
   }) => TaskItem(
     id: id ?? this.id,
     legacyId: legacyId ?? this.legacyId,
@@ -200,6 +204,7 @@ class TaskItem {
     done: done ?? this.done,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
+    completedAt: clearCompletedAt ? null : (completedAt ?? this.completedAt),
   );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
@@ -213,6 +218,7 @@ class TaskItem {
     'done': done,
     'createdAt': createdAt?.toIso8601String(),
     'updatedAt': updatedAt?.toIso8601String(),
+    'completedAt': completedAt?.toIso8601String(),
   };
 
   factory TaskItem.fromJson(Map<String, dynamic> json) {
@@ -234,6 +240,7 @@ class TaskItem {
       done: json['done'] as bool? ?? false,
       createdAt: _dateTime(json['createdAt']),
       updatedAt: _dateTime(json['updatedAt']),
+      completedAt: _dateTime(json['completedAt']),
     );
   }
 }
