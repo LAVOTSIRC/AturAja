@@ -199,6 +199,7 @@ class FirestoreCloudRepository implements CloudRepository {
         );
       }
       if (profile.fullName.isNotEmpty ||
+          profile.email.isNotEmpty ||
           profile.nim.isNotEmpty ||
           profile.program.isNotEmpty) {
         transaction.set(profileRef, profileToFirestore(profile));
