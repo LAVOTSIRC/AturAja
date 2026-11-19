@@ -554,27 +554,6 @@ class _FinanceScreenState extends State<FinanceScreen> {
                         ],
                       ),
                     ),
-                    // Theme toggle with label hint
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.remove_red_eye_outlined,
-                              size: 14,
-                              color: c.textMuted,
-                            ),
-                            const SizedBox(width: AppSpacing.xxs),
-                            const ThemeToggleSwitch(),
-                          ],
-                        ),
-                        const SizedBox(height: 2),
-                        Text('Tema', style: AppTypography.micro(c.textMuted)),
-                      ],
-                    ),
                   ],
                 ),
               ),
