@@ -74,13 +74,6 @@ class BudgetAlertService {
       return;
     }
 
-    final int threshold = spent >= limit
-        ? 100
-        : (spent * 5 >= limit * 4 ? 80 : 0);
-    if (threshold == 0) {
-      return;
-    }
-
     try {
       final SharedPreferences sharedPreferences =
           preferences ?? await SharedPreferences.getInstance();
@@ -91,39 +84,53 @@ class BudgetAlertService {
           'aturaja_budget_alert_${userId?.trim().isNotEmpty == true ? userId : 'guest'}_'
           '${now.year}_${now.month}_$limit';
       final int previousThreshold = sharedPreferences.getInt(key) ?? 0;
-      if (previousThreshold >= threshold) {
+
+      // Tentukan daftar threshold yang perlu dikirim (yang belum ada di prefs).
+      final List<int> thresholdsToSend = [];
+      if (spent >= limit && previousThreshold < 100) {
+        if (previousThreshold < 80) thresholdsToSend.add(80);
+        thresholdsToSend.add(100);
+      } else if (spent * 5 >= limit * 4 && previousThreshold < 80) {
+        thresholdsToSend.add(80);
+      }
+
+      if (thresholdsToSend.isEmpty) {
         return;
       }
 
-      BudgetAlertContent? content;
-      if (contentBuilder != null) {
-        try {
-          content = await contentBuilder(
-            threshold: threshold,
-            spent: spent,
-            limit: limit,
-          );
-        } catch (error) {
-          debugPrint('Gagal membuat konten Budget Roasting: $error');
+      // Kirim threshold satu per satu dari bawah ke atas.
+      for (final int threshold in thresholdsToSend) {
+        BudgetAlertContent? content;
+        if (contentBuilder != null) {
+          try {
+            content = await contentBuilder(
+              threshold: threshold,
+              spent: spent,
+              limit: limit,
+            );
+          } catch (error) {
+            debugPrint('Gagal membuat konten Budget Roasting: $error');
+          }
         }
-      }
-      content ??= _staticContent(
-        threshold: threshold,
-        spent: spent,
-        limit: limit,
-      );
-      if (shouldNotify != null && !shouldNotify()) {
-        return;
-      }
+        content ??= _staticContent(
+          threshold: threshold,
+          spent: spent,
+          limit: limit,
+        );
+        if (shouldNotify != null && !shouldNotify()) {
+          return;
+        }
 
-      // Show notification — if this throws, the catch below prevents setInt.
-      await notifications.showBudgetAlert(
-        id: stableNotificationId('budget:$key:$threshold'),
-        title: content.title,
-        body: content.body,
-      );
-      // Only save threshold after successful notification.
-      await sharedPreferences.setInt(key, threshold);
+        // Show notification — if this throws, stop: don't update prefs and
+        // don't send the next threshold either.
+        await notifications.showBudgetAlert(
+          id: stableNotificationId('budget:$key:$threshold'),
+          title: content.title,
+          body: content.body,
+        );
+        // Only save threshold after successful notification.
+        await sharedPreferences.setInt(key, threshold);
+      }
     } catch (error) {
       // Kegagalan notifikasi tidak boleh mengganggu pencatatan transaksi.
       debugPrint('Gagal mengirim peringatan anggaran: $error');

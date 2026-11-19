@@ -58,6 +58,9 @@ class FakeNotificationService implements AppNotificationService {
   Future<void> cancelNotification(int id) async {}
 
   @override
+  Future<bool> requestExactAlarmPermissionIfNeeded() async => true;
+
+  @override
   Future<void> showBudgetAlert({
     required int id,
     required String title,
@@ -375,6 +378,71 @@ void main() {
 
       // All three are at 80% threshold → should only fire once
       expect(notifications.budgetAlertCalls, 1);
+    });
+
+    test('jump from <80% directly to >=100% sends BOTH 80% and 100% notifications', () async {
+      final notifications = FakeNotificationService();
+      final service = BudgetAlertService(notifications: notifications);
+
+      // Spending jumps straight from 0 to 100% (skipping 80% threshold).
+      await service.check(
+        userId: 'user-skip',
+        spent: 1000,
+        limit: 1000,
+        enabled: true,
+      );
+
+      // Both 80% AND 100% notifications must be sent.
+      expect(notifications.budgetAlertCalls, 2);
+    });
+
+    test('jump from <80% to >=100% stops after first failure, 80% not saved', () async {
+      final notifications = FakeNotificationService()..shouldThrow = true;
+      final service = BudgetAlertService(notifications: notifications);
+
+      // Attempt to jump to 100% while notifications fail.
+      await service.check(
+        userId: 'user-fail',
+        spent: 1000,
+        limit: 1000,
+        enabled: true,
+      );
+      expect(notifications.budgetAlertCalls, 0);
+
+      // On retry with working notifications, should still send both.
+      notifications.shouldThrow = false;
+      await service.check(
+        userId: 'user-fail',
+        spent: 1000,
+        limit: 1000,
+        enabled: true,
+      );
+      expect(notifications.budgetAlertCalls, 2);
+    });
+
+    test('jump from 80% already sent to >=100% sends only 100% notification', () async {
+      final notifications = FakeNotificationService();
+      final service = BudgetAlertService(notifications: notifications);
+
+      // First: send 80%
+      await service.check(
+        userId: 'user-partial',
+        spent: 800,
+        limit: 1000,
+        enabled: true,
+      );
+      expect(notifications.budgetAlertCalls, 1);
+      expect(notifications.lastTitle, 'Budget alert 80%');
+
+      // Then: jump to 100% — only 100% notification should be sent.
+      await service.check(
+        userId: 'user-partial',
+        spent: 1000,
+        limit: 1000,
+        enabled: true,
+      );
+      expect(notifications.budgetAlertCalls, 2);
+      expect(notifications.lastTitle, 'Limit anggaran tercapai');
     });
   });
 }
