@@ -75,6 +75,9 @@ class _FakeNotificationService
   Future<bool> requestPermissions() async => permissionGranted;
 
   @override
+  Future<bool> requestExactAlarmPermissionIfNeeded() async => true;
+
+  @override
   Future<void> scheduleTaskReminder(
     TaskItem task, {
     String? title,
@@ -161,6 +164,10 @@ class _FakeRoastingGenerator implements RoastingNotificationGenerator {
   DailyRoastingSummary? lastDailySummary;
   List<String> lastRecentMessages = <String>[];
 
+  String? lastBudgetUserName;
+  String? lastDeadlineUserName;
+  String? lastDailyUserName;
+
   @override
   Future<RoastingNotificationMessage> generateBudgetNotification({
     required RoastingIntensity intensity,
@@ -168,6 +175,7 @@ class _FakeRoastingGenerator implements RoastingNotificationGenerator {
     required int limit,
     required int threshold,
     required List<String> recentMessages,
+    String? userName,
   }) async {
     budgetCalls++;
     lastBudgetIntensity = intensity;
@@ -175,6 +183,7 @@ class _FakeRoastingGenerator implements RoastingNotificationGenerator {
     lastBudgetLimit = limit;
     lastBudgetThreshold = threshold;
     lastRecentMessages = List<String>.of(recentMessages);
+    lastBudgetUserName = userName;
     final Object? failure = budgetError;
     if (failure != null) {
       throw failure;
@@ -193,6 +202,7 @@ class _FakeRoastingGenerator implements RoastingNotificationGenerator {
     required DateTime dueAt,
     required Duration remaining,
     required List<String> recentMessages,
+    String? userName,
   }) async {
     deadlineCalls++;
     lastDeadlineIntensity = intensity;
@@ -200,6 +210,7 @@ class _FakeRoastingGenerator implements RoastingNotificationGenerator {
     lastDeadlineDueAt = dueAt;
     lastDeadlineRemaining = remaining;
     lastRecentMessages = List<String>.of(recentMessages);
+    lastDeadlineUserName = userName;
     final Object? failure = deadlineError;
     if (failure != null) {
       throw failure;
@@ -218,11 +229,13 @@ class _FakeRoastingGenerator implements RoastingNotificationGenerator {
     required RoastingIntensity intensity,
     required DailyRoastingSummary summary,
     required List<String> recentMessages,
+    String? userName,
   }) async {
     dailyCalls++;
     lastDailyIntensity = intensity;
     lastDailySummary = summary;
     lastRecentMessages = List<String>.of(recentMessages);
+    lastDailyUserName = userName;
     final Object? failure = dailyError;
     if (failure != null) {
       throw failure;
@@ -1502,7 +1515,7 @@ void main() {
         expect(generator.budgetCalls, 0);
         expect(generator.deadlineCalls, 0);
         expect(generator.dailyCalls, 0);
-        expect(notifications.budgetTitles, <String>['Limit anggaran tercapai']);
+        expect(notifications.budgetTitles, <String>['Budget alert 80%', 'Limit anggaran tercapai']);
         expect(notifications.taskSchedules, isEmpty);
         expect(notifications.dailySchedules, isEmpty);
       },
@@ -1650,5 +1663,47 @@ void main() {
         expect(find.text('20.00'), findsOneWidget);
       },
     );
+
+    test('resolveGreetingName uses preferred first name or skips short initials', () {
+      expect(resolveGreetingName('M Zidan Ruriano A.G'), 'Zidan');
+      expect(resolveGreetingName('Budi Santoso'), 'Budi');
+      expect(resolveGreetingName('Sarah'), 'Sarah');
+      expect(resolveGreetingName(''), 'Dek');
+      expect(resolveGreetingName('   '), 'Dek');
+      expect(resolveGreetingName(null), 'Dek');
+    });
+
+    test('fallback roasts personalize greeting when userName is provided', () {
+      final String budget = fallbackBudgetRoast(
+        intensity: RoastingIntensity.seimbang,
+        spent: 800000,
+        limit: 1000000,
+        threshold: 80,
+        userName: 'M Zidan Ruriano',
+      );
+      expect(budget, startsWith('Zidan, anggaran bulan ini'));
+
+      final String deadline = fallbackDeadlineRoast(
+        intensity: RoastingIntensity.seimbang,
+        taskTitle: 'Tugas Mobile',
+        remaining: const Duration(minutes: 5),
+        userName: 'Budi',
+      );
+      expect(deadline, startsWith('Budi, deadline'));
+
+      final String daily = fallbackDailyRoast(
+        intensity: RoastingIntensity.seimbang,
+        summary: const DailyRoastingSummary(
+          pendingTasks: 2,
+          dueTodayTasks: 1,
+          overdueTasks: 0,
+          completedToday: 1,
+          todayExpense: 50000,
+          todayTransactionCount: 2,
+        ),
+        userName: 'Ahmad Dahlan',
+      );
+      expect(daily, contains('Ahmad'));
+    });
   });
 }

@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 
 import '../data/models.dart';
 import '../data/roasting_intensity.dart';
+import '../data/roasting_notification.dart';
 import '../providers/app_provider.dart';
 import '../services/roasting_ai_service.dart';
 import '../theme/app_colors.dart';
@@ -37,7 +38,9 @@ String fallbackRoastFor({
   required int pendingTasks,
   required int totalExpense,
   required int budgetLimit,
+  String? userName,
 }) {
+  final String name = resolveGreetingName(userName);
   final bool hasPendingTasks = pendingTasks > 0;
   final bool overBudget = totalExpense > budgetLimit;
 
@@ -64,42 +67,42 @@ String fallbackRoastFor({
 
     case RoastingIntensity.seimbang:
       if (hasPendingTasks && overBudget) {
-        return 'Dek, tugas masih menumpuk dan pengeluaran sudah lewat '
+        return '$name, tugas masih menumpuk dan pengeluaran sudah lewat '
             'anggaran. Pilih satu tugas sekarang, lalu tahan checkout '
             'berikutnya supaya dompet dan deadline sama-sama tidak menangis.';
       }
       if (hasPendingTasks) {
-        return 'Dek, $pendingTasks tugas masih menunggu sementara kamu sibuk '
+        return '$name, $pendingTasks tugas masih menunggu sementara kamu sibuk '
             'mencari waktu yang sempurna. Mulai satu tugas sekarang, karena '
             'to-do list tidak bisa dicentang sendiri.';
       }
       if (overBudget) {
-        return 'Dek, anggaranmu sudah mulai menipis. Dompetmu sudah memberi '
+        return '$name, anggaranmu sudah mulai menipis. Dompetmu sudah memberi '
             'peringatan; jangan sampai saldo tinggal kenangan sebelum akhir '
             'bulan.';
       }
-      return 'Dek, tugas dan anggaranmu sedang aman. Jangan terlena; '
+      return '$name, tugas dan anggaranmu sedang aman. Jangan terlena; '
           'pertahankan kebiasaan ini sebelum deadline dan dompet kembali '
           'bikin panik.';
 
     case RoastingIntensity.pedas:
       if (hasPendingTasks && overBudget) {
-        return 'Dek, tugas menumpuk dan anggaran sudah lewat, tapi sepertinya '
+        return '$name, tugas menumpuk dan anggaran sudah lewat, tapi sepertinya '
             'kamu masih sibuk mencari alasan. Tutup tab belanja, buka satu '
             'tugas, dan buktikan kamu bisa berhenti menunda.';
       }
       if (hasPendingTasks) {
-        return 'Dek, $pendingTasks tugas masih menunggu, tapi kamu lebih rajin '
+        return '$name, $pendingTasks tugas masih menunggu, tapi kamu lebih rajin '
             'membuka to-do list daripada mengerjakannya. Pilih satu, kerjakan '
             'sekarang, dan jangan biarkan deadline yang mengambil alih '
             'kendali.';
       }
       if (overBudget) {
-        return 'Anggaranmu hampir habis, Dek. Sepertinya tombol checkout lebih '
+        return 'Anggaranmu hampir habis, $name. Sepertinya tombol checkout lebih '
             'sering kamu kunjungi daripada halaman pengaturan keuangan. '
             'Saatnya berhenti dan benahi prioritasmu.';
       }
-      return 'Dek, tugas dan anggaranmu aman; jangan sampai kenyamanan ini '
+      return '$name, tugas dan anggaranmu aman; jangan sampai kenyamanan ini '
           'jadi alasan untuk bersantai berlebihan. Pertahankan disiplinmu '
           'sebelum dompet dan deadline bersekongkol.';
   }
@@ -171,6 +174,7 @@ class _HomeScreenState extends State<HomeScreen> {
         pendingTasks: app.pendingTaskCount,
         transactionCount: app.transactions.length,
         intensity: app.settings.roastingIntensity,
+        userName: app.profile.fullName,
       );
     } on FirebaseAIException {
       roastMessage = _fallbackRoast(app);
@@ -190,6 +194,7 @@ class _HomeScreenState extends State<HomeScreen> {
       pendingTasks: app.pendingTaskCount,
       totalExpense: app.totalExpense,
       budgetLimit: app.budgetLimit,
+      userName: app.profile.fullName,
     );
   }
 

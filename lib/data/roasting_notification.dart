@@ -78,13 +78,33 @@ String _shortTaskTitle(String title) {
   return '${normalized.substring(0, 77)}...';
 }
 
+/// Mengambil nama panggilan yang pantas dari nama pengguna atau profil.
+/// Jika nama kosong, kembalikan 'Dek' sebagai fallback ramah.
+String resolveGreetingName(String? fullName) {
+  if (fullName == null) return 'Dek';
+  final String trimmed = fullName.trim();
+  if (trimmed.isEmpty) return 'Dek';
+
+  final List<String> parts = trimmed.split(RegExp(r'\s+'));
+  // Jika kata pertama sangat pendek (misal inisial seperti "M", "M.", "A."),
+  // dan ada kata berikutnya, gunakan kata berikutnya sebagai nama panggilan.
+  if (parts.length > 1 &&
+      parts[0].replaceAll('.', '').length <= 2 &&
+      parts[1].length > 2) {
+    return parts[1];
+  }
+  return parts.first;
+}
+
 /// Fallback Budget Roasting yang tetap memuat fakta anggaran aktual.
 String fallbackBudgetRoast({
   required RoastingIntensity intensity,
   required int spent,
   required int limit,
   required int threshold,
+  String? userName,
 }) {
+  final String name = resolveGreetingName(userName);
   final int percentage = limit <= 0 ? 0 : ((spent / limit) * 100).round();
   final int remaining = limit - spent < 0 ? 0 : limit - spent;
   final bool exhausted = threshold >= 100 || spent >= limit;
@@ -106,17 +126,17 @@ String fallbackBudgetRoast({
 
     case RoastingIntensity.seimbang:
       if (exhausted) {
-        return 'Dek, pengeluaran bulan ini sudah $spentText dan anggaran '
+        return '$name, pengeluaran bulan ini sudah $spentText dan anggaran '
             '$limitText sudah habis. Dompetmu butuh istirahat, bukan checkout '
             'berikutnya; saatnya benahi prioritas sampai akhir bulan.';
       }
-      return 'Dek, anggaran bulan ini sudah terpakai $percentage% '
+      return '$name, anggaran bulan ini sudah terpakai $percentage% '
           '($spentText dari $limitText). Dompetmu mulai memberi kode darurat; '
           'rem pengeluaran sebelum sisa $remainingText ikut hilang.';
 
     case RoastingIntensity.pedas:
       if (exhausted) {
-        return 'Anggaran $limitText sudah habis, Dek, sementara pengeluaranmu '
+        return 'Anggaran $limitText sudah habis, $name, sementara pengeluaranmu '
             'mencapai $spentText. Belanja boleh semangat, tapi dompet bukan '
             'sumber dana abadi; berhenti dan benahi prioritasmu.';
       }
@@ -131,7 +151,9 @@ String fallbackDeadlineRoast({
   required RoastingIntensity intensity,
   required String taskTitle,
   required Duration remaining,
+  String? userName,
 }) {
+  final String name = resolveGreetingName(userName);
   final String title = _shortTaskTitle(taskTitle);
   final String timeLeft = deadlineRemainingLabel(remaining);
 
@@ -141,10 +163,10 @@ String fallbackDeadlineRoast({
           'untuk mulai dari langkah kecil; kerjakan bagian pertamanya sekarang, '
           'ya.';
     case RoastingIntensity.seimbang:
-      return 'Dek, deadline "$title" tinggal $timeLeft lagi. Waktu untuk '
+      return '$name, deadline "$title" tinggal $timeLeft lagi. Waktu untuk '
           'menunda sudah hampir habis; buka tugasnya dan mulai sekarang.';
     case RoastingIntensity.pedas:
-      return '"$title" tinggal $timeLeft lagi, Dek. Deadline tidak akan '
+      return '"$title" tinggal $timeLeft lagi, $name. Deadline tidak akan '
           'menunggu sampai kamu merasa siap; kerjakan sekarang sebelum panik '
           'yang mengambil alih.';
   }
@@ -154,7 +176,9 @@ String fallbackDeadlineRoast({
 String fallbackDailyRoast({
   required RoastingIntensity intensity,
   required DailyRoastingSummary summary,
+  String? userName,
 }) {
+  final String name = resolveGreetingName(userName);
   final List<String> facts = <String>[];
   if (summary.pendingTasks > 0) {
     facts.add('${summary.pendingTasks} tugas belum selesai');
@@ -189,17 +213,17 @@ String fallbackDailyRoast({
           'dirimu apresiasi setelah menyelesaikannya.';
     case RoastingIntensity.seimbang:
       if (facts.isEmpty) {
-        return '$activity, Dek. Bukan masalah, tapi jangan biarkan hari '
+        return '$activity, $name. Bukan masalah, tapi jangan biarkan hari '
             'berakhir tanpa satu langkah kecil yang bisa kamu banggakan.';
       }
-      return '$activity, Dek. Mulai dari satu tugas atau tahan satu '
+      return '$activity, $name. Mulai dari satu tugas atau tahan satu '
           'pengeluaran; jangan tunggu semuanya menumpuk.';
     case RoastingIntensity.pedas:
       if (facts.isEmpty) {
-        return '$activity, Dek. Bukan mau menuduh, tapi kalender tidak akan '
+        return '$activity, $name. Bukan mau menuduh, tapi kalender tidak akan '
             'mengerjakan tugasmu sendiri; mulai satu langkah sekarang.';
       }
-      return '$activity, Dek. To-do list dan dompet sama-sama butuh perhatian; '
+      return '$activity, $name. To-do list dan dompet sama-sama butuh perhatian; '
           'berhenti menunda dan bereskan satu hal sekarang.';
   }
 }

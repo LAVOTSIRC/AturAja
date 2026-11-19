@@ -29,6 +29,7 @@ class RoastingNotificationService {
     this.preferences,
     DateTime Function()? clock,
     this.activeUserId,
+    this.userName,
     this.isAppActive,
   }) : _clock = clock ?? DateTime.now;
 
@@ -45,6 +46,7 @@ class RoastingNotificationService {
   SharedPreferences? preferences;
   final DateTime Function() _clock;
   final String? Function()? activeUserId;
+  final String? Function()? userName;
   final bool Function()? isAppActive;
 
   Future<void> _taskChain = Future<void>.value();
@@ -70,6 +72,7 @@ class RoastingNotificationService {
     if (!_isActive(userId)) {
       return null;
     }
+    final String? currentUserName = userName?.call();
     RoastingNotificationMessage result;
     try {
       result = await generator.generateBudgetNotification(
@@ -78,6 +81,7 @@ class RoastingNotificationService {
         limit: limit,
         threshold: threshold,
         recentMessages: recent,
+        userName: currentUserName,
       );
     } catch (error) {
       debugPrint('Generator Budget Roasting gagal: $error');
@@ -87,6 +91,7 @@ class RoastingNotificationService {
           spent: spent,
           limit: limit,
           threshold: threshold,
+          userName: currentUserName,
         ),
         generatedByAi: false,
         kind: RoastingNotificationKind.budget,
@@ -243,10 +248,12 @@ class RoastingNotificationService {
             cached.body.trim().isNotEmpty) {
           record = cached;
         } else {
+          final String? currentUserName = userName?.call();
           final String fallback = fallbackDeadlineRoast(
             intensity: intensity,
             taskTitle: task.title,
             remaining: remaining,
+            userName: currentUserName,
           );
           RoastingNotificationMessage result;
           try {
@@ -260,6 +267,7 @@ class RoastingNotificationService {
               dueAt: task.dueDate!,
               remaining: remaining,
               recentMessages: recent,
+              userName: currentUserName,
             );
           } catch (error) {
             debugPrint('Generator Deadline Roasting gagal: $error');
@@ -364,10 +372,12 @@ class RoastingNotificationService {
           record.intensityName == intensity.name &&
           record.body.trim().isNotEmpty;
 
+      final String? currentUserName = userName?.call();
       if (!canReuse) {
         final String fallback = fallbackDailyRoast(
           intensity: intensity,
           summary: summary,
+          userName: currentUserName,
         );
         RoastingNotificationMessage result;
         try {
@@ -379,6 +389,7 @@ class RoastingNotificationService {
             intensity: intensity,
             summary: summary,
             recentMessages: recent,
+            userName: currentUserName,
           );
         } catch (error) {
           debugPrint('Generator Daily Roasting gagal: $error');

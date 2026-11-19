@@ -25,6 +25,7 @@ class _RecordingRoastingGenerator implements RoastingAiGenerator {
     required int pendingTasks,
     required int transactionCount,
     required RoastingIntensity intensity,
+    String? userName,
   }) async {
     receivedIntensities.add(intensity);
     final Object? failure = error;

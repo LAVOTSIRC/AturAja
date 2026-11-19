@@ -13,6 +13,7 @@ abstract interface class RoastingAiGenerator {
     required int pendingTasks,
     required int transactionCount,
     required RoastingIntensity intensity,
+    String? userName,
   });
 }
 
@@ -27,6 +28,7 @@ abstract interface class RoastingNotificationGenerator {
     required int limit,
     required int threshold,
     required List<String> recentMessages,
+    String? userName,
   });
 
   Future<RoastingNotificationMessage> generateDeadlineNotification({
@@ -35,12 +37,14 @@ abstract interface class RoastingNotificationGenerator {
     required DateTime dueAt,
     required Duration remaining,
     required List<String> recentMessages,
+    String? userName,
   });
 
   Future<RoastingNotificationMessage> generateDailyNotification({
     required RoastingIntensity intensity,
     required DailyRoastingSummary summary,
     required List<String> recentMessages,
+    String? userName,
   });
 }
 
@@ -75,8 +79,9 @@ class RoastingAiService
   static String systemInstructionFor(RoastingIntensity intensity) {
     return 'Kamu adalah Roasting AI ringan untuk aplikasi produktivitas '
         'mahasiswa AturAja. Tulis dalam Bahasa Indonesia yang natural, tidak '
-        'kaku, dan cocok untuk mahasiswa. Boleh memakai sapaan "dek" secara '
-        'wajar. Untuk roasting di layar, tulis 2 sampai 3 kalimat; untuk '
+        'kaku, dan cocok untuk mahasiswa. Jika nama pengguna diberikan, prioritaskan '
+        'menyapa pengguna dengan nama tersebut secara akrab. Jika nama tidak ada, '
+        'boleh memakai sapaan santai seperti "dek" atau tanpa sapaan. Untuk roasting di layar, tulis 2 sampai 3 kalimat; untuk '
         'notifikasi otomatis, tulis 1 sampai 2 kalimat yang singkat dan mudah '
         'dibaca di layar ponsel. '
         '${intensity.instruction} '
@@ -99,6 +104,7 @@ class RoastingAiService
     required int pendingTasks,
     required int transactionCount,
     required RoastingIntensity intensity,
+    String? userName,
   }) async {
     final GenerateContentResponse response = await _modelFor(intensity)
         .generateContent([
@@ -107,7 +113,7 @@ class RoastingAiService
             '$pendingTasks tugas belum selesai, dan $transactionCount '
             'transaksi tercatat. Gunakan gaya ${intensity.label}. Buat '
             'roasting 2 sampai 3 kalimat yang membahas kebiasaan pengguna '
-            'tetapi tetap memotivasi.',
+            'tetapi tetap memotivasi.${_nameClause(userName)}',
           ),
         ])
         .timeout(const Duration(seconds: 8));
@@ -125,6 +131,7 @@ class RoastingAiService
     required int limit,
     required int threshold,
     required List<String> recentMessages,
+    String? userName,
   }) async {
     final int percentage = limit <= 0 ? 0 : ((spent / limit) * 100).round();
     final int remaining = limit - spent < 0 ? 0 : limit - spent;
@@ -133,6 +140,7 @@ class RoastingAiService
       spent: spent,
       limit: limit,
       threshold: threshold,
+      userName: userName,
     );
     final String prompt =
         'Jenis notifikasi: Budget Roasting.\n'
@@ -145,6 +153,7 @@ class RoastingAiService
         'tersebut dengan gaya ${intensity.label}. Jangan mengarang nominal, '
         'persentase, atau aktivitas lain. Jangan menyalin contoh kalimat '
         'secara tetap; buat kalimat baru yang relevan dengan fakta di atas.'
+        '${_nameClause(userName)}'
         '${_historyClause(recentMessages)}';
 
     return _generateNotification(
@@ -162,11 +171,13 @@ class RoastingAiService
     required DateTime dueAt,
     required Duration remaining,
     required List<String> recentMessages,
+    String? userName,
   }) async {
     final String fallback = fallbackDeadlineRoast(
       intensity: intensity,
       taskTitle: taskTitle,
       remaining: remaining,
+      userName: userName,
     );
     final String timeLeft = deadlineRemainingLabel(remaining);
     final String dueLabel = _dateTimeLabel(dueAt);
@@ -180,7 +191,9 @@ class RoastingAiService
         'waktu tersebut, dengan gaya ${intensity.label}. Jangan mengarang '
         'status selesai, deskripsi tugas, atau sisa waktu lain. Jangan menyalin '
         'contoh kalimat secara tetap; buat kalimat baru berdasarkan fakta di '
-        'atas.${_historyClause(recentMessages)}';
+        'atas.'
+        '${_nameClause(userName)}'
+        '${_historyClause(recentMessages)}';
 
     return _generateNotification(
       prompt: prompt,
@@ -195,10 +208,12 @@ class RoastingAiService
     required RoastingIntensity intensity,
     required DailyRoastingSummary summary,
     required List<String> recentMessages,
+    String? userName,
   }) async {
     final String fallback = fallbackDailyRoast(
       intensity: intensity,
       summary: summary,
+      userName: userName,
     );
     final String prompt =
         'Jenis notifikasi: Daily Roasting.\n'
@@ -214,6 +229,7 @@ class RoastingAiService
         'pengguna melakukan sesuatu yang tidak tercatat. Jangan mengarang '
         'tugas, nominal, atau jumlah transaksi. Jangan menyalin contoh kalimat '
         'secara tetap; buat kalimat baru yang relevan.'
+        '${_nameClause(userName)}'
         '${_historyClause(recentMessages)}';
 
     return _generateNotification(
@@ -264,6 +280,14 @@ class RoastingAiService
       return normalized;
     }
     return '${normalized.substring(0, 117)}...';
+  }
+
+  static String _nameClause(String? userName) {
+    final String name = resolveGreetingName(userName);
+    if (name.toLowerCase() != 'dek') {
+      return ' Sapa pengguna secara personal dengan nama "$name" (misalnya "$name, ...", "Hai $name, ...", atau "... ya, $name"). Jangan memakai sapaan "dek".';
+    }
+    return ' Boleh gunakan sapaan santai seperti "Dek" atau langsung ke topik.';
   }
 
   static String _historyClause(List<String> recentMessages) {
