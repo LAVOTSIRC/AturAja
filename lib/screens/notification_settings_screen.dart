@@ -1,5 +1,8 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
+import '../config/routes.dart';
 import '../data/roasting_intensity.dart';
 import '../providers/settings_provider.dart';
 import '../theme/app_colors.dart';
@@ -217,6 +220,29 @@ class NotificationSettingsScreen extends StatelessWidget {
                 const SizedBox(height: AppSpacing.md),
                 const SectionLabel('Pratinjau Roasting'),
                 _RoastingPreviewCard(intensity: settings.roastingIntensity),
+                if (kDebugMode) ...[
+                  const SizedBox(height: AppSpacing.lg),
+                  const SectionLabel('Alat Pengembang'),
+                  AppCard(
+                    padding: EdgeInsets.zero,
+                    child: Material(
+                      color: c.transparent,
+                      child: ListTile(
+                        leading: Icon(Icons.bug_report, color: c.blue),
+                        title: Text(
+                          'Notification Diagnostics',
+                          style: AppTypography.label(c.text),
+                        ),
+                        subtitle: Text(
+                          'Uji notifikasi langsung, deadline, budget, roasting AI & pantau status izin Android.',
+                          style: AppTypography.meta(c.textMuted),
+                        ),
+                        trailing: Icon(Icons.chevron_right, color: c.textMuted),
+                        onTap: () => context.push(AppRoutes.notificationDiagnostics),
+                      ),
+                    ),
+                  ),
+                ],
               ],
             ),
           );

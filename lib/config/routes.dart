@@ -16,6 +16,7 @@ import '../screens/home_screen.dart';
 import '../screens/login_screen.dart';
 import '../screens/main_shell.dart';
 import '../screens/nlp_simulation_screen.dart';
+import '../screens/notification_diagnostics_screen.dart';
 import '../screens/notification_settings_screen.dart';
 import '../screens/privacy_security_screen.dart';
 import '../screens/profile_screen.dart';
@@ -42,6 +43,7 @@ class AppRoutes {
   static const String budgetLimit = '/settings/budget-limit';
   static const String nlpSimulation = '/settings/nlp-simulation';
   static const String privacySecurity = '/settings/privacy-security';
+  static const String notificationDiagnostics = '/settings/notification-diagnostics';
 }
 
 GoRouter createAppRouter({
@@ -211,6 +213,12 @@ GoRouter createAppRouter({
             appLockService: appLockService,
             exportService: exportService,
           );
+        },
+      ),
+      GoRoute(
+        path: AppRoutes.notificationDiagnostics,
+        builder: (BuildContext context, GoRouterState state) {
+          return const NotificationDiagnosticsScreen();
         },
       ),
       StatefulShellRoute(

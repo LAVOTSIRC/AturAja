@@ -44,6 +44,7 @@ class AppProvider extends ChangeNotifier {
   final CloudRepository? cloudRepository;
   final AppNotificationService? notifications;
   final BudgetAlertService? budgetAlerts;
+  final RoastingNotificationGenerator? roastingGenerator;
   late final RoastingNotificationService? roastingNotifications;
 
   final SharedPreferences? preferences;
@@ -83,19 +84,21 @@ class AppProvider extends ChangeNotifier {
     this.cloudRepository,
     this.notifications,
     this.budgetAlerts,
-    RoastingNotificationGenerator? roastingGenerator,
+    this.roastingGenerator,
   }) : tasks = List<TaskItem>.of(tasks),
        _transactions = List<TransactionItem>.of(
          transactions ?? sampleTransactions,
        ) {
     final AppNotificationService? notificationService = notifications;
-    if (notificationService != null && roastingGenerator != null) {
+    final RoastingNotificationGenerator? generator = roastingGenerator;
+    if (notificationService != null && generator != null) {
       roastingNotifications = RoastingNotificationService(
         notifications: notificationService,
-        generator: roastingGenerator,
+        generator: generator,
         settings: settings,
         preferences: preferences,
         activeUserId: () => activeUserId,
+        userName: () => profile.fullName,
         isAppActive: () => _isAppActive,
       );
     } else {
@@ -785,6 +788,14 @@ class AppProvider extends ChangeNotifier {
       return true;
     }
     return service.requestPermissions();
+  }
+
+  Future<bool> requestExactAlarmPermission() async {
+    final AppNotificationService? service = notifications;
+    if (service == null) {
+      return true;
+    }
+    return service.requestExactAlarmPermissionIfNeeded();
   }
 
   Future<bool> setDeadlineNotifications(bool value) async {
