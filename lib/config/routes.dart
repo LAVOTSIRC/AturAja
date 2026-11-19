@@ -171,6 +171,10 @@ GoRouter createAppRouter({
             settings: app.settings,
             onDeadlineChanged: app.setDeadlineNotifications,
             onBudgetAlertsChanged: app.setBudgetAlerts,
+            onBudgetRoastingChanged: app.setBudgetRoasting,
+            onDeadlineRoastingChanged: app.setDeadlineRoasting,
+            onDailyRoastingChanged: app.setDailyRoasting,
+            onDailyTimeChanged: app.setDailyRoastingTime,
           );
         },
       ),

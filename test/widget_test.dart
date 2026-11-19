@@ -569,8 +569,15 @@ void main() {
     await tester.pumpAndSettle();
     await openProfileSetting(tester, 'Notifikasi & Roasting AI');
 
-    expect(find.byType(Switch), findsNWidgets(3));
-    await tester.tap(find.byType(Switch).first);
+    expect(find.byType(Switch), findsNWidgets(6));
+    final Finder deadlineSwitch = find.descendant(
+      of: find.ancestor(
+        of: find.text('Deadline Tugas'),
+        matching: find.byType(SwitchListTile),
+      ),
+      matching: find.byType(Switch),
+    );
+    await tester.tap(deadlineSwitch);
     await tester.pumpAndSettle();
     await returnFromSetting(tester);
 

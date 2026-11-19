@@ -17,6 +17,7 @@ import 'services/auth_service.dart';
 import 'services/budget_alert_service.dart';
 import 'services/data_export_service.dart';
 import 'services/local_notification_service.dart';
+import 'services/roasting_ai_service.dart';
 import 'theme/app_colors.dart';
 import 'theme/app_spacing.dart';
 import 'theme/app_typography.dart';
@@ -42,11 +43,13 @@ Future<void> main() async {
   final BudgetAlertService budgetAlertService = BudgetAlertService(
     notifications: notificationService,
   );
+  final RoastingAiService roastingAiService = RoastingAiService();
   final AppProvider app = await AppProvider.loadPersistent(
     userId: auth.user?.uid,
     cloudRepository: FirestoreCloudRepository(),
     notifications: notificationService,
     budgetAlerts: budgetAlertService,
+    roastingGenerator: roastingAiService,
   );
   auth.addListener(() {
     unawaited(app.switchUser(auth.user?.uid));
@@ -80,15 +83,18 @@ class MyApp extends StatefulWidget {
   State<MyApp> createState() => _MyAppState();
 }
 
-class _MyAppState extends State<MyApp> {
+class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   late final AuthProvider _auth;
+  late final AppProvider _app;
   late final GoRouter _router;
   late final AppLockService _appLockService;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _auth = context.read<AuthProvider>();
+    _app = context.read<AppProvider>();
     _appLockService = widget.appLockService ?? AppLockService();
     _router = createAppRouter(
       initialLocation: widget.initialLocation,
@@ -99,7 +105,18 @@ class _MyAppState extends State<MyApp> {
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    if (state == AppLifecycleState.resumed) {
+      unawaited(_app.onAppForeground());
+    } else {
+      _app.onAppBackgrounded();
+    }
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _router.dispose();
     super.dispose();
   }

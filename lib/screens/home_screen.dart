@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../data/models.dart';
+import '../data/roasting_intensity.dart';
 import '../providers/app_provider.dart';
 import '../services/roasting_ai_service.dart';
 import '../theme/app_colors.dart';
@@ -30,12 +31,87 @@ String greetingForHour(int hour) {
   return 'Selamat malam';
 }
 
+/// Roasting cadangan ketika Gemini gagal, tetap mengikuti intensitas pilihan.
+String fallbackRoastFor({
+  required RoastingIntensity intensity,
+  required int pendingTasks,
+  required int totalExpense,
+  required int budgetLimit,
+}) {
+  final bool hasPendingTasks = pendingTasks > 0;
+  final bool overBudget = totalExpense > budgetLimit;
+
+  switch (intensity) {
+    case RoastingIntensity.santai:
+      if (hasPendingTasks && overBudget) {
+        return 'Tugasmu masih ada yang menunggu dan pengeluaran sudah melewati '
+            'anggaran. Tidak apa-apa, mulai dari satu langkah kecil: pilih '
+            'satu tugas lalu tahan dulu pengeluaran yang belum mendesak.';
+      }
+      if (hasPendingTasks) {
+        return 'Masih ada $pendingTasks tugas yang menunggu, tetapi kamu sudah '
+            'punya waktu untuk memulai. Pilih satu tugas paling ringan hari '
+            'ini dan beri dirimu apresiasi setelah menyelesaikannya.';
+      }
+      if (overBudget) {
+        return 'Pengeluaranmu sudah melewati anggaran, jadi waktunya lebih '
+            'berhati-hati. Cek lagi kebutuhan yang benar-benar penting dan '
+            'sisihkan sedikit untuk tabungan.';
+      }
+      return 'Tugas dan anggaranmu sedang terkendali, kerja bagus! '
+          'Pertahankan ritme ini dan tetap sempatkan istirahat agar besok '
+          'tetap bersemangat.';
+
+    case RoastingIntensity.seimbang:
+      if (hasPendingTasks && overBudget) {
+        return 'Dek, tugas masih menumpuk dan pengeluaran sudah lewat '
+            'anggaran. Pilih satu tugas sekarang, lalu tahan checkout '
+            'berikutnya supaya dompet dan deadline sama-sama tidak menangis.';
+      }
+      if (hasPendingTasks) {
+        return 'Dek, $pendingTasks tugas masih menunggu sementara kamu sibuk '
+            'mencari waktu yang sempurna. Mulai satu tugas sekarang, karena '
+            'to-do list tidak bisa dicentang sendiri.';
+      }
+      if (overBudget) {
+        return 'Dek, anggaranmu sudah mulai menipis. Dompetmu sudah memberi '
+            'peringatan; jangan sampai saldo tinggal kenangan sebelum akhir '
+            'bulan.';
+      }
+      return 'Dek, tugas dan anggaranmu sedang aman. Jangan terlena; '
+          'pertahankan kebiasaan ini sebelum deadline dan dompet kembali '
+          'bikin panik.';
+
+    case RoastingIntensity.pedas:
+      if (hasPendingTasks && overBudget) {
+        return 'Dek, tugas menumpuk dan anggaran sudah lewat, tapi sepertinya '
+            'kamu masih sibuk mencari alasan. Tutup tab belanja, buka satu '
+            'tugas, dan buktikan kamu bisa berhenti menunda.';
+      }
+      if (hasPendingTasks) {
+        return 'Dek, $pendingTasks tugas masih menunggu, tapi kamu lebih rajin '
+            'membuka to-do list daripada mengerjakannya. Pilih satu, kerjakan '
+            'sekarang, dan jangan biarkan deadline yang mengambil alih '
+            'kendali.';
+      }
+      if (overBudget) {
+        return 'Anggaranmu hampir habis, Dek. Sepertinya tombol checkout lebih '
+            'sering kamu kunjungi daripada halaman pengaturan keuangan. '
+            'Saatnya berhenti dan benahi prioritasmu.';
+      }
+      return 'Dek, tugas dan anggaranmu aman; jangan sampai kenyamanan ini '
+          'jadi alasan untuk bersantai berlebihan. Pertahankan disiplinmu '
+          'sebelum dompet dan deadline bersekongkol.';
+  }
+}
+
 class HomeScreen extends StatefulWidget {
   final VoidCallback onScan;
   final VoidCallback onAddTask;
   final VoidCallback onBrainDump;
   final VoidCallback? onViewFinance;
   final VoidCallback? onViewTasks;
+  final RoastingAiGenerator? roastingAiGenerator;
 
   const HomeScreen({
     super.key,
@@ -44,6 +120,7 @@ class HomeScreen extends StatefulWidget {
     required this.onBrainDump,
     this.onViewFinance,
     this.onViewTasks,
+    this.roastingAiGenerator,
   });
 
   @override
@@ -54,7 +131,7 @@ class _HomeScreenState extends State<HomeScreen> {
   bool showRoast = false;
   bool isRoastLoading = false;
   String? roastMessage;
-  RoastingAiService? _roastingAiService;
+  RoastingAiGenerator? _roastingAiService;
   late final Timer _greetingTimer;
 
   @override
@@ -87,12 +164,13 @@ class _HomeScreenState extends State<HomeScreen> {
       showRoast = true;
     });
     try {
-      final RoastingAiService service = _roastingAiService ??=
-          RoastingAiService();
+      final RoastingAiGenerator service = _roastingAiService ??=
+          widget.roastingAiGenerator ?? RoastingAiService();
       roastMessage = await service.generate(
         totalExpense: app.totalExpense,
         pendingTasks: app.pendingTaskCount,
         transactionCount: app.transactions.length,
+        intensity: app.settings.roastingIntensity,
       );
     } on FirebaseAIException {
       roastMessage = _fallbackRoast(app);
@@ -107,16 +185,12 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   String _fallbackRoast(AppProvider app) {
-    if (app.pendingTaskCount > 0 && app.totalExpense > app.budgetLimit) {
-      return 'Dek, tugas masih menumpuk dan pengeluaran sudah lewat anggaran. Jangan cuma sibuk merencanakan; pilih satu tugas, kerjakan sekarang, lalu kendalikan checkout berikutnya.';
-    }
-    if (app.pendingTaskCount > 0) {
-      return 'Dek, ${app.pendingTaskCount} tugas masih menunggu. To-do list-mu sudah rajin mengingatkan, sekarang giliran kamu mulai satu tugas dan tuntaskan.';
-    }
-    if (app.totalExpense > app.budgetLimit) {
-      return 'Dek, pengeluaran sudah melewati anggaran. Dompetmu tidak butuh alasan baru; tahan checkout dan cek lagi prioritasmu sebelum menambah transaksi.';
-    }
-    return 'Dek, tugas dan anggaranmu sedang terkendali. Jangan terlena; pertahankan kebiasaan ini supaya besok tidak kembali panik di menit terakhir.';
+    return fallbackRoastFor(
+      intensity: app.settings.roastingIntensity,
+      pendingTasks: app.pendingTaskCount,
+      totalExpense: app.totalExpense,
+      budgetLimit: app.budgetLimit,
+    );
   }
 
   List<_QuickActionData> get quickActions => [
