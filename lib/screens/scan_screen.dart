@@ -35,6 +35,26 @@ String _formatReceiptAmount(int amount) {
   return formatted.toString();
 }
 
+class _EditableItem {
+  final TextEditingController nameCtrl;
+  final TextEditingController amountCtrl;
+
+  /// true = biaya tambahan (pajak, service charge, tip, diskon, dll)
+  bool isCharge;
+
+  _EditableItem({
+    String name = '',
+    String amount = '',
+    this.isCharge = false,
+  })  : nameCtrl = TextEditingController(text: name),
+        amountCtrl = TextEditingController(text: amount);
+
+  void dispose() {
+    nameCtrl.dispose();
+    amountCtrl.dispose();
+  }
+}
+
 class ScanScreen extends StatefulWidget {
   const ScanScreen({super.key});
 
@@ -45,15 +65,9 @@ class ScanScreen extends StatefulWidget {
 class _ScanScreenState extends State<ScanScreen>
     with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   _ScanStep step = _ScanStep.scan;
-  final TextEditingController merchantController = TextEditingController(
-    text: 'Belanja di Indomaret',
-  );
-  final TextEditingController amountController = TextEditingController(
-    text: '28500',
-  );
-  final TextEditingController dateController = TextEditingController(
-    text: 'Hari ini',
-  );
+  final TextEditingController merchantController = TextEditingController();
+  final TextEditingController amountController = TextEditingController();
+  final TextEditingController dateController = TextEditingController();
   final ReceiptOcrService _ocrService = ReceiptOcrService();
   String _category = 'belanja';
   bool isProcessing = false;
@@ -64,7 +78,12 @@ class _ScanScreenState extends State<ScanScreen>
   CameraController? _cameraController;
   int _cameraSession = 0;
 
-  // Scanning line animation
+  final List<_EditableItem> _editableItems = [];
+  String? _processingStatus;
+  bool _showAccuracyWarning = false;
+  bool _canRetryOcr = false;
+  bool _isGuardrailError = false;
+
   late AnimationController _scanLineController;
   late Animation<double> _scanLineAnim;
 
@@ -94,6 +113,7 @@ class _ScanScreenState extends State<ScanScreen>
     amountController.dispose();
     merchantController.dispose();
     dateController.dispose();
+    _disposeAllEditableItems();
     unawaited(_ocrService.close());
     _scanLineController.dispose();
     super.dispose();
@@ -205,39 +225,99 @@ class _ScanScreenState extends State<ScanScreen>
     }
   }
 
-  void _showUndetectedReceiptAlert(String message) {
-    if (!mounted) return;
-    final AppColors c = ThemeScope.of(context).colors;
-    ScaffoldMessenger.of(context).hideCurrentSnackBar();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            Icon(
-              Icons.warning_amber_rounded,
-              color: c.expense,
-              size: AppSpacing.iconSmall,
-            ),
-            const SizedBox(width: AppSpacing.xs),
-            Expanded(
-              child: Text(
-                'Struk atau informasi keuangan tidak terdeteksi pada gambar.',
-                style: AppTypography.label(c.text),
-              ),
-            ),
-          ],
+  void _disposeAllEditableItems() {
+    for (final item in _editableItems) {
+      item.dispose();
+    }
+    _editableItems.clear();
+  }
+
+  void _populateEditableItems(ReceiptOcrResult result) {
+    _disposeAllEditableItems();
+    for (final item in result.items) {
+      _editableItems.add(
+        _EditableItem(
+          name: item.name,
+          amount: item.amount.toString(),
+          isCharge: item.isCharge,
         ),
-        behavior: SnackBarBehavior.floating,
-        backgroundColor: c.surface,
-        elevation: 6,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppSpacing.md),
-          side: BorderSide(color: c.expense, width: 1.5),
-        ),
-        margin: const EdgeInsets.all(AppSpacing.md),
-        duration: const Duration(seconds: 3),
-      ),
-    );
+      );
+    }
+  }
+
+  void _addItem() {
+    setState(() => _editableItems.add(_EditableItem()));
+  }
+
+  void _removeItem(int index) {
+    setState(() {
+      _editableItems[index].dispose();
+      _editableItems.removeAt(index);
+    });
+  }
+
+  void _recalcTotalFromItems() {
+    int total = 0;
+    for (final item in _editableItems) {
+      final int? amount = int.tryParse(
+        item.amountCtrl.text.replaceAll(RegExp(r'[^0-9]'), ''),
+      );
+      if (amount != null && amount > 0) total += amount;
+    }
+    if (total > 0) {
+      setState(() => amountController.text = total.toString());
+    }
+  }
+
+  Future<void> _runOcrOnPath(String imagePath) async {
+    setState(() {
+      _processingStatus = 'Membaca teks dari foto...';
+      _canRetryOcr = false;
+      _isGuardrailError = false;
+      _showAccuracyWarning = false;
+      errorMessage = null;
+    });
+
+    try {
+      final String text = await _ocrService.extractText(imagePath);
+      if (!mounted) return;
+
+      setState(() => _processingStatus = 'Menganalisis dengan Gemini AI...');
+      final ReceiptOcrResult result = await _ocrService.parseText(text);
+      if (!mounted) return;
+
+      _populateEditableItems(result);
+      setState(() {
+        if (result.merchant.isNotEmpty) {
+          merchantController.text = result.merchant;
+        }
+        if (result.total != null) {
+          amountController.text = result.total.toString();
+        }
+        if (result.date != null) {
+          dateController.text = _shortDate(result.date!);
+        }
+        _ocrResult = result;
+        _showAccuracyWarning = _ocrService.isResultSuspicious(result);
+        _processingStatus = null;
+        errorMessage = null;
+      });
+    } on ReceiptOcrException catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _ocrResult = null;
+        errorMessage = error.message;
+        _processingStatus = null;
+        _canRetryOcr = error.isRetryable;
+        _isGuardrailError = error.isGuardrailError;
+      });
+    }
+  }
+
+  Future<void> _retryOcr() async {
+    final String? path = _receiptImagePath;
+    if (path == null) return;
+    await _runOcrOnPath(path);
   }
 
   Future<void> _captureReceipt() async {
@@ -276,30 +356,7 @@ class _ScanScreenState extends State<ScanScreen>
         step = _ScanStep.confirm;
       });
       await _releaseCamera();
-      try {
-        final ReceiptOcrResult result = await _ocrService.recognizeFile(path);
-        if (!mounted) return;
-        setState(() {
-          if (result.merchant.isNotEmpty) {
-            merchantController.text = result.merchant;
-          }
-          if (result.total != null) {
-            amountController.text = result.total.toString();
-          }
-          if (result.date != null) {
-            dateController.text = _shortDate(result.date!);
-          }
-          _ocrResult = result;
-          errorMessage = null;
-        });
-      } on ReceiptOcrException catch (error) {
-        if (!mounted) return;
-        setState(() {
-          _ocrResult = null;
-          errorMessage = error.message;
-        });
-        _showUndetectedReceiptAlert(error.message);
-      }
+      await _runOcrOnPath(path);
     } on ReceiptCameraException catch (error) {
       if (!mounted) return;
       setState(() {
@@ -336,29 +393,7 @@ class _ScanScreenState extends State<ScanScreen>
         step = _ScanStep.confirm;
       });
       await _releaseCamera();
-      final ReceiptOcrResult result = await _ocrService.recognizeFile(path);
-      if (!mounted) return;
-      setState(() {
-        if (result.merchant.isNotEmpty) {
-          merchantController.text = result.merchant;
-        }
-        if (result.total != null) {
-          amountController.text = result.total.toString();
-        }
-        if (result.date != null) {
-          dateController.text = _shortDate(result.date!);
-        }
-        _ocrResult = result;
-        errorMessage = null;
-      });
-    } on ReceiptOcrException catch (error) {
-      if (mounted) {
-        setState(() {
-          _ocrResult = null;
-          errorMessage = error.message;
-        });
-        _showUndetectedReceiptAlert(error.message);
-      }
+      await _runOcrOnPath(path);
     } catch (error) {
       if (mounted) {
         setState(() {
@@ -374,6 +409,42 @@ class _ScanScreenState extends State<ScanScreen>
     final AppProvider app = context.read<AppProvider>();
     final String transactionTime = TimeOfDay.now().format(context);
     final NavigatorState navigator = Navigator.of(context);
+
+    if (_editableItems.isEmpty) {
+      final AppColors c = ThemeScope.of(context).colors;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              Icon(
+                Icons.warning_amber_rounded,
+                color: c.warning,
+                size: AppSpacing.iconSmall,
+              ),
+              const SizedBox(width: AppSpacing.xs),
+              const Expanded(
+                child: Text(
+                  'Daftar item kosong. Tambahkan item untuk membuat '
+                  'total lebih transparan.',
+                ),
+              ),
+            ],
+          ),
+          backgroundColor: c.surface,
+          behavior: SnackBarBehavior.floating,
+          margin: const EdgeInsets.all(AppSpacing.md),
+          duration: const Duration(seconds: 4),
+          action: SnackBarAction(
+            label: 'Lanjut',
+            onPressed: () {},
+          ),
+        ),
+      );
+      // Tunda konfirmasi 500ms agar snackbar sempat tampil
+      await Future<void>.delayed(const Duration(milliseconds: 500));
+      if (!mounted) return;
+    }
+
     final String rawValue = amountController.text.replaceAll(
       RegExp(r'[^0-9]'),
       '',
@@ -402,13 +473,13 @@ class _ScanScreenState extends State<ScanScreen>
       final TransactionItem transaction = TransactionItem(
         id: transactionId,
         label: merchantController.text.trim().isEmpty
-            ? 'Belanja di Indomaret'
+            ? 'Transaksi dari Struk'
             : merchantController.text.trim(),
         amount: -amount,
         cat: _category,
         time: transactionTime,
         date: dateController.text.trim().isEmpty
-            ? 'Hari ini'
+            ? _shortDate(DateTime.now())
             : dateController.text.trim(),
         receiptImagePath: _receiptImagePath,
       );
@@ -425,16 +496,21 @@ class _ScanScreenState extends State<ScanScreen>
   }
 
   void _scanAgain() {
+    _disposeAllEditableItems();
     setState(() {
       step = _ScanStep.scan;
       isProcessing = false;
       errorMessage = null;
       _receiptImagePath = null;
       _ocrResult = null;
-      merchantController.text = 'Belanja di Indomaret';
-      amountController.text = '28500';
-      dateController.text = 'Hari ini';
+      merchantController.text = '';
+      amountController.text = '';
+      dateController.text = '';
       _category = 'belanja';
+      _processingStatus = null;
+      _showAccuracyWarning = false;
+      _canRetryOcr = false;
+      _isGuardrailError = false;
     });
     if (!_scanLineController.isAnimating) {
       _scanLineController.repeat(reverse: true);
@@ -453,12 +529,365 @@ class _ScanScreenState extends State<ScanScreen>
         ),
       ];
     }
-    return items.take(5).map((ReceiptItem item) {
+    return items.map((ReceiptItem item) {
+      if (item.isCharge) {
+        return Text(
+          '${item.name} - - - - ${_formatReceiptAmount(item.amount)}',
+          style: AppTypography.mono(c.textMuted).copyWith(
+            fontStyle: FontStyle.italic,
+          ),
+        );
+      }
       return Text(
         '${item.name} ......... ${_formatReceiptAmount(item.amount)}',
         style: AppTypography.mono(c.textSub),
       );
     }).toList();
+  }
+
+  /// Banner progress saat OCR masih berjalan di step konfirmasi.
+  Widget _buildOcrLoadingBanner(AppColors c) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: AppSpacing.sm),
+      padding: const EdgeInsets.all(AppSpacing.sm),
+      decoration: BoxDecoration(
+        color: c.blue.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(AppSpacing.sm),
+        border: Border.all(color: c.blue.withValues(alpha: 0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              SizedBox(
+                width: AppSpacing.iconSmall,
+                height: AppSpacing.iconSmall,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: c.blue,
+                ),
+              ),
+              const SizedBox(width: AppSpacing.xs),
+              Expanded(
+                child: Text(
+                  _processingStatus ?? 'Memproses...',
+                  style: AppTypography.label(c.blue)
+                      .copyWith(fontWeight: FontWeight.w600),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.xs),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(2),
+            child: LinearProgressIndicator(
+              color: c.blue,
+              backgroundColor: c.blue.withValues(alpha: 0.2),
+              minHeight: 3,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Banner peringatan kuning saat hasil AI mungkin tidak akurat.
+  Widget _buildAccuracyWarningBanner(AppColors c) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: AppSpacing.sm),
+      padding: const EdgeInsets.all(AppSpacing.sm),
+      decoration: BoxDecoration(
+        color: c.warning.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(AppSpacing.sm),
+        border: Border.all(color: c.warning.withValues(alpha: 0.5)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            Icons.info_outline_rounded,
+            size: AppSpacing.iconSmall,
+            color: c.warning,
+          ),
+          const SizedBox(width: AppSpacing.xs),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Periksa kembali sebelum menyimpan',
+                  style: AppTypography.label(c.warning)
+                      .copyWith(fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Hasil analisis AI mungkin tidak 100% akurat — ada item yang '
+                  'terlewat atau harga yang salah baca. Koreksi daftar item dan '
+                  'nominal sebelum konfirmasi.',
+                  style: AppTypography.caption(c.warning),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Banner merah saat gambar bukan struk / foto tidak terbaca.
+  Widget _buildGuardrailErrorBanner(AppColors c) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: AppSpacing.sm),
+      padding: const EdgeInsets.all(AppSpacing.sm),
+      decoration: BoxDecoration(
+        color: c.expense.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(AppSpacing.sm),
+        border: Border.all(color: c.expense.withValues(alpha: 0.5)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            Icons.block_rounded,
+            size: AppSpacing.iconSmall,
+            color: c.expense,
+          ),
+          const SizedBox(width: AppSpacing.xs),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Gambar bukan struk atau tidak terbaca',
+                  style: AppTypography.label(c.expense)
+                      .copyWith(fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  errorMessage ?? 'Pastikan memotret struk yang '
+                      'memuat daftar item dan harga dengan jelas.',
+                  style: AppTypography.caption(c.expense),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEditableItemsSection(AppColors c) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: AppSpacing.sm),
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                'Daftar Item',
+                style: AppTypography.label(c.text)
+                    .copyWith(fontWeight: FontWeight.w600),
+              ),
+            ),
+            TextButton.icon(
+              onPressed: _addItem,
+              icon: const Icon(Icons.add, size: AppSpacing.iconSmall),
+              label: const Text('Tambah Item'),
+              style: TextButton.styleFrom(
+                foregroundColor: c.blue,
+                minimumSize: Size.zero,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppSpacing.sm,
+                  vertical: AppSpacing.xxs,
+                ),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: AppSpacing.xs),
+        if (_editableItems.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
+            child: Text(
+              'Tidak ada item terdeteksi. Ketuk + Tambah Item untuk menambah manual.',
+              style: AppTypography.caption(c.textMuted),
+            ),
+          )
+        else
+          ...List<Widget>.generate(
+            _editableItems.length,
+            (int index) =>
+                _buildEditableItemRow(c, index, _editableItems[index]),
+          ),
+        if (_editableItems.isNotEmpty) ...<Widget>[
+          const SizedBox(height: AppSpacing.xs),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: _recalcTotalFromItems,
+              icon: const Icon(
+                Icons.calculate_outlined,
+                size: AppSpacing.iconSmall,
+              ),
+              label: const Text('Hitung Total dari Item'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: c.blue,
+                side: BorderSide(color: c.border),
+                padding: const EdgeInsets.symmetric(
+                  vertical: AppSpacing.xs,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildEditableItemRow(AppColors c, int index, _EditableItem item) {
+    final Color accentColor = item.isCharge ? c.warning : c.border;
+    final Color fillColor = item.isCharge
+        ? c.warning.withValues(alpha: 0.08)
+        : c.surface;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpacing.xs),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Badge baris: produk biasa vs biaya tambahan (tappable untuk toggle)
+          GestureDetector(
+            onTap: () => setState(() => item.isCharge = !item.isCharge),
+            child: Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.xs,
+                vertical: 2,
+              ),
+              decoration: BoxDecoration(
+                color: item.isCharge
+                    ? c.warning.withValues(alpha: 0.15)
+                    : c.surface,
+                border: Border.all(color: accentColor.withValues(alpha: 0.5)),
+                borderRadius: BorderRadius.circular(AppSpacing.xxs),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    item.isCharge
+                        ? Icons.receipt_outlined
+                        : Icons.shopping_bag_outlined,
+                    size: 10,
+                    color: item.isCharge ? c.warning : c.textMuted,
+                  ),
+                  const SizedBox(width: 3),
+                  Text(
+                    item.isCharge ? 'BIAYA / PAJAK' : 'PRODUK',
+                    style: TextStyle(
+                      fontSize: 9,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.5,
+                      color: item.isCharge ? c.warning : c.textMuted,
+                    ),
+                  ),
+                  const SizedBox(width: 3),
+                  Icon(
+                    Icons.swap_horiz,
+                    size: 9,
+                    color: item.isCharge ? c.warning : c.textMuted,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: AppSpacing.xxs),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Expanded(
+                flex: 5,
+                child: TextField(
+                  controller: item.nameCtrl,
+                  style: AppTypography.body(c.text),
+                  textCapitalization: TextCapitalization.words,
+                  decoration: InputDecoration(
+                    hintText: item.isCharge ? 'Nama biaya / pajak' : 'Nama item',
+                    hintStyle: AppTypography.body(c.textMuted),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.sm,
+                      vertical: AppSpacing.xs,
+                    ),
+                    filled: true,
+                    fillColor: fillColor,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(AppSpacing.xs),
+                      borderSide: BorderSide(color: accentColor),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(AppSpacing.xs),
+                      borderSide: BorderSide(color: accentColor),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(AppSpacing.xs),
+                      borderSide: BorderSide(color: c.focus, width: 1.5),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: AppSpacing.xs),
+              Expanded(
+                flex: 3,
+                child: TextField(
+                  controller: item.amountCtrl,
+                  keyboardType: TextInputType.number,
+                  style: AppTypography.body(
+                    item.isCharge ? c.warning : c.text,
+                  ),
+                  decoration: InputDecoration(
+                    hintText: 'Nominal',
+                    hintStyle: AppTypography.body(c.textMuted),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.sm,
+                      vertical: AppSpacing.xs,
+                    ),
+                    filled: true,
+                    fillColor: fillColor,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(AppSpacing.xs),
+                      borderSide: BorderSide(color: accentColor),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(AppSpacing.xs),
+                      borderSide: BorderSide(color: accentColor),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(AppSpacing.xs),
+                      borderSide: BorderSide(color: c.focus, width: 1.5),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: AppSpacing.xxs),
+              SizedBox(
+                width: AppSpacing.target,
+                height: AppSpacing.target,
+                child: IconButton(
+                  onPressed: () => _removeItem(index),
+                  icon: const Icon(Icons.delete_outline),
+                  color: c.expense,
+                  iconSize: AppSpacing.iconSmall,
+                  padding: EdgeInsets.zero,
+                  tooltip: 'Hapus item',
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -471,8 +900,6 @@ class _ScanScreenState extends State<ScanScreen>
       ),
     );
   }
-
-  // ── Camera view (scan step) ──────────────────────────────────────────────
 
   Widget _cameraBackground() {
     return Container(
@@ -770,7 +1197,7 @@ class _ScanScreenState extends State<ScanScreen>
                         Text(
                           _isCameraInitializing
                               ? 'Menyiapkan kamera...'
-                              : 'Memproses struk...',
+                              : (_processingStatus ?? 'Menganalisis struk dengan Gemini AI...'),
                           style: const TextStyle(
                             color: Colors.white,
                             fontSize: 13,
@@ -829,8 +1256,6 @@ class _ScanScreenState extends State<ScanScreen>
     );
   }
 
-  // ── Confirm step body ────────────────────────────────────────────────────
-
   Widget _confirmBody(AppColors c) {
     return Scaffold(
       backgroundColor: c.bg,
@@ -888,7 +1313,15 @@ class _ScanScreenState extends State<ScanScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (errorMessage != null) ...[
+          if (_processingStatus != null)
+            _buildOcrLoadingBanner(c),
+          if (_showAccuracyWarning && _processingStatus == null) ...[
+            _buildAccuracyWarningBanner(c),
+          ],
+          if (_isGuardrailError && _processingStatus == null) ...[
+            _buildGuardrailErrorBanner(c),
+          ],
+          if (errorMessage != null && !_isGuardrailError) ...[
             AppErrorMessage(message: errorMessage!),
             const SizedBox(height: AppSpacing.sm),
           ],
@@ -1047,7 +1480,7 @@ class _ScanScreenState extends State<ScanScreen>
           ),
           const SizedBox(height: AppSpacing.sm),
           Text(
-            'Periksa dan koreksi hasil OCR sebelum menyimpan transaksi.',
+            'Periksa dan koreksi hasil analisis Gemini AI sebelum menyimpan transaksi.',
             style: AppTypography.micro(c.textMuted),
           ),
           const SizedBox(height: AppSpacing.sm),
@@ -1065,8 +1498,8 @@ class _ScanScreenState extends State<ScanScreen>
               ),
             ),
           ),
+          _buildEditableItemsSection(c),
           const SizedBox(height: AppSpacing.sm),
-          const SizedBox(height: AppSpacing.xs),
           Text(
             'Koreksi nominal jika perlu',
             style: AppTypography.meta(c.textMuted),
@@ -1138,7 +1571,7 @@ class _ScanScreenState extends State<ScanScreen>
                     }
                   },
           ),
-          if (errorMessage != null) ...[
+          if (errorMessage != null && !_isGuardrailError) ...[
             const SizedBox(height: AppSpacing.sm),
             AppErrorMessage(message: errorMessage!),
           ],
@@ -1149,7 +1582,7 @@ class _ScanScreenState extends State<ScanScreen>
             SizedBox(
               width: double.infinity,
               child: PressableScale(
-                onTap: _confirmScan,
+                onTap: _processingStatus != null ? null : _confirmScan,
                 semanticLabel: 'Konfirmasi dan catat hasil pemindaian',
                 tooltip: 'Konfirmasi transaksi',
                 child: Container(
@@ -1180,13 +1613,30 @@ class _ScanScreenState extends State<ScanScreen>
               child: Text('Scan Ulang', style: AppTypography.label(c.textSub)),
             ),
           ),
+          if (_canRetryOcr) ...[
+            const SizedBox(height: AppSpacing.xs),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: _processingStatus != null ? null : _retryOcr,
+                icon: const Icon(
+                  Icons.refresh_rounded,
+                  size: AppSpacing.iconSmall,
+                ),
+                label: const Text('Kirim Ulang ke AI'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: c.blue,
+                  side: BorderSide(color: c.blue.withValues(alpha: 0.5)),
+                  minimumSize: const Size(AppSpacing.target, AppSpacing.target),
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );
   }
 }
-
-// ── Custom painters ──────────────────────────────────────────────────────────
 
 /// Paints a semi-transparent overlay with a clear rectangular cutout (viewfinder).
 class _ViewfinderOverlayPainter extends CustomPainter {
