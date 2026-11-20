@@ -1,3 +1,5 @@
+import '../utils/task_schedule.dart';
+
 String _stringId(dynamic value) {
   if (value is String && value.trim().isNotEmpty) {
     return value.trim();
@@ -151,6 +153,12 @@ class TaskItem {
   /// Formatted category list string for displays
   String get sub => categories.isNotEmpty ? categories.join(', ') : 'Pribadi';
 
+  /// Label tenggat untuk tampilan. Dihitung dari [dueDate] agar "Besok" atau
+  /// "Hari ini" selalu sesuai tanggal sekarang, bukan teks yang tersimpan saat
+  /// tugas dibuat.
+  String get deadlineLabel =>
+      dueDate == null ? deadline : formatDeadline(dueDate!);
+
   /// Calculates if task is overdue (past deadline)
   bool get isOverdue {
     if (done) return false;
@@ -240,26 +248,32 @@ class TaskItem {
 
 class ProfileData {
   final String fullName;
+  final String email;
   final String nim;
   final String program;
   final String avatarLabel;
 
   const ProfileData({
     required this.fullName,
-    required this.nim,
-    required this.program,
+    this.email = '',
+    this.nim = '',
+    this.program = '',
     required this.avatarLabel,
   });
 
+  String get username => fullName;
+
   static const ProfileData initial = ProfileData(
     fullName: 'M Zidan Ruriano A.G',
-    nim: '241401063',
-    program: 'Ilmu Komputer',
+    email: 'zidan@aturaja.id',
+    nim: '',
+    program: '',
     avatarLabel: 'ZR',
   );
 
   static const ProfileData empty = ProfileData(
     fullName: '',
+    email: '',
     nim: '',
     program: '',
     avatarLabel: '',
@@ -267,12 +281,14 @@ class ProfileData {
 
   ProfileData copyWith({
     String? fullName,
+    String? email,
     String? nim,
     String? program,
     String? avatarLabel,
   }) {
     return ProfileData(
       fullName: fullName ?? this.fullName,
+      email: email ?? this.email,
       nim: nim ?? this.nim,
       program: program ?? this.program,
       avatarLabel: avatarLabel ?? this.avatarLabel,
@@ -281,6 +297,7 @@ class ProfileData {
 
   Map<String, dynamic> toJson() => <String, dynamic>{
     'fullName': fullName,
+    'email': email,
     'nim': nim,
     'program': program,
     'avatarLabel': avatarLabel,
@@ -288,9 +305,13 @@ class ProfileData {
 
   factory ProfileData.fromJson(Map<String, dynamic> json) {
     return ProfileData(
-      fullName: json['fullName'] as String? ?? initial.fullName,
-      nim: json['nim'] as String? ?? initial.nim,
-      program: json['program'] as String? ?? initial.program,
+      fullName:
+          (json['fullName'] as String?) ??
+          (json['username'] as String?) ??
+          initial.fullName,
+      email: json['email'] as String? ?? initial.email,
+      nim: json['nim'] as String? ?? '',
+      program: json['program'] as String? ?? '',
       avatarLabel: json['avatarLabel'] as String? ?? initial.avatarLabel,
     );
   }

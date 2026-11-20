@@ -14,6 +14,11 @@ class ReceiptOcrResult {
     this.items = const <ReceiptItem>[],
     required this.rawText,
   });
+
+  /// Mengembalikan true jika gambar mengandung informasi keuangan/struk yang
+  /// valid (terdapat nominal total atau daftar item belanja bernominal).
+  bool get hasFinancialInfo =>
+      (total != null && total! > 0) || items.isNotEmpty;
 }
 
 class ReceiptItem {
@@ -335,11 +340,10 @@ class ReceiptOcrService {
         InputImage.fromFilePath(imagePath),
       );
       final ReceiptOcrResult result = ReceiptParser.parse(recognized.text);
-      if (result.total == null &&
-          result.merchant.isEmpty &&
-          result.date == null) {
+      if (!result.hasFinancialInfo) {
         throw const ReceiptOcrException(
-          'Teks struk tidak terbaca. Silakan isi data secara manual.',
+          'Tidak ditemukan informasi keuangan atau struk pada gambar ini. '
+          'Pastikan foto struk terlihat jelas, atau isi data transaksi secara manual.',
         );
       }
       return result;
@@ -347,7 +351,8 @@ class ReceiptOcrService {
       rethrow;
     } catch (error) {
       throw ReceiptOcrException(
-        'OCR gagal membaca foto struk. Silakan isi data secara manual. ($error)',
+        'Tidak dapat mendeteksi informasi struk atau keuangan dari gambar. '
+        'Pastikan foto struk jelas atau isi data secara manual. ($error)',
       );
     }
   }

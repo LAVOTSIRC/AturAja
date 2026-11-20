@@ -5,6 +5,8 @@ import 'package:provider/provider.dart';
 import '../data/models.dart';
 import '../providers/app_provider.dart';
 import '../providers/auth_provider.dart';
+import '../services/app_lock_service.dart';
+import '../services/data_export_service.dart';
 import '../screens/brain_dump_finance_screen.dart';
 import '../screens/budget_limit_screen.dart';
 import '../screens/category_detail_screen.dart';
@@ -45,6 +47,8 @@ class AppRoutes {
 GoRouter createAppRouter({
   String initialLocation = AppRoutes.splash,
   required AuthProvider auth,
+  AppLockService? appLockService,
+  DataExportService? exportService,
 }) {
   return GoRouter(
     initialLocation: initialLocation,
@@ -162,8 +166,11 @@ GoRouter createAppRouter({
       GoRoute(
         path: AppRoutes.notificationSettings,
         builder: (BuildContext context, GoRouterState state) {
+          final AppProvider app = context.read<AppProvider>();
           return NotificationSettingsScreen(
-            settings: context.read<AppProvider>().settings,
+            settings: app.settings,
+            onDeadlineChanged: app.setDeadlineNotifications,
+            onBudgetAlertsChanged: app.setBudgetAlerts,
           );
         },
       ),
@@ -192,8 +199,13 @@ GoRouter createAppRouter({
       GoRoute(
         path: AppRoutes.privacySecurity,
         builder: (BuildContext context, GoRouterState state) {
+          final AppProvider app = context.read<AppProvider>();
           return PrivacySecurityScreen(
-            settings: context.read<AppProvider>().settings,
+            settings: app.settings,
+            app: app,
+            auth: context.read<AuthProvider>(),
+            appLockService: appLockService,
+            exportService: exportService,
           );
         },
       ),
@@ -280,9 +292,17 @@ GoRouter createAppRouter({
                 builder: (BuildContext context, GoRouterState state) {
                   return Consumer<AppProvider>(
                     builder: (BuildContext context, AppProvider app, _) {
+                      final String? authEmail =
+                          context.read<AuthProvider>().user?.email;
+                      final ProfileData profile =
+                          (app.profile.email.isEmpty &&
+                              authEmail != null &&
+                              authEmail.isNotEmpty)
+                          ? app.profile.copyWith(email: authEmail)
+                          : app.profile;
                       return ProfileScreen(
                         settings: app.settings,
-                        initialProfile: app.profile,
+                        initialProfile: profile,
                         onProfileChanged: app.updateProfile,
                         completedTaskCount: app.tasks
                             .where((TaskItem task) => task.done)
@@ -309,16 +329,22 @@ GoRouter createAppRouter({
 }
 
 Future<void> _openBrainDump(BuildContext context) async {
-  final List<TransactionItem>? notes = await context
-      .push<List<TransactionItem>>(AppRoutes.brainDump);
-  if (notes == null || notes.isEmpty || !context.mounted) {
+  final Object? result = await context.push<Object?>(AppRoutes.brainDump);
+  if (result == null || !context.mounted) {
     return;
   }
-  ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-    SnackBar(
-      content: Text('${notes.length} catatan keuangan berhasil dicatat.'),
-    ),
-  );
+  if (result is BrainDumpSaveResult) {
+    if (result.isEmpty) return;
+    ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+      SnackBar(content: Text(result.summaryMessage)),
+    );
+  } else if (result is List<TransactionItem> && result.isNotEmpty) {
+    ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+      SnackBar(
+        content: Text('${result.length} catatan keuangan berhasil dicatat.'),
+      ),
+    );
+  }
 }
 
 Future<void> _openScan(BuildContext context) async {

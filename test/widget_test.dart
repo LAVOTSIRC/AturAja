@@ -23,8 +23,10 @@ import 'package:aturaja/services/receipt_camera.dart';
 import 'package:aturaja/theme/theme_scope.dart';
 import 'package:aturaja/widgets/quick_add_modal.dart';
 
+import 'helpers/fake_app_lock_service.dart';
 import 'helpers/fake_auth_service.dart';
 import 'helpers/fake_cloud_repository.dart';
+import 'helpers/fake_data_export_service.dart';
 
 Future<AppProvider> pumpApp(
   WidgetTester tester, {
@@ -33,12 +35,16 @@ Future<AppProvider> pumpApp(
   bool settle = true,
   List<TransactionItem>? transactions,
   CloudRepository? cloudRepository,
+  FakeAppLockService? appLockService,
+  FakeDataExportService? exportService,
+  bool appLockEnabled = false,
 }) async {
   final AppProvider app = AppProvider.inMemory(
     transactions: transactions,
     activeUserId: cloudRepository == null ? null : testAuthUser.uid,
     cloudRepository: cloudRepository,
   );
+  app.settings.setBiometricLock(appLockEnabled);
   if (cloudRepository != null) {
     await app.connectCloud();
   }
@@ -60,7 +66,11 @@ Future<AppProvider> pumpApp(
         ChangeNotifierProvider<ThemeController>.value(value: app.theme),
         ChangeNotifierProvider<SettingsController>.value(value: app.settings),
       ],
-      child: MyApp(initialLocation: initialLocation),
+      child: MyApp(
+        initialLocation: initialLocation,
+        appLockService: appLockService ?? FakeAppLockService(),
+        exportService: exportService ?? FakeDataExportService(),
+      ),
     ),
   );
   if (settle) {
@@ -102,6 +112,11 @@ Future<void> returnFromSetting(WidgetTester tester) async {
   await tester.pumpAndSettle();
 }
 
+Finder textFieldWithLabel(String label) => find.byWidgetPredicate(
+  (Widget widget) =>
+      widget is TextField && widget.decoration?.labelText == label,
+);
+
 void main() {
   test('Home greeting follows the time of day', () {
     expect(greetingForHour(6), 'Selamat pagi');
@@ -123,6 +138,28 @@ void main() {
 
     expect(find.textContaining('Atur'), findsWidgets);
     expect(find.textContaining('Aja'), findsWidgets);
+  });
+
+  testWidgets('App lock requires PIN on launch', (WidgetTester tester) async {
+    final FakeAppLockService lockService = FakeAppLockService()..pin = '1234';
+    await pumpApp(tester, appLockService: lockService, appLockEnabled: true);
+
+    expect(find.text('AturAja terkunci'), findsOneWidget);
+    await tester.enterText(textFieldWithLabel('PIN aplikasi'), '0000');
+    await tester.tap(find.text('Buka dengan PIN'));
+    await tester.pumpAndSettle();
+    expect(find.text('PIN salah. Coba lagi.'), findsOneWidget);
+
+    await tester.enterText(textFieldWithLabel('PIN aplikasi'), '1234');
+    await tester.tap(find.text('Buka dengan PIN'));
+    await tester.pumpAndSettle();
+    expect(find.text('AturAja terkunci'), findsNothing);
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    await tester.pump();
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pumpAndSettle();
+    expect(find.text('AturAja terkunci'), findsOneWidget);
   });
 
   testWidgets('Home quick actions invoke matching callbacks', (
@@ -163,7 +200,7 @@ void main() {
     expect(taskCount, 1);
   });
 
-  testWidgets('Theme toggle repaints the bottom navigation shell', (
+  testWidgets('Theme toggle lives only on the profile page', (
     WidgetTester tester,
   ) async {
     final AppProvider app = await pumpApp(tester);
@@ -175,7 +212,10 @@ void main() {
       tester.widget<Scaffold>(shellScaffold).backgroundColor,
       AppColors.dark.shell,
     );
+    expect(find.byTooltip('Ganti ke mode terang'), findsNothing);
 
+    await tester.tap(find.byTooltip('Profil'));
+    await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('Ganti ke mode terang'));
     await tester.pumpAndSettle();
 
@@ -205,6 +245,7 @@ void main() {
       tester.widget<Scaffold>(loginScaffold).backgroundColor,
       AppColors.dark.bg,
     );
+    expect(find.byTooltip('Ganti ke mode gelap'), findsNothing);
 
     app.theme.toggle();
     await tester.pumpAndSettle();
@@ -271,6 +312,47 @@ void main() {
     expect(find.text('Submit laporan'), findsOneWidget);
   });
 
+  testWidgets('Task screen shows completion progress', (
+    WidgetTester tester,
+  ) async {
+    final AppProvider app = await pumpApp(tester);
+    await tester.tap(find.byTooltip('Tugas'));
+    await tester.pumpAndSettle();
+
+    final int done = app.tasks.where((TaskItem task) => task.done).length;
+    final int total = app.tasks.length;
+    final int percent = total == 0 ? 0 : ((done / total) * 100).round();
+
+    expect(find.text('Progress tugas'), findsOneWidget);
+    expect(find.text('$done dari $total tugas selesai'), findsOneWidget);
+    expect(find.text('$percent%'), findsOneWidget);
+  });
+
+  testWidgets('Task screen supports search without quick add field', (
+    WidgetTester tester,
+  ) async {
+    final AppProvider app = await pumpApp(tester);
+    await tester.tap(find.byTooltip('Tugas'));
+    await tester.pumpAndSettle();
+
+    // Fitur tambah tugas cepat sudah dihilangkan dari halaman tugas
+    expect(find.byTooltip('Tambah tugas cepat'), findsNothing);
+    expect(find.text('Tambah tugas cepat...'), findsNothing);
+
+    final TaskItem first = app.tasks.first;
+    final TaskItem other = app.tasks.firstWhere(
+      (TaskItem task) => !task.title.contains('Praktikum Pemrograman'),
+    );
+    await tester.enterText(
+      find.byType(TextField).first,
+      'Praktikum Pemrograman',
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text(first.title), findsOneWidget);
+    expect(find.text(other.title), findsNothing);
+  });
+
   testWidgets('Add form switches between Manual and Brain Dump modes', (
     WidgetTester tester,
   ) async {
@@ -296,6 +378,132 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('JUDUL TUGAS *'), findsOneWidget);
     expect(find.text('AI Brain Dump Tugas'), findsNothing);
+  });
+
+  testWidgets('Task form keeps the deadline section minimal', (
+    WidgetTester tester,
+  ) async {
+    await pumpApp(tester);
+
+    await tester.tap(find.byTooltip('Tugas'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Tambah'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('TENGGAT WAKTU *'), findsOneWidget);
+    expect(find.byTooltip('Pilih Tanggal'), findsOneWidget);
+    expect(find.byTooltip('Pilih Jam'), findsOneWidget);
+    // Tugas baru dimulai dari hari ini pukul 23:59, belum terlewat.
+    expect(find.text('Hari ini'), findsOneWidget);
+    expect(find.text('23:59'), findsOneWidget);
+    expect(find.text('Tenggat ini sudah lewat.'), findsNothing);
+
+    // Pintasan dan field teks tenggat yang redundan sudah dihapus.
+    expect(find.text('JAM CEPAT'), findsNothing);
+    expect(find.text('TANGGAL CEPAT'), findsNothing);
+    expect(find.text('Hari ini, 23:59'), findsNothing);
+  });
+
+  testWidgets('Task form rejects a deadline that is already in the past', (
+    WidgetTester tester,
+  ) async {
+    await pumpApp(tester);
+
+    await tester.tap(find.byTooltip('Tugas'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Tambah'));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byType(TextField).first, 'Submit laporan');
+    tester.testTextInput.hide();
+    await tester.pumpAndSettle();
+
+    // Pilih jam 00:00 hari ini lewat input keyboard pada pemilih jam.
+    await tester.ensureVisible(find.byTooltip('Pilih Jam'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Pilih Jam'));
+    await tester.pumpAndSettle();
+    expect(find.text('PILIH JAM TENGGAT'), findsOneWidget);
+    await tester.tap(find.byIcon(Icons.keyboard_outlined));
+    await tester.pumpAndSettle();
+    final Finder pickerFields = find.descendant(
+      of: find.byType(Dialog),
+      matching: find.byType(TextField),
+    );
+    await tester.enterText(pickerFields.at(0), '0');
+    await tester.enterText(pickerFields.at(1), '0');
+    await tester.tap(find.text('OK'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('00:00'), findsOneWidget);
+    expect(find.text('Tenggat ini sudah lewat.'), findsOneWidget);
+
+    await tester.tap(find.text('Tambah Tugas'));
+    await tester.pumpAndSettle();
+    expect(
+      find.text(
+        'Tenggat sudah lewat. Pilih tanggal atau jam yang akan datang.',
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('Tambah Tugas Baru'), findsOneWidget);
+  });
+
+  testWidgets('Brain dump fills the deadline time from the text', (
+    WidgetTester tester,
+  ) async {
+    await pumpApp(tester);
+
+    await tester.tap(find.byTooltip('Tugas'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Tambah'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('AI Brain Dump'));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+      find.byType(TextField).first,
+      'Rapat evaluasi BEM besok jam 7 malam',
+    );
+    tester.testTextInput.hide();
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Proses Brain Dump ✨'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Proses Brain Dump ✨'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('JUDUL TUGAS *'), findsOneWidget);
+    expect(find.text('Besok'), findsOneWidget);
+    expect(find.text('19:00'), findsOneWidget);
+  });
+
+  testWidgets('Brain dump moves a time that already passed to tomorrow', (
+    WidgetTester tester,
+  ) async {
+    await pumpApp(tester);
+
+    await tester.tap(find.byTooltip('Tugas'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Tambah'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('AI Brain Dump'));
+    await tester.pumpAndSettle();
+
+    // Jam 12 malam = 00:00, selalu sudah lewat hari ini, jadi harus besok.
+    await tester.enterText(
+      find.byType(TextField).first,
+      'Ambil laundry jam 12 malam',
+    );
+    tester.testTextInput.hide();
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Proses Brain Dump ✨'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Proses Brain Dump ✨'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Besok'), findsOneWidget);
+    expect(find.text('00:00'), findsOneWidget);
+    expect(find.text('Tenggat ini sudah lewat.'), findsNothing);
   });
 
   testWidgets('Edit form keeps the manual layout without mode switcher', (
@@ -412,15 +620,22 @@ void main() {
     await tester.tap(find.byTooltip('Tugas'));
     await tester.pumpAndSettle();
 
-    final TaskItem firstTask = app.tasks
-        .where((TaskItem task) => !task.done)
-        .reduce((TaskItem a, TaskItem b) {
-          final DateTime? aDate = a.dueDate;
-          final DateTime? bDate = b.dueDate;
-          if (aDate == null) return b;
-          if (bDate == null) return a;
-          return aDate.isBefore(bDate) ? a : b;
-        });
+    final List<TaskItem> pendingTasks =
+        app.tasks.where((TaskItem task) => !task.done).toList()
+          ..sort((TaskItem a, TaskItem b) {
+            if (a.urgent != b.urgent) {
+              return a.urgent ? -1 : 1;
+            }
+            final DateTime? aDate = a.dueDate;
+            final DateTime? bDate = b.dueDate;
+            if (aDate != null && bDate != null) {
+              return aDate.compareTo(bDate);
+            }
+            if (aDate != null) return -1;
+            if (bDate != null) return 1;
+            return a.id.compareTo(b.id);
+          });
+    final TaskItem firstTask = pendingTasks.first;
     final int before = app.tasks.length;
 
     final Finder firstTaskTile = find.byTooltip('Buka detail tugas').first;
@@ -441,7 +656,7 @@ void main() {
     expect(find.text(firstTask.title), findsNothing);
   });
 
-  testWidgets('Brain Dump finance note processes into a preview then saves', (
+  testWidgets('Brain Dump processes finance note into a preview then saves', (
     WidgetTester tester,
   ) async {
     final AppProvider app = await pumpApp(tester);
@@ -450,8 +665,8 @@ void main() {
     await tester.tap(find.text('Brain Dump'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Brain Dump Keuangan'), findsOneWidget);
-    expect(find.text('AI Brain Dump Keuangan'), findsOneWidget);
+    expect(find.text('AI Brain Dump'), findsOneWidget);
+    expect(find.text('AI Brain Dump Pintar'), findsOneWidget);
 
     await tester.tap(find.text('Belanja sayur 120rb'));
     await tester.pumpAndSettle();
@@ -473,26 +688,88 @@ void main() {
     expect(app.transactions.first.cat, 'belanja');
   });
 
-  testWidgets('Brain Dump rejects input without a detectable amount', (
-    WidgetTester tester,
-  ) async {
-    await tester.pumpWidget(
-      ThemeScope(
-        controller: ThemeController(),
-        child: const MaterialApp(home: BrainDumpFinanceScreen()),
-      ),
-    );
+  testWidgets(
+    'Brain Dump handles mixed finance and tasks (finance first then tasks), supports manual edit and AI refinement',
+    (WidgetTester tester) async {
+      final AppProvider app = await pumpApp(tester);
+      final int txBefore = app.transactions.length;
+      final int taskBefore = app.tasks.length;
 
-    await tester.enterText(
-      find.byType(TextField).first,
-      'bayar kos bulan depan',
-    );
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Proses Brain Dump'));
-    await tester.pumpAndSettle();
+      await tester.tap(find.text('Brain Dump'));
+      await tester.pumpAndSettle();
 
-    expect(find.textContaining('Nominal belum terdeteksi'), findsOneWidget);
-  });
+      await tester.tap(
+        find.text('Makan batagor 15k lalu besok jam 08:00 quiz kalkulus'),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Proses Brain Dump'));
+      await tester.pumpAndSettle();
+
+      // Menampilkan bagian Keuangan terlebih dahulu lalu bagian Tugas
+      expect(find.text('1. BAGIAN KEUANGAN (1)'), findsOneWidget);
+      expect(find.text('2. BAGIAN TUGAS (1)'), findsOneWidget);
+      expect(find.text('Edit Manual'), findsNWidgets(2));
+      expect(find.text('Perbaiki AI'), findsNWidgets(2));
+      expect(find.text('Perbaiki Semua (AI)'), findsOneWidget);
+
+      // Uji perbaikan AI pada 1 item keuangan
+      await tester.tap(find.text('Perbaiki AI').first);
+      await tester.pumpAndSettle();
+      expect(find.text('Minta AI Perbaiki Item Ini'), findsOneWidget);
+      await tester.tap(find.text('Ubah nominal jadi 25rb'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Perbaiki Item dengan AI'));
+      await tester.pumpAndSettle();
+      expect(find.text('25000'), findsOneWidget);
+
+      // Simpan semua catatan (keuangan & tugas sekaligus)
+      await tester.ensureVisible(find.text('Simpan Semua Catatan'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Simpan Semua Catatan'));
+      await tester.pumpAndSettle();
+
+      expect(app.transactions.length, txBefore + 1);
+      expect(app.transactions.first.amount, -25000);
+      expect(app.tasks.length, taskBefore + 1);
+      expect(
+        app.tasks.any(
+          (TaskItem t) => t.title.toLowerCase().contains('quiz kalkulus'),
+        ),
+        isTrue,
+      );
+    },
+  );
+
+  testWidgets(
+    'Brain Dump handles incomplete, vague, or rude input by cleaning and inferring intent without rejecting',
+    (WidgetTester tester) async {
+      await tester.pumpWidget(
+        ThemeScope(
+          controller: ThemeController(),
+          child: const MaterialApp(home: BrainDumpFinanceScreen()),
+        ),
+      );
+
+      // Input tidak sopan + data keuangan tidak lengkap (tanpa nominal) + tugas tidak jelas
+      await tester.enterText(
+        find.byType(TextField).first,
+        'bayar kos sialan lalu tugas kalkulus bangsat',
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Proses Brain Dump'));
+      await tester.pumpAndSettle();
+
+      // Tidak boleh ditolak, melainkan disimpulkan otomatis (Keuangan dulu, lalu Tugas)
+      expect(find.text('Periksa hasil AI sebelum disimpan'), findsOneWidget);
+      expect(find.text('1. BAGIAN KEUANGAN (1)'), findsOneWidget);
+      expect(find.text('2. BAGIAN TUGAS (1)'), findsOneWidget);
+      // Kata kasar sudah dibersihkan dari judul
+      expect(find.text('Bayar kos'), findsOneWidget);
+      expect(find.text('Tugas kalkulus'), findsOneWidget);
+      // Nominal kos diperkirakan otomatis (650000)
+      expect(find.text('650000'), findsOneWidget);
+    },
+  );
 
   testWidgets('Profile setting rows navigate to five detail screens', (
     WidgetTester tester,
@@ -527,7 +804,7 @@ void main() {
 
     expect(find.byType(Switch), findsNWidgets(3));
     await tester.tap(find.byType(Switch).first);
-    await tester.pump();
+    await tester.pumpAndSettle();
     await returnFromSetting(tester);
 
     expect(find.text('2 dari 3 kategori aktif'), findsOneWidget);
@@ -645,31 +922,37 @@ void main() {
 
     await openProfileSetting(tester, 'Privasi & Keamanan');
     await tester.tap(find.byType(Switch));
+    await tester.pumpAndSettle();
+    expect(find.text('Buat PIN aplikasi'), findsOneWidget);
+    await tester.enterText(textFieldWithLabel('PIN baru'), '12');
+    await tester.enterText(textFieldWithLabel('Konfirmasi PIN'), '12');
+    await tester.tap(find.widgetWithText(TextButton, 'Simpan PIN'));
     await tester.pump();
+    expect(find.text('PIN harus terdiri dari 4-6 digit.'), findsOneWidget);
+    await tester.enterText(textFieldWithLabel('PIN baru'), '1234');
+    await tester.enterText(textFieldWithLabel('Konfirmasi PIN'), '1234');
+    await tester.tap(find.widgetWithText(TextButton, 'Simpan PIN'));
+    await tester.pumpAndSettle();
     await returnFromSetting(tester);
-    expect(find.text('Biometrik nonaktif'), findsOneWidget);
+    expect(find.text('Biometrik aktif'), findsOneWidget);
 
     await openProfileSetting(tester, 'Privasi & Keamanan');
     await tester.tap(find.text('Ubah PIN'));
     await tester.pumpAndSettle();
-    await tester.enterText(find.byType(TextField), '12');
-    await tester.tap(find.widgetWithText(TextButton, 'Simpan PIN'));
-    await tester.pump();
-    expect(find.text('PIN harus terdiri dari 4–6 digit.'), findsOneWidget);
-    await tester.enterText(find.byType(TextField), '1234');
+    expect(find.text('Verifikasi PIN'), findsOneWidget);
+    await tester.enterText(textFieldWithLabel('PIN saat ini'), '1234');
+    await tester.tap(find.widgetWithText(TextButton, 'Lanjut'));
+    await tester.pumpAndSettle();
+    await tester.enterText(textFieldWithLabel('PIN baru'), '5678');
+    await tester.enterText(textFieldWithLabel('Konfirmasi PIN'), '5678');
     await tester.tap(find.widgetWithText(TextButton, 'Simpan PIN'));
     await tester.pumpAndSettle();
-    expect(find.text('PIN telah diperbarui.'), findsOneWidget);
+    expect(find.text('PIN aplikasi berhasil diperbarui.'), findsOneWidget);
 
     await tester.ensureVisible(find.text('Ekspor data'));
     await tester.tap(find.text('Ekspor data'));
-    await tester.pump();
-    expect(find.text('Menyiapkan data...'), findsOneWidget);
-    await tester.pump(const Duration(milliseconds: 700));
     await tester.pumpAndSettle();
-    expect(find.text('Pratinjau Ekspor Data'), findsOneWidget);
-    await tester.tap(find.text('Tutup'));
-    await tester.pumpAndSettle();
+    expect(find.textContaining('File ekspor dibuat'), findsOneWidget);
 
     await tester.ensureVisible(find.text('Hapus akun'));
     await tester.tap(find.text('Hapus akun'));
@@ -677,23 +960,13 @@ void main() {
     expect(find.text('Hapus akun AturAja?'), findsOneWidget);
     await tester.tap(find.widgetWithText(TextButton, 'Batal'));
     await tester.pumpAndSettle();
-    expect(
-      find.text('Permintaan penghapusan akun sudah dicatat.'),
-      findsNothing,
-    );
+    expect(find.byType(LoginScreen), findsNothing);
 
     await tester.tap(find.text('Hapus akun'));
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(TextButton, 'Hapus Akun'));
-    await tester.pump();
-    expect(find.text('Menghapus akun...'), findsOneWidget);
-    await tester.pump(const Duration(milliseconds: 700));
     await tester.pumpAndSettle();
-    expect(find.text('Permintaan hapus akun telah dicatat.'), findsOneWidget);
-    expect(
-      find.text('Permintaan penghapusan akun sudah dicatat.'),
-      findsOneWidget,
-    );
+    expect(find.byType(LoginScreen), findsOneWidget);
   });
 
   testWidgets('Profile edit validates and updates the displayed identity', (
@@ -708,20 +981,29 @@ void main() {
     final Finder fields = find.byType(TextField);
     expect(fields, findsNWidgets(3));
 
+    // Pastikan NIM dan Program Studi sudah tidak ada di form Edit Profil
+    expect(find.text('NIM'), findsNothing);
+    expect(find.text('Program Studi'), findsNothing);
+    expect(find.text('Username'), findsOneWidget);
+    expect(find.text('Email'), findsOneWidget);
+    expect(find.text('Password Baru (Opsional)'), findsOneWidget);
+
     await tester.enterText(fields.at(0), '');
-    await tester.enterText(fields.at(1), 'abc');
+    await tester.enterText(fields.at(1), 'bukan-email');
+    await tester.enterText(fields.at(2), '123');
     tester.testTextInput.hide();
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('Simpan'));
     await tester.tap(find.text('Simpan'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Nama tidak boleh kosong.'), findsOneWidget);
-    expect(find.text('NIM harus berupa angka.'), findsOneWidget);
+    expect(find.text('Username tidak boleh kosong.'), findsOneWidget);
+    expect(find.text('Masukkan format email yang valid.'), findsOneWidget);
+    expect(find.text('Password minimal 6 karakter.'), findsOneWidget);
 
     await tester.enterText(fields.at(0), 'Budi Santoso');
-    await tester.enterText(fields.at(1), '241401099');
-    await tester.enterText(fields.at(2), 'Sistem Informasi');
+    await tester.enterText(fields.at(1), 'budi@aturaja.id');
+    await tester.enterText(fields.at(2), 'rahasia123');
     tester.testTextInput.hide();
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('Simpan'));
@@ -729,7 +1011,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Budi Santoso'), findsOneWidget);
-    expect(find.text('241401099 · Sistem Informasi'), findsOneWidget);
+    expect(find.text('budi@aturaja.id'), findsOneWidget);
     expect(find.text('BS'), findsOneWidget);
     expect(find.text('Profil berhasil diperbarui.'), findsOneWidget);
   });

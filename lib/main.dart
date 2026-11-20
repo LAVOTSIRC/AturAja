@@ -12,11 +12,16 @@ import 'data/firestore_repository.dart';
 import 'providers/app_provider.dart';
 import 'providers/auth_provider.dart';
 import 'providers/settings_provider.dart';
+import 'services/app_lock_service.dart';
 import 'services/auth_service.dart';
+import 'services/budget_alert_service.dart';
+import 'services/data_export_service.dart';
+import 'services/local_notification_service.dart';
 import 'theme/app_colors.dart';
 import 'theme/app_spacing.dart';
 import 'theme/app_typography.dart';
 import 'theme/theme_scope.dart';
+import 'widgets/app_lock_gate.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -31,9 +36,17 @@ Future<void> main() async {
   );
   final AuthProvider auth = AuthProvider(service: FirebaseAuthService());
   await auth.initialize();
+  final LocalNotificationService notificationService =
+      LocalNotificationService();
+  await notificationService.initialize();
+  final BudgetAlertService budgetAlertService = BudgetAlertService(
+    notifications: notificationService,
+  );
   final AppProvider app = await AppProvider.loadPersistent(
     userId: auth.user?.uid,
     cloudRepository: FirestoreCloudRepository(),
+    notifications: notificationService,
+    budgetAlerts: budgetAlertService,
   );
   auth.addListener(() {
     unawaited(app.switchUser(auth.user?.uid));
@@ -53,8 +66,15 @@ Future<void> main() async {
 
 class MyApp extends StatefulWidget {
   final String initialLocation;
+  final AppLockService? appLockService;
+  final DataExportService? exportService;
 
-  const MyApp({super.key, this.initialLocation = AppRoutes.splash});
+  const MyApp({
+    super.key,
+    this.initialLocation = AppRoutes.splash,
+    this.appLockService,
+    this.exportService,
+  });
 
   @override
   State<MyApp> createState() => _MyAppState();
@@ -63,14 +83,18 @@ class MyApp extends StatefulWidget {
 class _MyAppState extends State<MyApp> {
   late final AuthProvider _auth;
   late final GoRouter _router;
+  late final AppLockService _appLockService;
 
   @override
   void initState() {
     super.initState();
     _auth = context.read<AuthProvider>();
+    _appLockService = widget.appLockService ?? AppLockService();
     _router = createAppRouter(
       initialLocation: widget.initialLocation,
       auth: _auth,
+      appLockService: _appLockService,
+      exportService: widget.exportService,
     );
   }
 
@@ -157,6 +181,15 @@ class _MyAppState extends State<MyApp> {
         debugShowCheckedModeBanner: false,
         theme: _theme(c, brightness),
         routerConfig: _router,
+        builder: (BuildContext context, Widget? child) {
+          final SettingsController settings = context
+              .watch<SettingsController>();
+          return AppLockGate(
+            settings: settings,
+            service: _appLockService,
+            child: child ?? const SizedBox.shrink(),
+          );
+        },
       ),
     );
   }

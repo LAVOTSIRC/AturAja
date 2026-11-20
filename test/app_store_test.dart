@@ -90,6 +90,34 @@ void main() {
     expect(restored.receiptImagePath, transaction.receiptImagePath);
   });
 
+  test('AppProvider calculates budget spending for the current month only', () {
+    final DateTime now = DateTime.now();
+    final AppProvider store = AppProvider.inMemory(
+      transactions: <TransactionItem>[
+        TransactionItem(
+          id: 'current-month',
+          label: 'Bulan ini',
+          amount: -800,
+          cat: 'food',
+          time: '10:00',
+          createdAt: DateTime(now.year, now.month, 5),
+        ),
+        TransactionItem(
+          id: 'previous-month',
+          label: 'Bulan lalu',
+          amount: -1200,
+          cat: 'food',
+          time: '10:00',
+          createdAt: DateTime(now.year, now.month - 1, 5),
+        ),
+      ],
+    );
+    addTearDown(store.dispose);
+
+    expect(store.totalExpense, 2000);
+    expect(store.monthlyExpense, 800);
+  });
+
   test(
     'AppProvider persists tasks, transactions, profile, settings, and theme',
     () async {

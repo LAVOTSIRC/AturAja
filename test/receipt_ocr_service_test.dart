@@ -66,5 +66,11 @@ void main() {
     expect(result.merchant, 'struk buram');
     expect(result.total, isNull);
     expect(result.date, isNull);
+    expect(result.hasFinancialInfo, isFalse);
+
+    final ReceiptOcrResult valid = ReceiptParser.parse(
+      'INDOMARET\nTOTAL 15.000',
+    );
+    expect(valid.hasFinancialInfo, isTrue);
   });
 }

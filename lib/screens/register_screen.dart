@@ -139,21 +139,18 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        PressableScale(
-                          onTap: widget.onLogin,
-                          semanticLabel: 'Kembali ke halaman masuk',
-                          tooltip: 'Kembali',
-                          child: Icon(
-                            Icons.arrow_back_rounded,
-                            color: c.text,
-                            size: AppSpacing.iconMedium,
-                          ),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: PressableScale(
+                        onTap: widget.onLogin,
+                        semanticLabel: 'Kembali ke halaman masuk',
+                        tooltip: 'Kembali',
+                        child: Icon(
+                          Icons.arrow_back_rounded,
+                          color: c.text,
+                          size: AppSpacing.iconMedium,
                         ),
-                        const ThemeToggleSwitch(),
-                      ],
+                      ),
                     ),
                     const SizedBox(height: AppSpacing.lg),
                     _buildBrand(c),

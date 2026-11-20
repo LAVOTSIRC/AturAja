@@ -85,6 +85,11 @@ class AuthProvider extends ChangeNotifier {
     _applyUser(null);
   }
 
+  Future<void> deleteAccount() async {
+    await service.deleteAccount();
+    _applyUser(null);
+  }
+
   void _applyUser(AuthUser? user) {
     if (_disposed) {
       return;

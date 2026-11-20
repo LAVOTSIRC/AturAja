@@ -6,7 +6,9 @@ import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_typography.dart';
 import '../theme/theme_scope.dart';
+import '../utils/task_schedule.dart';
 import '../widgets/common.dart';
+import 'brain_dump_finance_screen.dart';
 
 enum TaskFilter { all, pending, urgent, done }
 
@@ -67,8 +69,21 @@ class TaskScreen extends StatefulWidget {
 class _TaskScreenState extends State<TaskScreen> {
   TaskFilter activeFilter = TaskFilter.all;
   String selectedCategoryFilter = 'Semua';
+  String searchQuery = '';
+  final TextEditingController searchController = TextEditingController();
 
   List<TaskItem> get list => widget.tasks;
+
+  @override
+  void dispose() {
+    searchController.dispose();
+    super.dispose();
+  }
+
+  void _clearSearch() {
+    searchController.clear();
+    setState(() => searchQuery = '');
+  }
 
   void _showMessage(String message, {bool isError = false}) {
     final AppColors c = ThemeScope.of(context).colors;
@@ -220,7 +235,17 @@ class _TaskScreenState extends State<TaskScreen> {
         matchesCategory = t.categories.contains(selectedCategoryFilter);
       }
 
-      return matchesStatus && matchesCategory;
+      // 3. Pencarian judul, kategori, atau deskripsi
+      final String query = searchQuery.trim().toLowerCase();
+      final bool matchesQuery =
+          query.isEmpty ||
+          t.title.toLowerCase().contains(query) ||
+          t.description.toLowerCase().contains(query) ||
+          t.categories.any(
+            (String category) => category.toLowerCase().contains(query),
+          );
+
+      return matchesStatus && matchesCategory && matchesQuery;
     }).toList();
     filtered.sort((TaskItem a, TaskItem b) {
       if (a.done != b.done) {
@@ -245,10 +270,6 @@ class _TaskScreenState extends State<TaskScreen> {
   Widget build(BuildContext context) {
     final AppColors c = ThemeScope.of(context).colors;
     final List<TaskItem> pending = list.where((TaskItem t) => !t.done).toList();
-    final List<TaskItem> done = list.where((TaskItem t) => t.done).toList();
-    final int pct = list.isEmpty
-        ? 0
-        : ((done.length / list.length) * 100).round();
 
     final filtered = _filteredList;
 
@@ -314,8 +335,6 @@ class _TaskScreenState extends State<TaskScreen> {
                               ],
                             ),
                           ),
-                          const ThemeToggleSwitch(),
-                          const SizedBox(width: AppSpacing.xs),
                           PressableScale(
                             onTap: _openTaskFormScreen,
                             semanticLabel: 'Tambah tugas baru',
@@ -361,95 +380,25 @@ class _TaskScreenState extends State<TaskScreen> {
                       ),
                     ),
 
-                    // Progress Card
+                    // Progress penyelesaian tugas
                     Padding(
-                      padding: const EdgeInsets.fromLTRB(
-                        AppSpacing.md,
-                        AppSpacing.xs,
-                        AppSpacing.md,
-                        AppSpacing.sm,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: AppSpacing.md,
                       ),
-                      child: AppCard(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: AppSpacing.md,
-                          vertical: AppSpacing.md,
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Container(
-                                  width: 36,
-                                  height: 36,
-                                  decoration: BoxDecoration(
-                                    color: c.blueDim,
-                                    borderRadius: BorderRadius.circular(
-                                      AppSpacing.sm,
-                                    ),
-                                  ),
-                                  child: Icon(
-                                    Icons.trending_up_rounded,
-                                    color: c.blue,
-                                    size: AppSpacing.iconSmall,
-                                  ),
-                                ),
-                                const SizedBox(width: AppSpacing.sm),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        'Progress tugas',
-                                        style: AppTypography.label(
-                                          c.text,
-                                        ).copyWith(fontWeight: FontWeight.w700),
-                                      ),
-                                      const SizedBox(height: AppSpacing.xxs),
-                                      Text(
-                                        'Pantau penyelesaian tugasmu minggu ini',
-                                        style: AppTypography.micro(c.textMuted),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                Text(
-                                  '${done.length}/${list.length}',
-                                  style: AppTypography.title(c.blue)
-                                      .copyWith(fontWeight: FontWeight.w800),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: AppSpacing.xs),
-                            ClipRRect(
-                              borderRadius: BorderRadius.circular(
-                                AppSpacing.huge,
-                              ),
-                              child: LinearProgressIndicator(
-                                value: list.isEmpty ? 0 : pct / 100,
-                                minHeight: AppSpacing.progressMedium,
-                                backgroundColor: c.surfaceHigh,
-                                valueColor: AlwaysStoppedAnimation<Color>(
-                                  pct == 100 ? c.teal : c.blue,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: AppSpacing.xs),
-                            Text(
-                              list.isEmpty
-                                  ? 'Belum ada aktivitas tugas — Tambahkan tugas pertamamu!'
-                                  : pct == 100
-                                  ? 'Luar biasa! Semua tugas minggu ini tuntas! 🎉'
-                                  : done.isEmpty
-                                  ? 'Belum ada tugas selesai minggu ini. Mari tuntaskan 1 tugas hari ini!'
-                                  : '$pct% — ${pct < 50 ? 'Ayo semangat, selesaikan tugasmu!' : 'Hampir selesai, teruskan!'}',
-                              style: AppTypography.micro(c.textMuted),
-                            ),
-                          ],
-                        ),
-                      ),
+                      child: _buildProgressCard(c),
                     ),
+
+                    const SizedBox(height: AppSpacing.sm),
+
+                    // Pencarian tugas
+                    Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: AppSpacing.md,
+                      ),
+                      child: _buildSearchField(c),
+                    ),
+
+                    const SizedBox(height: AppSpacing.sm),
 
                     // Dropdown Filter Bar
                     Padding(
@@ -522,6 +471,140 @@ class _TaskScreenState extends State<TaskScreen> {
     );
   }
 
+  Widget _buildProgressCard(AppColors c) {
+    final int total = list.length;
+    final int done = list.where((TaskItem t) => t.done).length;
+    final int percent = total == 0 ? 0 : ((done / total) * 100).round();
+    final List<TaskItem> todayTasks = list
+        .where((TaskItem t) => t.deadlineLabel.startsWith('Hari ini'))
+        .toList();
+    final int todayDone = todayTasks.where((TaskItem t) => t.done).length;
+    final String note = total == 0
+        ? 'Belum ada tugas — tambahkan tugas pertamamu!'
+        : percent == 100
+        ? 'Luar biasa! Semua tugas sudah selesai.'
+        : todayTasks.isEmpty
+        ? '$done dari $total tugas selesai. Tambahkan tugas untuk hari ini!'
+        : '$todayDone/${todayTasks.length} tugas hari ini selesai — '
+            '${percent < 50 ? 'ayo selesaikan satu tugas!' : 'hampir selesai, teruskan!'}';
+
+    return AppCard(
+      padding: const EdgeInsets.all(AppSpacing.md),
+      background: c.surface,
+      borderColor: c.border.withValues(alpha: 0.55),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: c.blueDim,
+                  borderRadius: BorderRadius.circular(AppSpacing.sm),
+                ),
+                child: Icon(
+                  Icons.trending_up_rounded,
+                  color: c.blue,
+                  size: AppSpacing.iconSmall,
+                ),
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Progress tugas',
+                      style: AppTypography.label(
+                        c.text,
+                      ).copyWith(fontWeight: FontWeight.w700),
+                    ),
+                    const SizedBox(height: AppSpacing.xxs),
+                    Text(
+                      '$done dari $total tugas selesai',
+                      style: AppTypography.micro(c.textMuted),
+                    ),
+                  ],
+                ),
+              ),
+              Text(
+                '$percent%',
+                style: AppTypography.title(
+                  c.blue,
+                ).copyWith(fontWeight: FontWeight.w800),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.xs),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(AppSpacing.huge),
+            child: LinearProgressIndicator(
+              value: total == 0 ? 0 : done / total,
+              minHeight: AppSpacing.progressMedium,
+              backgroundColor: c.surfaceHigh,
+              valueColor: AlwaysStoppedAnimation<Color>(
+                percent == 100 ? c.teal : c.blue,
+              ),
+            ),
+          ),
+          const SizedBox(height: AppSpacing.xs),
+          Text(note, style: AppTypography.micro(c.textMuted)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSearchField(AppColors c) {
+    return AppCard(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.sm,
+        vertical: AppSpacing.xxs,
+      ),
+      background: c.surface,
+      borderColor: c.border.withValues(alpha: 0.55),
+      child: Row(
+        children: [
+          Icon(
+            Icons.search_rounded,
+            color: c.textMuted,
+            size: AppSpacing.iconSmall,
+          ),
+          const SizedBox(width: AppSpacing.xs),
+          Expanded(
+            child: TextField(
+              controller: searchController,
+              onChanged: (String value) =>
+                  setState(() => searchQuery = value),
+              style: AppTypography.body(c.text),
+              decoration: InputDecoration(
+                hintText: 'Cari tugas...',
+                hintStyle: AppTypography.body(c.textMuted),
+                border: InputBorder.none,
+                isDense: true,
+              ),
+            ),
+          ),
+          if (searchQuery.isNotEmpty)
+            PressableScale(
+              onTap: _clearSearch,
+              tooltip: 'Hapus pencarian',
+              semanticLabel: 'Hapus pencarian',
+              child: Padding(
+                padding: const EdgeInsets.all(AppSpacing.xxs),
+                child: Icon(
+                  Icons.close_rounded,
+                  color: c.textMuted,
+                  size: AppSpacing.iconSmall,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
   /// Compact Dropdown Filter Bar with Crisp Heights and No Clipping
   Widget _buildFilterDropdowns(AppColors c) {
     final int pendingCount = list.where((t) => !t.done).length;
@@ -529,7 +612,9 @@ class _TaskScreenState extends State<TaskScreen> {
     final int doneCount = list.where((t) => t.done).length;
 
     final bool hasActiveFilter =
-        activeFilter != TaskFilter.all || selectedCategoryFilter != 'Semua';
+        activeFilter != TaskFilter.all ||
+        selectedCategoryFilter != 'Semua' ||
+        searchQuery.trim().isNotEmpty;
 
     return AppCard(
       padding: const EdgeInsets.all(AppSpacing.xs),
@@ -655,7 +740,9 @@ class _TaskScreenState extends State<TaskScreen> {
                   setState(() {
                     activeFilter = TaskFilter.all;
                     selectedCategoryFilter = 'Semua';
+                    searchQuery = '';
                   });
+                  searchController.clear();
                 },
                 semanticLabel: 'Reset Filter',
                 tooltip: 'Reset Filter',
@@ -702,6 +789,13 @@ class _TaskScreenState extends State<TaskScreen> {
   }
 
   Widget _buildEmptyStateForFilter() {
+    if (searchQuery.trim().isNotEmpty) {
+      return AppEmptyState(
+        icon: Icons.search_off_rounded,
+        title: 'Tidak ada hasil untuk "$searchQuery"',
+        message: 'Coba kata kunci lain atau hapus pencarian.',
+      );
+    }
     if (selectedCategoryFilter != 'Semua') {
       return AppEmptyState(
         icon: categoryIcon(selectedCategoryFilter),
@@ -915,7 +1009,7 @@ class _TaskScreenState extends State<TaskScreen> {
                           ),
                           const SizedBox(width: AppSpacing.xxs),
                           Text(
-                            t.deadline,
+                            t.deadlineLabel,
                             style:
                                 AppTypography.micro(
                                   t.done
@@ -1201,7 +1295,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                                   ),
                                 ),
                                 Text(
-                                  currentTask.deadline,
+                                  currentTask.deadlineLabel,
                                   style: AppTypography.label(
                                     !currentTask.done && (isOverdue || isUrgent)
                                         ? (isOverdue ? c.expense : c.amber)
@@ -1320,7 +1414,6 @@ class TaskFormScreen extends StatefulWidget {
 class _TaskFormScreenState extends State<TaskFormScreen> {
   late TaskInputMode inputMode;
   late final TextEditingController titleController;
-  late final TextEditingController deadlineController;
   late final TextEditingController descriptionController;
   late final TextEditingController brainDumpController;
 
@@ -1330,83 +1423,25 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
   DateTime? selectedDueDate;
   String? errorMessage;
 
-  static const List<String> brainDumpSuggestions = [
-    'Besok jam 08:00 Quiz Kalkulus untuk Tugas Kuliah dan Pribadi',
-    'Ambil laundry & cuci sepatu hari ini jam 18:00',
-    'Rapat evaluasi BEM lusa jam 19:00 untuk Organisasi',
-    'Jogging 5km di lapangan kampus besok jam 16:30',
-  ];
-
-  static const List<String> deadlinePresets = [
-    'Hari ini, 23:59',
-    'Besok, 08:00',
-    '3 hari lagi',
-    'Minggu depan',
-  ];
-
-  DateTime? _parseBrainDumpDateTime(String text) {
-    final String lower = text.toLowerCase();
-    final DateTime now = DateTime.now();
-    final Match? dateMatch = RegExp(r'\btanggal\s+(\d{1,2})\s+bulan\s+ini\b')
-        .firstMatch(lower);
-    final Match? timeMatch = RegExp(
-      r'\bjam\s+(\d{1,2})(?::(\d{2}))?\s*(pagi|siang|sore|malam)?\b',
-    ).firstMatch(lower);
-
-    DateTime date = now;
-    if (dateMatch != null) {
-      final int day = int.parse(dateMatch.group(1)!);
-      if (day >= 1 && day <= DateTime(now.year, now.month + 1, 0).day) {
-        date = DateTime(now.year, now.month, day);
-      }
-    } else if (lower.contains('besok')) {
-      date = DateTime(now.year, now.month, now.day + 1);
-    } else if (lower.contains('lusa')) {
-      date = DateTime(now.year, now.month, now.day + 2);
-    } else if (!lower.contains('hari ini')) {
-      return null;
-    }
-
-    int hour = 23;
-    int minute = 59;
-    if (timeMatch != null) {
-      hour = int.parse(timeMatch.group(1)!);
-      minute = int.tryParse(timeMatch.group(2) ?? '0') ?? 0;
-      final String period = timeMatch.group(3) ?? '';
-      if (period == 'pagi' && hour == 12) {
-        hour = 0;
-      } else if (period == 'siang' && hour < 12) {
-        hour += 12;
-      } else if ((period == 'sore' || period == 'malam') && hour < 12) {
-        hour += 12;
-      }
-    }
-    if (hour > 23 || minute > 59) {
-      return null;
-    }
-    return DateTime(date.year, date.month, date.day, hour, minute);
-  }
-
   @override
   void initState() {
     super.initState();
-    final t = widget.taskToEdit;
+    final TaskItem? t = widget.taskToEdit;
     inputMode = TaskInputMode.manual;
     titleController = TextEditingController(text: t?.title ?? '');
-    deadlineController = TextEditingController(
-      text: t?.deadline ?? 'Hari ini, 23:59',
-    );
     descriptionController = TextEditingController(text: t?.description ?? '');
     brainDumpController = TextEditingController();
     selectedCategories = List.of(t?.categories ?? ['Tugas Kuliah']);
-    selectedDueDate =
-        t?.dueDate ?? DateTime.now().add(const Duration(hours: 12));
+    // Tugas baru dimulai dari hari ini pukul 23:59. Tugas lama memakai dueDate
+    // tersimpan, atau dibaca dari teks tenggat lamanya jika dueDate kosong.
+    selectedDueDate = t == null
+        ? _currentDueOrDefault()
+        : (t.dueDate ?? parseSchedule(t.deadline));
   }
 
   @override
   void dispose() {
     titleController.dispose();
-    deadlineController.dispose();
     descriptionController.dispose();
     brainDumpController.dispose();
     super.dispose();
@@ -1432,13 +1467,6 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
     if (text.isEmpty) {
       setState(() {
         errorMessage = 'Tuliskan catatan brain dump terlebih dahulu.';
-      });
-      return;
-    }
-
-    if (text.length < 5) {
-      setState(() {
-        errorMessage = 'Isi brain dump terlalu pendek (minimal 5 karakter).';
       });
       return;
     }
@@ -1480,37 +1508,35 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
       final List<String> categories = aiCategories.isEmpty
           ? const <String>['Pribadi']
           : aiCategories;
-      final DateTime? aiDueDate = item.dueDate == null
-          ? _parseBrainDumpDateTime(text)
-          : DateTime.tryParse('${item.dueDate!}T${item.dueTime ?? '23:59'}');
-      final String deadline = switch ((item.dueDate, item.dueTime)) {
-        (final String date, final String time) => '$date, $time',
-        (final String date, null) => date,
-        _ when aiDueDate != null =>
-          '${aiDueDate.year.toString().padLeft(4, '0')}-'
-              '${aiDueDate.month.toString().padLeft(2, '0')}-'
-              '${aiDueDate.day.toString().padLeft(2, '0')}, '
-              '${aiDueDate.hour.toString().padLeft(2, '0')}:'
-              '${aiDueDate.minute.toString().padLeft(2, '0')}',
-        _ => 'Hari ini, 23:59',
-      };
-      final String normalizedTitle = item.title.trim().toLowerCase();
-      final String title =
+      final DateTime dueDate = dueDateForBrainDump(
+        aiDate: item.dueDate,
+        aiTime: item.dueTime,
+        sourceText: text,
+      );
+      final String deadline = formatDeadline(dueDate);
+      final String cleanTitle = sanitizeBrainDumpText(item.title);
+      final String rawTitle = cleanTitle.isEmpty
+          ? 'Tugas ${categories.first}'
+          : cleanTitle;
+      final String normalizedTitle = rawTitle.trim().toLowerCase();
+      String title =
           (normalizedTitle == 'jogging' || normalizedTitle == 'joging') &&
-              aiDueDate != null &&
-              aiDueDate.hour < 12
+              dueDate.hour < 12
           ? 'Jogging pagi'
-          : item.title;
+          : rawTitle;
+      if (title.length < 4) {
+        title = 'Tugas $title';
+      }
 
       setState(() {
         isProcessingBrainDump = false;
         titleController.text = title;
         selectedCategories = categories;
-        deadlineController.text = deadline;
-        selectedDueDate = aiDueDate;
-        descriptionController.text =
-            item.description ??
-            'Pada ${deadline.toLowerCase()}, ${title.toLowerCase()}.';
+        selectedDueDate = dueDate;
+        final String cleanDesc = sanitizeBrainDumpText(item.description ?? '');
+        descriptionController.text = cleanDesc.isNotEmpty
+            ? cleanDesc
+            : 'Pada ${deadline.toLowerCase()}, ${title.toLowerCase()}.';
         inputMode = TaskInputMode.manual;
       });
       return;
@@ -1518,12 +1544,16 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
 
     await Future<void>.delayed(const Duration(milliseconds: 600));
 
-    final lower = text.toLowerCase();
+    final String sanitized = sanitizeBrainDumpText(text);
+    final String effectiveText =
+        sanitized.isEmpty ? 'Selesaikan tugas hari ini' : sanitized;
+    final lower = effectiveText.toLowerCase();
 
     // 1. Auto detect categories
     final List<String> detectedCategories = [];
     if (lower.contains('kalkulus') ||
         lower.contains('quiz') ||
+        lower.contains('kuis') ||
         lower.contains('tugas') ||
         lower.contains('laporan') ||
         lower.contains('praktikum') ||
@@ -1554,45 +1584,31 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
       detectedCategories.add('Pribadi');
     }
 
-    // 2. Auto detect deadline
-    final now = DateTime.now();
-    DateTime detectedDueDate = now.add(const Duration(hours: 12));
-    String detectedDeadlineStr = 'Hari ini, 23:59';
+    // 2. Auto detect deadline (tanggal dan jam apa pun, bukan hanya preset)
+    final DateTime detectedDueDate = parseSchedule(
+          effectiveText,
+          useCurrentTimeAsDefault: true,
+        ) ??
+        dueAtCurrentTime();
 
-    if (lower.contains('besok')) {
-      if (lower.contains('08:00') || lower.contains('jam 8')) {
-        detectedDeadlineStr = 'Besok, 08:00';
-        detectedDueDate = DateTime(now.year, now.month, now.day + 1, 8, 0);
-      } else {
-        detectedDeadlineStr = 'Besok, 23:59';
-        detectedDueDate = DateTime(now.year, now.month, now.day + 1, 23, 59);
-      }
-    } else if (lower.contains('lusa')) {
-      detectedDeadlineStr = '2 hari lagi';
-      detectedDueDate = now.add(const Duration(days: 2));
-    } else if (lower.contains('hari ini')) {
-      if (lower.contains('18:00') || lower.contains('jam 6')) {
-        detectedDeadlineStr = 'Hari ini, 18:00';
-        detectedDueDate = DateTime(now.year, now.month, now.day, 18, 0);
-      } else {
-        detectedDeadlineStr = 'Hari ini, 23:59';
-        detectedDueDate = DateTime(now.year, now.month, now.day, 23, 59);
-      }
+    // 3. Extract title & description (pastikan minimal 4 karakter dan sopan)
+    String extractedTitle = effectiveText;
+    if (extractedTitle.length < 4) {
+      extractedTitle = 'Tugas $extractedTitle';
     }
-
-    // 3. Extract title & description
-    String extractedTitle = text;
-    if (text.length > 50) {
-      extractedTitle = '${text.substring(0, 47)}...';
+    extractedTitle =
+        '${extractedTitle[0].toUpperCase()}${extractedTitle.substring(1)}';
+    if (extractedTitle.length > 50) {
+      extractedTitle = '${extractedTitle.substring(0, 47)}...';
     }
 
     setState(() {
       isProcessingBrainDump = false;
       titleController.text = extractedTitle;
       selectedCategories = detectedCategories;
-      deadlineController.text = detectedDeadlineStr;
       selectedDueDate = detectedDueDate;
-      descriptionController.text = text;
+      descriptionController.text =
+          'Jadwal ${extractedTitle.toLowerCase()} pada ${formatDeadline(detectedDueDate).toLowerCase()}.';
       inputMode = TaskInputMode.manual; // Switch back to preview manual form
     });
 
@@ -1631,75 +1647,89 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
     }
   }
 
-  Future<void> _pickDateTime() async {
-    final now = DateTime.now();
-    final pickedDate = await showDatePicker(
-      context: context,
-      initialDate: selectedDueDate ?? now,
-      firstDate: now.subtract(const Duration(days: 30)),
-      lastDate: now.add(const Duration(days: 365)),
-    );
+  /// Tenggat saat ini; jika belum dipilih, hari ini pukul 23:59.
+  DateTime _currentDueOrDefault() {
+    final DateTime now = DateTime.now();
+    return selectedDueDate ??
+        DateTime(now.year, now.month, now.day, defaultDueHour, defaultDueMinute);
+  }
 
+  void _setDueDate(DateTime value) {
+    setState(() {
+      selectedDueDate = value;
+      errorMessage = null;
+    });
+  }
+
+  /// Tenggat dianggap terlewat hanya jika baru dipilih/diubah. Tugas lama yang
+  /// memang sudah lewat tetap bisa diedit tanpa mengubah tenggatnya.
+  bool get _isDueDateInPast {
+    final DateTime? due = selectedDueDate;
+    if (due == null || !due.isBefore(DateTime.now())) {
+      return false;
+    }
+    return widget.taskToEdit?.dueDate != due;
+  }
+
+  Future<void> _pickDate() async {
+    final DateTime now = DateTime.now();
+    final DateTime current = _currentDueOrDefault();
+    DateTime firstDate = DateTime(
+      now.year,
+      now.month,
+      now.day,
+    ).subtract(const Duration(days: 30));
+    DateTime lastDate = DateTime(now.year + 1, now.month, now.day);
+    // initialDate wajib berada di antara firstDate dan lastDate, termasuk saat
+    // mengedit tugas lama.
+    if (current.isBefore(firstDate)) {
+      firstDate = DateTime(current.year, current.month, current.day);
+    }
+    if (current.isAfter(lastDate)) {
+      lastDate = DateTime(current.year, current.month, current.day);
+    }
+
+    final DateTime? pickedDate = await showDatePicker(
+      context: context,
+      initialDate: current,
+      firstDate: firstDate,
+      lastDate: lastDate,
+    );
     if (pickedDate == null || !mounted) return;
 
-    final pickedTime = await showTimePicker(
+    _setDueDate(
+      DateTime(
+        pickedDate.year,
+        pickedDate.month,
+        pickedDate.day,
+        current.hour,
+        current.minute,
+      ),
+    );
+  }
+
+  Future<void> _pickTime() async {
+    final DateTime current = _currentDueOrDefault();
+    final TimeOfDay? pickedTime = await showTimePicker(
       context: context,
-      initialTime: TimeOfDay.fromDateTime(selectedDueDate ?? now),
+      initialTime: TimeOfDay.fromDateTime(current),
+      helpText: 'PILIH JAM TENGGAT',
+      builder: (BuildContext context, Widget? child) => MediaQuery(
+        data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: true),
+        child: child!,
+      ),
     );
+    if (pickedTime == null || !mounted) return;
 
-    if (!mounted) return;
-
-    final time = pickedTime ?? const TimeOfDay(hour: 23, minute: 59);
-    final finalDateTime = DateTime(
-      pickedDate.year,
-      pickedDate.month,
-      pickedDate.day,
-      time.hour,
-      time.minute,
+    _setDueDate(
+      DateTime(
+        current.year,
+        current.month,
+        current.day,
+        pickedTime.hour,
+        pickedTime.minute,
+      ),
     );
-
-    final String dayStr = pickedDate.day == now.day
-        ? 'Hari ini'
-        : '${pickedDate.day}/${pickedDate.month}/${pickedDate.year}';
-    final String timeStr =
-        '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
-
-    setState(() {
-      selectedDueDate = finalDateTime;
-      deadlineController.text = '$dayStr, $timeStr';
-    });
-  }
-
-  void _applyPreset(String preset) {
-    final now = DateTime.now();
-    DateTime calculatedDate;
-
-    if (preset.contains('Hari ini')) {
-      calculatedDate = DateTime(now.year, now.month, now.day, 23, 59);
-    } else if (preset.contains('Besok')) {
-      calculatedDate = DateTime(now.year, now.month, now.day + 1, 8, 0);
-    } else if (preset.contains('3 hari')) {
-      calculatedDate = now.add(const Duration(days: 3));
-    } else {
-      calculatedDate = now.add(const Duration(days: 7));
-    }
-
-    setState(() {
-      selectedDueDate = calculatedDate;
-      deadlineController.text = preset;
-    });
-  }
-
-  bool _isCalculatedUrgent() {
-    if (selectedDueDate != null) {
-      final diff = selectedDueDate!.difference(DateTime.now());
-      return diff.inHours < 24 && diff.inHours >= 0;
-    }
-    final lower = deadlineController.text.toLowerCase();
-    return lower.contains('hari ini') ||
-        lower.contains('besok') ||
-        lower.contains('23:59') ||
-        lower.contains('08:00');
   }
 
   void _submit() {
@@ -1732,10 +1762,22 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
       return;
     }
 
-    final deadline = deadlineController.text.trim();
+    final DateTime? dueDate = selectedDueDate;
+    // Tugas lama tanpa dueDate masih boleh disimpan dengan teks tenggat aslinya.
+    final String deadline = dueDate != null
+        ? formatDeadline(dueDate)
+        : (widget.taskToEdit?.deadline ?? '');
     if (deadline.isEmpty) {
       setState(() {
-        errorMessage = 'Tenggat waktu tidak boleh kosong.';
+        errorMessage = 'Pilih tanggal dan jam tenggat.';
+      });
+      return;
+    }
+
+    if (_isDueDateInPast) {
+      setState(() {
+        errorMessage =
+            'Tenggat sudah lewat. Pilih tanggal atau jam yang akan datang.';
       });
       return;
     }
@@ -1748,7 +1790,7 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
       categories: selectedCategories,
       description: description,
       deadline: deadline,
-      dueDate: selectedDueDate,
+      dueDate: dueDate,
       done: widget.taskToEdit?.done ?? false,
     );
 
@@ -1760,7 +1802,6 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
   Widget build(BuildContext context) {
     final AppColors c = ThemeScope.of(context).colors;
     final bool isEditing = widget.taskToEdit != null;
-    final bool isUrgentAuto = _isCalculatedUrgent();
 
     return Scaffold(
       backgroundColor: c.bg,
@@ -1886,48 +1927,7 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
                                 hintText: 'Contoh: Besok jam 08:00 ada Quiz Kalkulus untuk Tugas Kuliah dan kumpulkan laporan praktikum...',
                               ),
                             ),
-                            const SizedBox(height: AppSpacing.sm),
-
-                            // Brain Dump Suggestions
-                            Text(
-                              'CONTOH BRAIN DUMP',
-                              style: AppTypography.overline(c.textMuted),
-                            ),
-                            const SizedBox(height: AppSpacing.xxs),
-                            Wrap(
-                              spacing: AppSpacing.xs,
-                              runSpacing: AppSpacing.xs,
-                              children: brainDumpSuggestions.map((suggestion) {
-                                return PressableScale(
-                                  onTap: () {
-                                    setState(() {
-                                      brainDumpController.text = suggestion;
-                                      errorMessage = null;
-                                    });
-                                  },
-                                  semanticLabel: 'Gunakan contoh $suggestion',
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: AppSpacing.sm,
-                                      vertical: AppSpacing.xs - 2,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: c.surfaceHigh,
-                                      borderRadius: BorderRadius.circular(
-                                        AppSpacing.huge,
-                                      ),
-                                      border: Border.all(color: c.border),
-                                    ),
-                                    child: Text(
-                                      suggestion,
-                                      style: AppTypography.caption(c.textSub),
-                                    ),
-                                  ),
-                                );
-                              }).toList(),
-                            ),
-
-                            const SizedBox(height: AppSpacing.lg),
+                            const SizedBox(height: AppSpacing.md),
 
                             // Process Button
                             PressableScale(
@@ -1997,16 +1997,7 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                _formLabel(c, 'JUDUL TUGAS *'),
-                                Text(
-                                  '${titleController.text.length}/100',
-                                  style: AppTypography.micro(c.textMuted),
-                                ),
-                              ],
-                            ),
+                            _formLabel(c, 'JUDUL TUGAS *'),
                             const SizedBox(height: AppSpacing.xxs),
                             TextField(
                               controller: titleController,
@@ -2248,131 +2239,37 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
                             Row(
                               children: [
                                 Expanded(
-                                  child: TextField(
-                                    controller: deadlineController,
-                                    style: AppTypography.bodyLarge(c.text),
-                                    decoration: _cleanInputDecoration(
-                                      c,
-                                      hintText: 'misal: Besok, 08:00',
-                                    ),
+                                  child: _scheduleTile(
+                                    c,
+                                    icon: Icons.calendar_month_rounded,
+                                    label: selectedDueDate == null
+                                        ? 'Pilih tanggal'
+                                        : formatDueDateLabel(selectedDueDate!),
+                                    onTap: _pickDate,
+                                    tooltip: 'Pilih Tanggal',
+                                    semanticLabel: 'Pilih tanggal tenggat',
                                   ),
                                 ),
                                 const SizedBox(width: AppSpacing.xs),
-                                PressableScale(
-                                  onTap: _pickDateTime,
-                                  tooltip: 'Pilih Tanggal & Jam',
-                                  semanticLabel: 'Buka Pemilih Kalender',
-                                  child: Container(
-                                    height: 48,
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: AppSpacing.sm,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: c.blueDim,
-                                      borderRadius: BorderRadius.circular(
-                                        AppSpacing.md,
-                                      ),
-                                      border: Border.all(color: c.blue),
-                                    ),
-                                    child: Row(
-                                      children: [
-                                        Icon(
-                                          Icons.calendar_month_rounded,
-                                          size: AppSpacing.iconSmall,
-                                          color: c.blue,
-                                        ),
-                                        const SizedBox(width: AppSpacing.xxs),
-                                        Text(
-                                          'Pilih',
-                                          style: AppTypography.label(c.blue),
-                                        ),
-                                      ],
-                                    ),
+                                Expanded(
+                                  child: _scheduleTile(
+                                    c,
+                                    icon: Icons.schedule_rounded,
+                                    label: selectedDueDate == null
+                                        ? 'Pilih jam'
+                                        : formatDueTimeLabel(selectedDueDate!),
+                                    onTap: _pickTime,
+                                    tooltip: 'Pilih Jam',
+                                    semanticLabel: 'Pilih jam tenggat',
                                   ),
                                 ),
                               ],
                             ),
-                            const SizedBox(height: AppSpacing.sm),
-
-                            // Presets
-                            SingleChildScrollView(
-                              scrollDirection: Axis.horizontal,
-                              child: Row(
-                                children: deadlinePresets.map((preset) {
-                                  final bool isSelected =
-                                      deadlineController.text == preset;
-                                  return Padding(
-                                    padding: const EdgeInsets.only(
-                                      right: AppSpacing.xs,
-                                    ),
-                                    child: PressableScale(
-                                      onTap: () => _applyPreset(preset),
-                                      semanticLabel: 'Pilih tenggat $preset',
-                                      child: Container(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: AppSpacing.sm,
-                                          vertical: AppSpacing.xs,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: isSelected
-                                              ? c.blueDim
-                                              : c.surfaceHigh,
-                                          borderRadius: BorderRadius.circular(
-                                            AppSpacing.huge,
-                                          ),
-                                          border: Border.all(
-                                            color: isSelected
-                                                ? c.blue
-                                                : c.border,
-                                          ),
-                                        ),
-                                        child: Text(
-                                          preset,
-                                          style:
-                                              AppTypography.caption(
-                                                isSelected ? c.blue : c.textSub,
-                                              ).copyWith(
-                                                fontWeight: isSelected
-                                                    ? FontWeight.w600
-                                                    : FontWeight.w400,
-                                              ),
-                                        ),
-                                      ),
-                                    ),
-                                  );
-                                }).toList(),
-                              ),
-                            ),
-
-                            if (isUrgentAuto) ...[
-                              const SizedBox(height: AppSpacing.md),
-                              Container(
-                                padding: const EdgeInsets.all(AppSpacing.sm),
-                                decoration: BoxDecoration(
-                                  color: c.expenseDim,
-                                  borderRadius: BorderRadius.circular(
-                                    AppSpacing.md,
-                                  ),
-                                  border: Border.all(color: c.expense),
-                                ),
-                                child: Row(
-                                  children: [
-                                    Icon(
-                                      Icons.local_fire_department_rounded,
-                                      size: AppSpacing.iconSmall,
-                                      color: c.expense,
-                                    ),
-                                    const SizedBox(width: AppSpacing.xs),
-                                    Expanded(
-                                      child: Text(
-                                        'Tugas ini otomatis ditandai Mendesak karena tenggat waktu kurang dari 24 jam.',
-                                        style: AppTypography.caption(
-                                          c.expense,
-                                        ).copyWith(fontWeight: FontWeight.w600),
-                                      ),
-                                    ),
-                                  ],
-                                ),
+                            if (_isDueDateInPast) ...[
+                              const SizedBox(height: AppSpacing.xs),
+                              Text(
+                                'Tenggat ini sudah lewat.',
+                                style: AppTypography.caption(c.expense),
                               ),
                             ],
                           ],
@@ -2386,16 +2283,7 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                _formLabel(c, 'DESKRIPSI / CATATAN DETAIL'),
-                                Text(
-                                  '${descriptionController.text.length}/500',
-                                  style: AppTypography.micro(c.textMuted),
-                                ),
-                              ],
-                            ),
+                            _formLabel(c, 'DESKRIPSI / CATATAN DETAIL'),
                             const SizedBox(height: AppSpacing.xxs),
                             TextField(
                               controller: descriptionController,
@@ -2407,7 +2295,6 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
                                 c,
                                 hintText: 'Tuliskan instruksi, catatan penting, atau detail tugas di sini...',
                               ).copyWith(counterText: ''),
-                              onChanged: (_) => setState(() {}),
                             ),
                           ],
                         ),
@@ -2514,6 +2401,47 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
   Widget _formLabel(AppColors c, String text) {
     return Text(text, style: AppTypography.overline(c.textMuted));
   }
+
+  Widget _scheduleTile(
+    AppColors c, {
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+    required String tooltip,
+    required String semanticLabel,
+  }) {
+    return PressableScale(
+      onTap: onTap,
+      tooltip: tooltip,
+      semanticLabel: semanticLabel,
+      child: Container(
+        height: 48,
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
+        decoration: BoxDecoration(
+          color: c.blueDim,
+          borderRadius: BorderRadius.circular(AppSpacing.md),
+          border: Border.all(color: c.blue),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: AppSpacing.iconSmall, color: c.blue),
+            const SizedBox(width: AppSpacing.xs),
+            Flexible(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AppTypography.label(c.blue),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+
 
   InputDecoration _cleanInputDecoration(
     AppColors c, {
