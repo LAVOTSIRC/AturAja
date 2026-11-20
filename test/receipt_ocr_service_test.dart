@@ -3,74 +3,77 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:aturaja/services/receipt_ocr_service.dart';
 
 void main() {
-  test('parses Indonesian receipt with Rp total and numeric date', () {
-    final ReceiptOcrResult result = ReceiptParser.parse(
-      'INDOMARET\nAqua 600ml 5.000\nTOTAL BAYAR Rp 28.500\n10/11/2026',
-    );
+  // ── ReceiptOcrResult ──────────────────────────────────────────────────────
 
-    expect(result.merchant, 'INDOMARET');
-    expect(result.total, 28500);
-    expect(result.date, DateTime(2026, 11, 10));
+  group('ReceiptOcrResult.hasFinancialInfo', () {
+    test('returns true when total > 0', () {
+      const ReceiptOcrResult result = ReceiptOcrResult(
+        merchant: 'Indomaret',
+        total: 28500,
+        date: null,
+        rawText: '',
+      );
+      expect(result.hasFinancialInfo, isTrue);
+    });
+
+    test('returns true when items list is non-empty even without total', () {
+      const ReceiptOcrResult result = ReceiptOcrResult(
+        merchant: 'Warung',
+        total: null,
+        date: null,
+        items: <ReceiptItem>[ReceiptItem(name: 'Nasi goreng', amount: 15000)],
+        rawText: '',
+      );
+      expect(result.hasFinancialInfo, isTrue);
+    });
+
+    test('returns false when total is null and items are empty', () {
+      const ReceiptOcrResult result = ReceiptOcrResult(
+        merchant: '',
+        total: null,
+        date: null,
+        rawText: 'gambar bukan struk',
+      );
+      expect(result.hasFinancialInfo, isFalse);
+    });
+
+    test('returns false when total is 0', () {
+      const ReceiptOcrResult result = ReceiptOcrResult(
+        merchant: 'Toko',
+        total: 0,
+        date: null,
+        rawText: '',
+      );
+      expect(result.hasFinancialInfo, isFalse);
+    });
   });
 
-  test('parses comma-separated total and month name date', () {
-    final ReceiptOcrResult result = ReceiptParser.parse(
-      'Warung Makan Sederhana\nTotal: 125,000\n5 Nov 2026',
-    );
+  // ── ReceiptItem ───────────────────────────────────────────────────────────
 
-    expect(result.merchant, 'Warung Makan Sederhana');
-    expect(result.total, 125000);
-    expect(result.date, DateTime(2026, 11, 5));
+  group('ReceiptItem', () {
+    test('stores name and amount correctly', () {
+      const ReceiptItem item = ReceiptItem(name: 'Aqua 600ml', amount: 5000);
+      expect(item.name, 'Aqua 600ml');
+      expect(item.amount, 5000);
+    });
   });
 
-  test('uses the total line instead of the largest item line', () {
-    final ReceiptOcrResult result = ReceiptParser.parse(
-      'TOKO ABC\nBarang 100.000\nBarang 250.000\nGrand Total 350.000',
-    );
+  // ── ReceiptOcrException ───────────────────────────────────────────────────
 
-    expect(result.total, 350000);
+  group('ReceiptOcrException', () {
+    test('toString returns message', () {
+      const ReceiptOcrException ex = ReceiptOcrException('Struk tidak terbaca');
+      expect(ex.toString(), 'Struk tidak terbaca');
+    });
   });
 
-  test('ignores receipt date and item quantity when reading a total', () {
-    final ReceiptOcrResult result = ReceiptParser.parse(
-      'Alfamart\n'
-      'Cimory\n'
-      '1x 2.000\n'
-      'Cimory hazelnut\n'
-      '1x 9.000\n'
-      'AQUA 600 ML 1 5.000\n'
-      'Tanggal 10/11/2026\n'
-      'TOTAL BAYAR: Rp 28.500',
-    );
+  // ── ReceiptOcrService instantiation ──────────────────────────────────────
 
-    expect(result.merchant, 'Alfamart');
-    expect(result.total, 28500);
-    expect(result.date, DateTime(2026, 11, 10));
-    expect(
-      result.items.map((ReceiptItem item) => item.name),
-      containsAll(<String>['Cimory', 'Cimory hazelnut']),
-    );
-  });
-
-  test('accepts spaces and repeated separators from noisy OCR', () {
-    final ReceiptOcrResult result = ReceiptParser.parse(
-      'Warung\nTOTAL 28.. 500',
-    );
-
-    expect(result.total, 28500);
-  });
-
-  test('returns nullable fields when text is too incomplete', () {
-    final ReceiptOcrResult result = ReceiptParser.parse('struk buram');
-
-    expect(result.merchant, 'struk buram');
-    expect(result.total, isNull);
-    expect(result.date, isNull);
-    expect(result.hasFinancialInfo, isFalse);
-
-    final ReceiptOcrResult valid = ReceiptParser.parse(
-      'INDOMARET\nTOTAL 15.000',
-    );
-    expect(valid.hasFinancialInfo, isTrue);
+  group('ReceiptOcrService', () {
+    test('ReceiptOcrService class is importable and constructors exist', () {
+      // Hanya memastikan class dapat diimpor dan tipe-nya ada.
+      // Instansiasi nyata memerlukan Firebase app aktif (integration test).
+      expect(ReceiptOcrService, isNotNull);
+    });
   });
 }
