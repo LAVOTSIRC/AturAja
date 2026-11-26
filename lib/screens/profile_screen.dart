@@ -48,31 +48,12 @@ class _StatItem {
   const _StatItem(this.icon, this.value, this.label);
 }
 
-String _compactRupiah(int value) {
-  final int absolute = value.abs();
-  final String sign = value < 0 ? '-' : '';
-  if (absolute >= 1000000) {
-    final double millions = absolute / 1000000;
-    final String amount = millions == millions.roundToDouble()
-        ? millions.toStringAsFixed(0)
-        : millions.toStringAsFixed(1);
-    return '$sign${amount}jt';
-  }
-  if (absolute >= 1000) {
-    return '$sign${(absolute / 1000).round()}rb';
-  }
-  return '$value';
-}
-
 class ProfileScreen extends StatefulWidget {
   final SettingsController settings;
   final ProfileData? initialProfile;
   final ValueChanged<ProfileData>? onProfileChanged;
   final ValueChanged<String>? onPasswordChanged;
   final Future<void> Function() onLogout;
-  final int completedTaskCount;
-  final int totalSavings;
-  final int streakDays;
   final String? cloudBackupStatus;
 
   const ProfileScreen({
@@ -82,9 +63,6 @@ class ProfileScreen extends StatefulWidget {
     this.onProfileChanged,
     this.onPasswordChanged,
     required this.onLogout,
-    this.completedTaskCount = 12,
-    this.totalSavings = 874000,
-    this.streakDays = 7,
     this.cloudBackupStatus,
   });
 
@@ -140,11 +118,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   void _notifyProfileChanged() {
     widget.onProfileChanged?.call(
-      ProfileData(
-        fullName: fullName,
-        email: email,
-        avatarLabel: avatarLabel,
-      ),
+      ProfileData(fullName: fullName, email: email, avatarLabel: avatarLabel),
     );
   }
 
@@ -212,8 +186,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       context: context,
       isScrollControlled: true,
       backgroundColor: c.transparent,
-      builder: (_) =>
-          _EditProfileSheet(username: fullName, email: email),
+      builder: (_) => _EditProfileSheet(username: fullName, email: email),
     );
 
     if (!mounted || draft == null) {
@@ -305,7 +278,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 children: [
                   _buildHeader(c),
                   _buildProfileSummary(c),
-                  _buildStats(c),
                   const SizedBox(height: AppSpacing.md),
                   _buildSettings(c),
                 ],
@@ -346,10 +318,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             _buildName(c),
             if (email.isNotEmpty) ...[
               const SizedBox(height: AppSpacing.xxs),
-              Text(
-                email,
-                style: AppTypography.meta(c.textMuted),
-              ),
+              Text(email, style: AppTypography.meta(c.textMuted)),
             ],
             const SizedBox(height: AppSpacing.xs),
             _buildStatus(c),
@@ -461,70 +430,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget _buildStats(AppColors c) {
-    final List<_StatItem> stats = <_StatItem>[
-      _StatItem(
-        Icons.task_alt_outlined,
-        '${widget.completedTaskCount}',
-        'Tugas Selesai',
-      ),
-      _StatItem(
-        Icons.savings_outlined,
-        _compactRupiah(widget.totalSavings),
-        'Total Hemat',
-      ),
-      _StatItem(
-        Icons.local_fire_department_outlined,
-        '${widget.streakDays} hari',
-        'Streak',
-      ),
-    ];
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
-      child: Row(
-        children: stats
-            .map(
-              (_StatItem stat) => Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: AppSpacing.xxs,
-                  ),
-                  child: AppCard(
-                    padding: const EdgeInsets.symmetric(
-                      vertical: AppSpacing.sm,
-                      horizontal: AppSpacing.xs,
-                    ),
-                    child: Column(
-                      children: [
-                        Icon(
-                          stat.icon,
-                          size: AppSpacing.iconSmall,
-                          color: c.blue,
-                        ),
-                        const SizedBox(height: AppSpacing.xs),
-                        Text(
-                          stat.value,
-                          style: AppTypography.bodyLarge(c.text)
-                              .copyWith(fontWeight: FontWeight.w700),
-                        ),
-                        const SizedBox(height: AppSpacing.xxs),
-                        Text(
-                          stat.label,
-                          textAlign: TextAlign.center,
-                          style: AppTypography.micro(c.textMuted)
-                              .copyWith(height: 1.3),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            )
-            .toList(),
-      ),
-    );
-  }
-
   String _settingStatus(_SettingItem item) {
     final SettingsController settings = widget.settings;
     return switch (item.destination) {
@@ -532,7 +437,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
       _SettingsDestination.cloud =>
         widget.cloudBackupStatus ?? settings.cloudBackupStatus,
       _SettingsDestination.budget =>
-        '${formatRupiah(settings.monthlyBudgetLimit)}/bulan',
+        settings.monthlyBudgetLimit == 0
+            ? 'Nonaktif (opsional)'
+            : '${formatRupiah(settings.monthlyBudgetLimit)}/bulan',
       _SettingsDestination.nlp => settings.nlpModelStatus,
       _SettingsDestination.privacy => settings.privacyStatus,
       null => '',
@@ -654,10 +561,7 @@ class _EditProfileSheet extends StatefulWidget {
   final String username;
   final String email;
 
-  const _EditProfileSheet({
-    required this.username,
-    required this.email,
-  });
+  const _EditProfileSheet({required this.username, required this.email});
 
   @override
   State<_EditProfileSheet> createState() => _EditProfileSheetState();
@@ -703,8 +607,8 @@ class _EditProfileSheetState extends State<_EditProfileSheet> {
               : null);
     final String? nextPasswordError =
         (password.isNotEmpty && password.length < 6)
-            ? 'Password minimal 6 karakter.'
-            : null;
+        ? 'Password minimal 6 karakter.'
+        : null;
 
     if (nextUsernameError != null ||
         nextEmailError != null ||

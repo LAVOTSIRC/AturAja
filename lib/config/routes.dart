@@ -43,7 +43,8 @@ class AppRoutes {
   static const String budgetLimit = '/settings/budget-limit';
   static const String nlpSimulation = '/settings/nlp-simulation';
   static const String privacySecurity = '/settings/privacy-security';
-  static const String notificationDiagnostics = '/settings/notification-diagnostics';
+  static const String notificationDiagnostics =
+      '/settings/notification-diagnostics';
 }
 
 GoRouter createAppRouter({
@@ -304,8 +305,10 @@ GoRouter createAppRouter({
                 builder: (BuildContext context, GoRouterState state) {
                   return Consumer<AppProvider>(
                     builder: (BuildContext context, AppProvider app, _) {
-                      final String? authEmail =
-                          context.read<AuthProvider>().user?.email;
+                      final String? authEmail = context
+                          .read<AuthProvider>()
+                          .user
+                          ?.email;
                       final ProfileData profile =
                           (app.profile.email.isEmpty &&
                               authEmail != null &&
@@ -316,10 +319,6 @@ GoRouter createAppRouter({
                         settings: app.settings,
                         initialProfile: profile,
                         onProfileChanged: app.updateProfile,
-                        completedTaskCount: app.tasks
-                            .where((TaskItem task) => task.done)
-                            .length,
-                        totalSavings: app.balance,
                         onLogout: () async {
                           await app.save();
                           if (context.mounted) {
@@ -347,9 +346,8 @@ Future<void> _openBrainDump(BuildContext context) async {
   }
   if (result is BrainDumpSaveResult) {
     if (result.isEmpty) return;
-    ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-      SnackBar(content: Text(result.summaryMessage)),
-    );
+    ScaffoldMessenger.maybeOf(context)
+        ?.showSnackBar(SnackBar(content: Text(result.summaryMessage)));
   } else if (result is List<TransactionItem> && result.isNotEmpty) {
     ScaffoldMessenger.maybeOf(context)?.showSnackBar(
       SnackBar(
@@ -360,16 +358,13 @@ Future<void> _openBrainDump(BuildContext context) async {
 }
 
 Future<void> _openScan(BuildContext context) async {
-  final TransactionItem? transaction = await context.push<TransactionItem>(
-    AppRoutes.scan,
-  );
-  if (transaction == null || !context.mounted) {
-    return;
-  }
+  final List<TransactionItem>? transactions = await context
+      .push<List<TransactionItem>>(AppRoutes.scan);
+  if (transactions == null || transactions.isEmpty || !context.mounted) return;
   ScaffoldMessenger.maybeOf(context)?.showSnackBar(
     SnackBar(
       content: Text(
-        'Transaksi "${transaction.label}" dari scan struk berhasil dicatat.',
+        '${transactions.length} transaksi dari scan struk berhasil dicatat.',
       ),
     ),
   );
