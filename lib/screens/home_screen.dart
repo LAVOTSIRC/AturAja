@@ -42,7 +42,7 @@ String fallbackRoastFor({
 }) {
   final String name = resolveGreetingName(userName);
   final bool hasPendingTasks = pendingTasks > 0;
-  final bool overBudget = totalExpense > budgetLimit;
+  final bool overBudget = budgetLimit > 0 && totalExpense > budgetLimit;
 
   switch (intensity) {
     case RoastingIntensity.santai:
@@ -61,7 +61,7 @@ String fallbackRoastFor({
             'berhati-hati. Cek lagi kebutuhan yang benar-benar penting dan '
             'sisihkan sedikit untuk tabungan.';
       }
-      return 'Tugas dan anggaranmu sedang terkendali, kerja bagus! '
+      return 'Agenda hari ini sudah beres, kerja bagus! '
           'Pertahankan ritme ini dan tetap sempatkan istirahat agar besok '
           'tetap bersemangat.';
 
@@ -81,7 +81,7 @@ String fallbackRoastFor({
             'peringatan; jangan sampai saldo tinggal kenangan sebelum akhir '
             'bulan.';
       }
-      return '$name, tugas dan anggaranmu sedang aman. Jangan terlena; '
+      return '$name, tidak ada tugas yang menunggu. Jangan terlena; '
           'pertahankan kebiasaan ini sebelum deadline dan dompet kembali '
           'bikin panik.';
 
@@ -102,7 +102,7 @@ String fallbackRoastFor({
             'sering kamu kunjungi daripada halaman pengaturan keuangan. '
             'Saatnya berhenti dan benahi prioritasmu.';
       }
-      return '$name, tugas dan anggaranmu aman; jangan sampai kenyamanan ini '
+      return '$name, daftar tugasmu kosong, jangan sampai kenyamanan ini '
           'jadi alasan untuk bersantai berlebihan. Pertahankan disiplinmu '
           'sebelum dompet dan deadline bersekongkol.';
   }
@@ -192,7 +192,7 @@ class _HomeScreenState extends State<HomeScreen> {
     return fallbackRoastFor(
       intensity: app.settings.roastingIntensity,
       pendingTasks: app.pendingTaskCount,
-      totalExpense: app.totalExpense,
+      totalExpense: app.monthlyExpense,
       budgetLimit: app.budgetLimit,
       userName: app.profile.fullName,
     );
@@ -226,10 +226,11 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     final AppProvider app = context.watch<AppProvider>();
     final AppColors c = ThemeScope.of(context).colors;
-    final int budget = app.budgetLimit;
-    final int spent = app.totalExpense;
-    final int pct = budget <= 0 ? 0 : ((spent / budget) * 100).round();
-    final List<TransactionItem> recent = app.recentTransactions;
+    final int spent = app.monthlyExpense;
+    final int balance = app.balance;
+    final List<TransactionItem> recent = app.recentTransactions
+        .take(3)
+        .toList();
     final EdgeInsets pagePadding = Responsive.pagePadding(context);
     final List<TaskItem> urgentTasks = app.urgentTasks;
 
@@ -295,7 +296,17 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     padding: const EdgeInsets.all(AppSpacing.lg),
                     decoration: BoxDecoration(
-                      color: c.surface,
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [
+                          c.surface,
+                          Color.alphaBlend(
+                            c.blue.withValues(alpha: 0.10),
+                            c.surface,
+                          ),
+                        ],
+                      ),
                       border: Border.all(color: c.border),
                       borderRadius: BorderRadius.circular(AppSpacing.lg),
                     ),
@@ -303,66 +314,29 @@ class _HomeScreenState extends State<HomeScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Saldo Tersisa',
+                          'Saldo saat ini',
                           style: AppTypography.meta(c.textSub),
                         ),
                         const SizedBox(height: AppSpacing.xxs),
                         Padding(
                           padding: const EdgeInsets.only(bottom: AppSpacing.md),
                           child: Text(
-                            formatRupiahSigned(app.balance),
-                            style: AppTypography.hero(c.text),
-                          ),
-                        ),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Row(
-                              children: [
-                                Icon(
-                                  Icons.account_balance_wallet_outlined,
-                                  size: AppSpacing.iconSmall - 8,
-                                  color: c.textSub,
-                                ),
-                                const SizedBox(width: AppSpacing.xs),
-                                Text(
-                                  'Pengeluaran bulan ini',
-                                  style: AppTypography.meta(c.textSub),
-                                ),
-                              ],
-                            ),
-                            Text(
-                              '$pct%',
-                              style: AppTypography.meta(c.text)
-                                  .copyWith(fontWeight: FontWeight.w600),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: AppSpacing.xs),
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(AppSpacing.huge),
-                          child: LinearProgressIndicator(
-                            value: (pct / 100).clamp(0.0, 1.0),
-                            minHeight: AppSpacing.progressThin,
-                            backgroundColor: c.surfaceHigh,
-                            valueColor: AlwaysStoppedAnimation<Color>(
-                              pct > 70 ? c.expense : c.blue,
+                            formatRupiahSigned(balance),
+                            style: AppTypography.hero(
+                              balance < 0 ? c.expense : c.text,
                             ),
                           ),
                         ),
-                        const SizedBox(height: AppSpacing.xs),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              '${formatRupiah(spent)} dipakai',
-                              style: AppTypography.micro(c.textMuted),
-                            ),
-                            Text(
-                              'Limit ${formatRupiah(budget)}',
-                              style: AppTypography.micro(c.textMuted),
-                            ),
-                          ],
+                        if (balance < 0) ...[
+                          Text(
+                            'Defisit ${formatRupiah(balance)}',
+                            style: AppTypography.caption(c.expense),
+                          ),
+                          const SizedBox(height: AppSpacing.xs),
+                        ],
+                        Text(
+                          'Pengeluaran bulan ini · ${formatRupiah(spent)}',
+                          style: AppTypography.meta(c.textSub),
                         ),
                       ],
                     ),
@@ -389,74 +363,72 @@ class _HomeScreenState extends State<HomeScreen> {
                       ],
                     ),
                   ),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(
-                      AppSpacing.md,
-                      AppSpacing.sm,
-                      AppSpacing.md,
-                      0,
-                    ),
-                    child: GestureDetector(
-                      onTap: widget.onViewTasks,
-                      behavior: HitTestBehavior.opaque,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: AppSpacing.md,
-                          vertical: AppSpacing.sm,
-                        ),
-                        decoration: BoxDecoration(
-                          color: c.urgentBg,
-                          borderRadius: BorderRadius.circular(AppSpacing.md),
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(
-                              Icons.report_problem_outlined,
-                              size: AppSpacing.iconSmall,
-                              color: c.onAlert,
-                            ),
-                            const SizedBox(width: AppSpacing.xs),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    urgentTasks.isEmpty
-                                        ? 'Tidak ada tenggat dalam 24 jam'
-                                        : '${urgentTasks.length} tugas perlu segera dikerjakan',
-                                    style: AppTypography.caption(c.onAlert)
-                                        .copyWith(fontWeight: FontWeight.w600),
-                                  ),
-                                  const SizedBox(height: AppSpacing.xxs),
-                                  Text(
-                                    urgentTasks.isEmpty
-                                        ? 'Belum ada tugas aktif yang jatuh tempo dalam 24 jam.'
-                                        : urgentTasks
-                                              .take(2)
-                                              .map(
-                                                (TaskItem task) => task.title,
-                                              )
-                                              .join(' · '),
-                                    style: AppTypography.meta(c.onAlert)
-                                        .copyWith(
-                                          color: c.onAlert.withValues(
-                                            alpha: 0.9,
-                                          ),
-                                        ),
-                                  ),
-                                ],
+                  if (urgentTasks.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(
+                        AppSpacing.md,
+                        AppSpacing.sm,
+                        AppSpacing.md,
+                        0,
+                      ),
+                      child: GestureDetector(
+                        onTap: widget.onViewTasks,
+                        behavior: HitTestBehavior.opaque,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: AppSpacing.md,
+                            vertical: AppSpacing.sm,
+                          ),
+                          decoration: BoxDecoration(
+                            color: c.urgentBg,
+                            borderRadius: BorderRadius.circular(AppSpacing.md),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.report_problem_outlined,
+                                size: AppSpacing.iconSmall,
+                                color: c.onAlert,
                               ),
-                            ),
-                            Icon(
-                              Icons.chevron_right,
-                              size: AppSpacing.iconSmall,
-                              color: c.onAlert,
-                            ),
-                          ],
+                              const SizedBox(width: AppSpacing.xs),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Tenggat dalam 24 jam',
+                                      style: AppTypography.caption(
+                                        c.onAlert,
+                                      ).copyWith(fontWeight: FontWeight.w600),
+                                    ),
+                                    const SizedBox(height: AppSpacing.xxs),
+                                    Text(
+                                      urgentTasks
+                                          .take(2)
+                                          .map((TaskItem task) => task.title)
+                                          .join(' ? '),
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: AppTypography.meta(c.onAlert)
+                                          .copyWith(
+                                            color: c.onAlert.withValues(
+                                              alpha: 0.9,
+                                            ),
+                                          ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              Icon(
+                                Icons.chevron_right,
+                                size: AppSpacing.iconSmall,
+                                color: c.onAlert,
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     ),
-                  ),
                   Padding(
                     padding: const EdgeInsets.fromLTRB(
                       AppSpacing.md,
