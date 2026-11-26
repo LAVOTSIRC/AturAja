@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../data/id_generator.dart';
 import '../data/models.dart';
 import '../services/brain_dump_ai_service.dart';
 import '../theme/app_colors.dart';
@@ -138,6 +139,13 @@ class _TaskScreenState extends State<TaskScreen> {
     );
   }
 
+  void _saveTasks(List<TaskItem> tasks) {
+    for (final TaskItem task in tasks) {
+      widget.onSaveTask?.call(task);
+    }
+    _showMessage('${tasks.length} tugas berhasil ditambahkan.');
+  }
+
   void _deleteTask(String id) {
     final task = list.firstWhere((t) => t.id == id, orElse: () => list.first);
     widget.onDeleteTask?.call(id);
@@ -204,6 +212,9 @@ class _TaskScreenState extends State<TaskScreen> {
           nextTaskId: widget.nextTaskId,
           onSave: (savedTask) {
             _saveTask(savedTask);
+          },
+          onSaveMany: (savedTasks) {
+            _saveTasks(savedTasks);
           },
         ),
       ),
@@ -1399,12 +1410,16 @@ class TaskFormScreen extends StatefulWidget {
   final TaskItem? taskToEdit;
   final String nextTaskId;
   final ValueChanged<TaskItem> onSave;
+  final ValueChanged<List<TaskItem>>? onSaveMany;
+  final bool enableBrainDump;
 
   const TaskFormScreen({
     super.key,
     this.taskToEdit,
     required this.nextTaskId,
     required this.onSave,
+    this.onSaveMany,
+    this.enableBrainDump = false,
   });
 
   @override
@@ -1420,6 +1435,10 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
   late List<String> selectedCategories;
   bool isDropdownExpanded = false;
   bool isProcessingBrainDump = false;
+  bool showBrainDumpPreview = false;
+  List<TaskItem> brainDumpDrafts = <TaskItem>[];
+  int? editingBrainDumpIndex;
+  String? brainDumpFailure;
   DateTime? selectedDueDate;
   String? errorMessage;
 
@@ -1463,7 +1482,7 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
   }
 
   Future<void> _processBrainDump() async {
-    final text = brainDumpController.text.trim();
+    final String text = brainDumpController.text.trim();
     if (text.isEmpty) {
       setState(() {
         errorMessage = 'Tuliskan catatan brain dump terlebih dahulu.';
@@ -1476,16 +1495,10 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
       errorMessage = null;
     });
 
-    BrainDumpItem? aiItem;
+    List<BrainDumpItem>? aiItems;
     String? aiFailure;
     try {
-      final List<BrainDumpItem> items = await BrainDumpAiService().parse(text);
-      aiItem = items.firstWhere(
-        (BrainDumpItem item) =>
-            item.type == BrainDumpItemType.task ||
-            item.type == BrainDumpItemType.schedule,
-        orElse: () => items.first,
-      );
+      aiItems = await BrainDumpAiService().parse(text);
     } on BrainDumpAiException catch (error, stackTrace) {
       aiFailure = error.message;
       debugPrint('Brain Dump Gemini gagal: $error');
@@ -1496,61 +1509,176 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
       debugPrintStack(stackTrace: stackTrace);
     }
 
-    if (aiItem != null && mounted) {
-      final BrainDumpItem item = aiItem;
-      final List<String> aiCategories = item.category == null
-          ? const <String>['Pribadi']
-          : item.category!
-                .split(',')
-                .map((String value) => value.trim())
-                .where(availableCategories.contains)
-                .toList();
-      final List<String> categories = aiCategories.isEmpty
-          ? const <String>['Pribadi']
-          : aiCategories;
-      final DateTime dueDate = dueDateForBrainDump(
-        aiDate: item.dueDate,
-        aiTime: item.dueTime,
-        sourceText: text,
-      );
-      final String deadline = formatDeadline(dueDate);
-      final String cleanTitle = sanitizeBrainDumpText(item.title);
-      final String rawTitle = cleanTitle.isEmpty
-          ? 'Tugas ${categories.first}'
-          : cleanTitle;
-      final String normalizedTitle = rawTitle.trim().toLowerCase();
-      String title =
-          (normalizedTitle == 'jogging' || normalizedTitle == 'joging') &&
-              dueDate.hour < 12
-          ? 'Jogging pagi'
-          : rawTitle;
-      if (title.length < 4) {
-        title = 'Tugas $title';
+    final List<TaskItem> drafts = <TaskItem>[];
+    if (aiItems != null) {
+      for (final BrainDumpItem item in aiItems) {
+        if (!item.isTask) continue;
+        final TaskItem? draft = _draftFromAiItem(item);
+        if (draft != null) drafts.add(draft);
       }
-
+    }
+    if (drafts.isEmpty) {
+      drafts.addAll(_localTaskDrafts(text));
+    }
+    if (drafts.isEmpty) {
       setState(() {
         isProcessingBrainDump = false;
-        titleController.text = title;
-        selectedCategories = categories;
-        selectedDueDate = dueDate;
-        final String cleanDesc = sanitizeBrainDumpText(item.description ?? '');
-        descriptionController.text = cleanDesc.isNotEmpty
-            ? cleanDesc
-            : 'Pada ${deadline.toLowerCase()}, ${title.toLowerCase()}.';
-        inputMode = TaskInputMode.manual;
+        errorMessage = 'Tidak ada tugas yang bisa dibuat dari catatan ini.';
       });
       return;
     }
 
-    await Future<void>.delayed(const Duration(milliseconds: 600));
+    setState(() {
+      isProcessingBrainDump = false;
+      brainDumpDrafts = drafts;
+      showBrainDumpPreview = true;
+      editingBrainDumpIndex = null;
+      inputMode = TaskInputMode.brainDump;
+      brainDumpFailure = aiFailure;
+      errorMessage = null;
+    });
+  }
 
+  TaskItem? _draftFromAiItem(BrainDumpItem item) {
+    final String cleanTitle = sanitizeBrainDumpText(item.title);
+    if (cleanTitle.isEmpty) return null;
+    final DateTime dueDate = dueDateForBrainDump(
+      aiDate: item.dueDate,
+      aiTime: item.dueTime,
+      sourceText: '${item.title} ${item.description ?? ''}',
+    );
+    final String title = _normalizeDraftTitle(cleanTitle, dueDate);
+    final String cleanDescription = sanitizeBrainDumpText(item.description ?? '');
+    return TaskItem(
+      id: '',
+      title: title,
+      categories: _categoriesFromText(item.category),
+      description: cleanDescription.isNotEmpty
+          ? cleanDescription
+          : 'Pada ${formatDeadline(dueDate).toLowerCase()}, ${title.toLowerCase()}.',
+      deadline: formatDeadline(dueDate),
+      dueDate: dueDate,
+    );
+  }
+
+  List<TaskItem> _localTaskDrafts(String text) {
     final String sanitized = sanitizeBrainDumpText(text);
-    final String effectiveText =
-        sanitized.isEmpty ? 'Selesaikan tugas hari ini' : sanitized;
-    final lower = effectiveText.toLowerCase();
+    final String effective = sanitized.isEmpty
+        ? 'Selesaikan tugas hari ini'
+        : sanitized;
+    DateTime? inheritedDue;
+    final List<TaskItem> drafts = <TaskItem>[];
+    for (final String segment in _splitTaskSegments(effective)) {
+      final String clean = segment.trim();
+      if (clean.isEmpty) continue;
+      final DateTime? explicitDue = parseSchedule(clean);
+      final DateTime dueDate = explicitDue ?? inheritedDue ?? dueAtCurrentTime();
+      inheritedDue ??= dueDate;
+      final String title = _normalizeDraftTitle(
+        _extractLocalTaskTitle(clean),
+        dueDate,
+      );
+      drafts.add(
+        TaskItem(
+          id: '',
+          title: title,
+          categories: _detectTaskCategories(clean),
+          description:
+              'Jadwal ${title.toLowerCase()} pada ${formatDeadline(dueDate).toLowerCase()}.',
+          deadline: formatDeadline(dueDate),
+          dueDate: dueDate,
+        ),
+      );
+    }
+    return drafts;
+  }
 
-    // 1. Auto detect categories
-    final List<String> detectedCategories = [];
+  List<String> _splitTaskSegments(String text) {
+    final String normalized = text
+        .replaceAll(RegExp(r'[\r\n]+'), '|')
+        .replaceAll(
+          RegExp(
+            r'\s*(?:;|\bdan juga\b|\blalu\b|\bkemudian\b|\bserta\b)\s*',
+            caseSensitive: false,
+          ),
+          '|',
+        )
+        .replaceAll(RegExp(r'\s+\bdan\b\s+', caseSensitive: false), '|');
+    return normalized
+        .split('|')
+        .map((String part) => part.trim())
+        .where((String part) => part.isNotEmpty)
+        .toList();
+  }
+
+  String _extractLocalTaskTitle(String text) {
+    String title = text
+        .replaceFirst(
+          RegExp(
+            r'^(?:hari ini|besok|lusa)\s+jam\s+\d{1,2}(?::\d{2})?\s*(?:pagi|siang|sore|malam)?\s*',
+            caseSensitive: false,
+          ),
+          '',
+        )
+        .replaceFirst(
+          RegExp(
+            r'^(?:jam|pukul)\s+\d{1,2}(?::\d{2})?\s*(?:pagi|siang|sore|malam)?\s*',
+            caseSensitive: false,
+          ),
+          '',
+        )
+        .replaceFirst(
+          RegExp(
+            r'^(?:ada|tolong|jangan lupa|ingat|mohon|please|pls)\s+',
+            caseSensitive: false,
+          ),
+          '',
+        )
+        .replaceFirst(
+          RegExp(
+            r'\s+(?:hari ini|besok|lusa|jam|pukul|tanggal)\b.*$',
+            caseSensitive: false,
+          ),
+          '',
+        )
+        .trim();
+    if (title.isEmpty) title = text.trim();
+    return title;
+  }
+
+  String _normalizeDraftTitle(String raw, DateTime dueDate) {
+    String title = sanitizeBrainDumpText(raw).trim();
+    final String normalized = title.toLowerCase();
+    if ((normalized == 'jogging' || normalized == 'joging') &&
+        dueDate.hour < 12) {
+      title = 'Jogging pagi';
+    }
+    if (title.length < 4) {
+      title = 'Tugas $title';
+    }
+    if (title.isNotEmpty) {
+      title = '${title[0].toUpperCase()}${title.substring(1)}';
+    }
+    if (title.length > 100) {
+      title = '${title.substring(0, 97)}...';
+    }
+    return title;
+  }
+
+  List<String> _categoriesFromText(String? raw) {
+    final List<String> categories = raw == null
+        ? <String>[]
+        : raw
+              .split(',')
+              .map((String value) => value.trim())
+              .where(availableCategories.contains)
+              .toList();
+    return categories.isEmpty ? const <String>['Pribadi'] : categories;
+  }
+
+  List<String> _detectTaskCategories(String text) {
+    final String lower = text.toLowerCase();
+    final List<String> detected = <String>[];
     if (lower.contains('kalkulus') ||
         lower.contains('quiz') ||
         lower.contains('kuis') ||
@@ -1558,93 +1686,129 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
         lower.contains('laporan') ||
         lower.contains('praktikum') ||
         lower.contains('kuliah')) {
-      detectedCategories.add('Tugas Kuliah');
+      detected.add('Tugas Kuliah');
     }
     if (lower.contains('laundry') || lower.contains('cuci')) {
-      detectedCategories.add('Laundry');
+      detected.add('Laundry');
     }
     if (lower.contains('jogging') ||
         lower.contains('gym') ||
         lower.contains('olahraga') ||
         lower.contains('fitness')) {
-      detectedCategories.add('Olahraga');
+      detected.add('Olahraga');
     }
     if (lower.contains('bem') ||
         lower.contains('rapat') ||
         lower.contains('organisasi') ||
         lower.contains('proker')) {
-      detectedCategories.add('Organisasi');
+      detected.add('Organisasi');
     }
     if (lower.contains('bayar') ||
         lower.contains('kos') ||
         lower.contains('uang')) {
-      detectedCategories.add('Keuangan');
+      detected.add('Keuangan');
     }
-    if (detectedCategories.isEmpty || lower.contains('pribadi')) {
-      detectedCategories.add('Pribadi');
+    if (detected.isEmpty || lower.contains('pribadi')) {
+      detected.add('Pribadi');
     }
+    return detected;
+  }
 
-    // 2. Auto detect deadline (tanggal dan jam apa pun, bukan hanya preset)
-    final DateTime detectedDueDate = parseSchedule(
-          effectiveText,
-          useCurrentTimeAsDefault: true,
-        ) ??
-        dueAtCurrentTime();
-
-    // 3. Extract title & description (pastikan minimal 4 karakter dan sopan)
-    String extractedTitle = effectiveText;
-    if (extractedTitle.length < 4) {
-      extractedTitle = 'Tugas $extractedTitle';
-    }
-    extractedTitle =
-        '${extractedTitle[0].toUpperCase()}${extractedTitle.substring(1)}';
-    if (extractedTitle.length > 50) {
-      extractedTitle = '${extractedTitle.substring(0, 47)}...';
-    }
-
+  void _editBrainDumpDraft(int index) {
+    if (index < 0 || index >= brainDumpDrafts.length) return;
+    final TaskItem draft = brainDumpDrafts[index];
     setState(() {
-      isProcessingBrainDump = false;
-      titleController.text = extractedTitle;
-      selectedCategories = detectedCategories;
-      selectedDueDate = detectedDueDate;
-      descriptionController.text =
-          'Jadwal ${extractedTitle.toLowerCase()} pada ${formatDeadline(detectedDueDate).toLowerCase()}.';
-      inputMode = TaskInputMode.manual; // Switch back to preview manual form
+      editingBrainDumpIndex = index;
+      inputMode = TaskInputMode.manual;
+      titleController.text = draft.title;
+      descriptionController.text = draft.description;
+      selectedCategories = List<String>.of(draft.categories);
+      selectedDueDate = draft.dueDate;
+      errorMessage = null;
     });
+  }
 
-    if (mounted) {
-      final AppColors c = ThemeScope.of(context).colors;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Row(
-            children: [
-              Icon(
-                Icons.auto_awesome_rounded,
-                color: c.blue,
-                size: AppSpacing.iconSmall,
-              ),
-              const SizedBox(width: AppSpacing.xs),
-              Expanded(
-                child: Text(
-                  aiFailure == null
-                      ? 'Brain dump berhasil diproses oleh Gemini.'
-                      : 'Gemini gagal, memakai mode offline: $aiFailure',
-                  style: AppTypography.label(c.text),
-                ),
-              ),
-            ],
-          ),
-          behavior: SnackBarBehavior.floating,
-          backgroundColor: c.surface,
-          elevation: 6,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(AppSpacing.md),
-            side: BorderSide(color: c.border, width: 1.5),
-          ),
-          margin: const EdgeInsets.all(AppSpacing.md),
+  void _deleteBrainDumpDraft(int index) {
+    if (index < 0 || index >= brainDumpDrafts.length) return;
+    setState(() {
+      brainDumpDrafts.removeAt(index);
+      if (editingBrainDumpIndex == index) {
+        editingBrainDumpIndex = null;
+      } else if (editingBrainDumpIndex != null &&
+          editingBrainDumpIndex! > index) {
+        editingBrainDumpIndex = editingBrainDumpIndex! - 1;
+      }
+    });
+  }
+
+  void _backToBrainDumpPreview() {
+    setState(() {
+      editingBrainDumpIndex = null;
+      showBrainDumpPreview = true;
+      inputMode = TaskInputMode.brainDump;
+      errorMessage = null;
+    });
+  }
+
+  void _restartBrainDump() {
+    setState(() {
+      brainDumpDrafts = <TaskItem>[];
+      showBrainDumpPreview = false;
+      editingBrainDumpIndex = null;
+      inputMode = TaskInputMode.brainDump;
+      brainDumpFailure = null;
+      errorMessage = null;
+    });
+  }
+
+  void _saveBrainDumpDrafts() {
+    if (brainDumpDrafts.isEmpty) {
+      setState(() {
+        errorMessage = 'Belum ada tugas untuk disimpan.';
+      });
+      return;
+    }
+    final DateTime now = DateTime.now();
+    for (final TaskItem draft in brainDumpDrafts) {
+      final DateTime? dueDate = draft.dueDate;
+      if (draft.title.trim().length < 4) {
+        setState(() {
+          errorMessage = 'Judul "$draft.title" terlalu pendek (minimal 4 karakter).';
+        });
+        return;
+      }
+      if (draft.categories.isEmpty) {
+        setState(() {
+          errorMessage = 'Pilih minimal 1 kategori untuk "$draft.title".';
+        });
+        return;
+      }
+      if (dueDate == null || dueDate.isBefore(now)) {
+        setState(() {
+          errorMessage = 'Tenggat "$draft.title" sudah lewat. Periksa kembali.';
+        });
+        return;
+      }
+    }
+
+    final List<TaskItem> tasks = <TaskItem>[];
+    for (int index = 0; index < brainDumpDrafts.length; index++) {
+      final TaskItem draft = brainDumpDrafts[index];
+      tasks.add(
+        draft.copyWith(
+          id: index == 0 ? widget.nextTaskId : newDocumentId(),
+          deadline: formatDeadline(draft.dueDate!),
         ),
       );
     }
+    if (widget.onSaveMany != null) {
+      widget.onSaveMany!(tasks);
+    } else {
+      for (final TaskItem task in tasks) {
+        widget.onSave(task);
+      }
+    }
+    Navigator.of(context).pop();
   }
 
   /// Tenggat saat ini; jika belum dipilih, hari ini pukul 23:59.
@@ -1794,6 +1958,20 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
       done: widget.taskToEdit?.done ?? false,
     );
 
+    final int? draftIndex = editingBrainDumpIndex;
+    if (draftIndex != null) {
+      setState(() {
+        brainDumpDrafts[draftIndex] = task.copyWith(
+          id: brainDumpDrafts[draftIndex].id,
+        );
+        editingBrainDumpIndex = null;
+        showBrainDumpPreview = true;
+        inputMode = TaskInputMode.brainDump;
+        errorMessage = null;
+      });
+      return;
+    }
+
     widget.onSave(task);
     Navigator.of(context).pop();
   }
@@ -1802,6 +1980,8 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
   Widget build(BuildContext context) {
     final AppColors c = ThemeScope.of(context).colors;
     final bool isEditing = widget.taskToEdit != null;
+    final bool isEditingDraft = editingBrainDumpIndex != null;
+    final bool isPreviewing = showBrainDumpPreview && !isEditingDraft;
 
     return Scaffold(
       backgroundColor: c.bg,
@@ -1810,12 +1990,27 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
         surfaceTintColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
-          icon: Icon(Icons.close_rounded, color: c.text),
-          onPressed: () => Navigator.of(context).pop(),
-          tooltip: 'Batal',
+          icon: Icon(
+            isEditingDraft ? Icons.arrow_back_rounded : Icons.close_rounded,
+            color: c.text,
+          ),
+          onPressed: () {
+            if (isEditingDraft) {
+              _backToBrainDumpPreview();
+              return;
+            }
+            Navigator.of(context).pop();
+          },
+          tooltip: isEditingDraft ? 'Kembali ke pratinjau' : 'Batal',
         ),
         title: Text(
-          isEditing ? 'Edit Tugas' : 'Tambah Tugas Baru',
+          isEditing
+              ? 'Edit Tugas'
+              : isEditingDraft
+              ? 'Edit Hasil AI'
+              : isPreviewing
+              ? 'Pratinjau Tugas AI'
+              : 'Tambah Tugas Baru',
           style: AppTypography.titleLarge(c.text),
         ),
         centerTitle: false,
@@ -1824,7 +2019,8 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
         child: Column(
           children: [
             // Mode Switcher Tabs
-            if (!isEditing) ...[
+            if (widget.enableBrainDump &&
+                !isEditing && !isPreviewing && !isEditingDraft) ...[
               Container(
                 margin: const EdgeInsets.fromLTRB(
                   AppSpacing.md,
@@ -1869,8 +2065,10 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
                       const SizedBox(height: AppSpacing.md),
                     ],
 
-                    // AI Brain Dump Body
-                    if (!isEditing && inputMode == TaskInputMode.brainDump) ...[
+                    if (isPreviewing) ...[
+                      _buildBrainDumpPreview(c),
+                    ] else if (!isEditing &&
+                        inputMode == TaskInputMode.brainDump) ...[
                       AppCard(
                         padding: const EdgeInsets.all(AppSpacing.md),
                         background: c.surface,
@@ -2306,7 +2504,7 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
             ),
 
             // Bottom Save Action Bar
-            if (inputMode == TaskInputMode.manual) ...[
+            if (inputMode == TaskInputMode.manual && !isPreviewing) ...[
               Container(
                 padding: const EdgeInsets.all(AppSpacing.md),
                 decoration: BoxDecoration(
@@ -2317,6 +2515,8 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
                   onTap: _submit,
                   semanticLabel: isEditing
                       ? 'Simpan perubahan'
+                      : isEditingDraft
+                      ? 'Simpan perubahan hasil AI'
                       : 'Tambah tugas',
                   child: Container(
                     width: double.infinity,
@@ -2334,7 +2534,11 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
                       ],
                     ),
                     child: Text(
-                      isEditing ? 'Simpan Perubahan' : 'Tambah Tugas',
+                      isEditing
+                          ? 'Simpan Perubahan'
+                          : isEditingDraft
+                          ? 'Simpan Perubahan AI'
+                          : 'Tambah Tugas',
                       style: AppTypography.button(c.onAccent),
                     ),
                   ),
@@ -2343,6 +2547,276 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
             ],
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildBrainDumpPreview(AppColors c) {
+    final int count = brainDumpDrafts.length;
+    return AppCard(
+      padding: const EdgeInsets.all(AppSpacing.md),
+      background: c.surface,
+      borderColor: c.ai.withValues(alpha: 0.55),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(AppSpacing.xs),
+                decoration: BoxDecoration(
+                  color: c.aiDim,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.auto_awesome_rounded,
+                  size: AppSpacing.iconSmall,
+                  color: c.ai,
+                ),
+              ),
+              const SizedBox(width: AppSpacing.xs),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Periksa hasil AI sebelum disimpan',
+                      style: AppTypography.label(c.text)
+                          .copyWith(fontWeight: FontWeight.w700),
+                    ),
+                    Text(
+                      count == 0
+                          ? 'Semua tugas dihapus. Proses ulang atau isi manual.'
+                          : '$count tugas ditemukan. Edit atau hapus dulu sebelum menyimpan.',
+                      style: AppTypography.caption(c.textMuted),
+                    ),
+                    if (brainDumpFailure != null) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        'Mode offline: $brainDumpFailure',
+                        style: AppTypography.caption(c.warning),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.md),
+          if (count == 0) ...[
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(AppSpacing.md),
+              decoration: BoxDecoration(
+                color: c.surfaceHigh,
+                borderRadius: BorderRadius.circular(AppSpacing.md),
+              ),
+              child: Column(
+                children: [
+                  Icon(
+                    Icons.task_alt_rounded,
+                    size: AppSpacing.xl,
+                    color: c.textMuted,
+                  ),
+                  const SizedBox(height: AppSpacing.xs),
+                  Text(
+                    'Belum ada tugas dalam pratinjau.',
+                    style: AppTypography.label(c.textMuted),
+                  ),
+                ],
+              ),
+            ),
+          ] else ...[
+            ...brainDumpDrafts.indexed.map(
+              ((int index, TaskItem draft) entry) =>
+                  _buildBrainDumpDraftCard(c, entry.$1, entry.$2),
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            PressableScale(
+              onTap: _saveBrainDumpDrafts,
+              semanticLabel: 'Simpan $count tugas',
+              child: Container(
+                width: double.infinity,
+                height: AppSpacing.target,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: c.ai,
+                  borderRadius: BorderRadius.circular(AppSpacing.md),
+                ),
+                child: Text(
+                  'Simpan $count Tugas',
+                  style: AppTypography.button(c.onAccent),
+                ),
+              ),
+            ),
+          ],
+          const SizedBox(height: AppSpacing.sm),
+          Row(
+            children: [
+              Expanded(
+                child: PressableScale(
+                  onTap: _restartBrainDump,
+                  semanticLabel: 'Proses ulang brain dump',
+                  child: Container(
+                    height: AppSpacing.targetCompact,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: c.surfaceHigh,
+                      borderRadius: BorderRadius.circular(AppSpacing.sm),
+                      border: Border.all(color: c.border),
+                    ),
+                    child: Text(
+                      'Proses Ulang',
+                      style: AppTypography.micro(c.text)
+                          .copyWith(fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: AppSpacing.xs),
+              Expanded(
+                child: PressableScale(
+                  onTap: () {
+                    setState(() {
+                      showBrainDumpPreview = false;
+                      editingBrainDumpIndex = null;
+                      inputMode = TaskInputMode.manual;
+                      errorMessage = null;
+                    });
+                  },
+                  semanticLabel: 'Isi manual',
+                  child: Container(
+                    height: AppSpacing.targetCompact,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: c.surfaceHigh,
+                      borderRadius: BorderRadius.circular(AppSpacing.sm),
+                      border: Border.all(color: c.border),
+                    ),
+                    child: Text(
+                      'Isi Manual',
+                      style: AppTypography.micro(c.text)
+                          .copyWith(fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBrainDumpDraftCard(AppColors c, int index, TaskItem draft) {
+    return AppCard(
+      padding: const EdgeInsets.all(AppSpacing.sm),
+      background: c.surfaceHigh,
+      borderColor: c.border.withValues(alpha: 0.7),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 28,
+                height: 28,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: c.aiDim,
+                  shape: BoxShape.circle,
+                ),
+                child: Text(
+                  '${index + 1}',
+                  style: AppTypography.micro(c.ai)
+                      .copyWith(fontWeight: FontWeight.w800),
+                ),
+              ),
+              const SizedBox(width: AppSpacing.xs),
+              Expanded(
+                child: Text(
+                  draft.title,
+                  style: AppTypography.label(c.text)
+                      .copyWith(fontWeight: FontWeight.w700),
+                ),
+              ),
+              PressableScale(
+                onTap: () => _deleteBrainDumpDraft(index),
+                semanticLabel: 'Hapus tugas ${index + 1}',
+                tooltip: 'Hapus tugas',
+                child: Container(
+                  width: 30,
+                  height: 30,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: c.expenseDim,
+                    borderRadius: BorderRadius.circular(AppSpacing.xs),
+                  ),
+                  child: Icon(
+                    Icons.delete_outline_rounded,
+                    size: 16,
+                    color: c.expense,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.xs),
+          Wrap(
+            spacing: AppSpacing.xxs,
+            runSpacing: 4,
+            children: [
+              ...draft.categories.map(
+                (String category) => Pill(
+                  text: category,
+                  color: c.blue,
+                  background: c.blueDim,
+                ),
+              ),
+              Pill(
+                text: draft.deadlineLabel,
+                color: c.amber,
+                background: c.amberDim,
+              ),
+            ],
+          ),
+          if (draft.description.trim().isNotEmpty) ...[
+            const SizedBox(height: AppSpacing.xs),
+            Text(
+              draft.description,
+              style: AppTypography.caption(c.textSub),
+            ),
+          ],
+          const SizedBox(height: AppSpacing.xs),
+          const Divider(height: 1),
+          const SizedBox(height: AppSpacing.xs),
+          PressableScale(
+            onTap: () => _editBrainDumpDraft(index),
+            semanticLabel: 'Edit tugas ${index + 1}',
+            child: Container(
+              height: 34,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: c.surface,
+                borderRadius: BorderRadius.circular(AppSpacing.xs),
+                border: Border.all(color: c.border),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.edit_outlined, size: 14, color: c.text),
+                  const SizedBox(width: 4),
+                  Text(
+                    'Edit Tugas Ini',
+                    style: AppTypography.micro(c.text)
+                        .copyWith(fontWeight: FontWeight.w700),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
