@@ -20,6 +20,7 @@ import 'package:aturaja/screens/main_shell.dart';
 import 'package:aturaja/screens/profile_screen.dart';
 import 'package:aturaja/screens/task_screen.dart';
 import 'package:aturaja/services/receipt_camera.dart';
+import 'package:aturaja/services/receipt_ocr_service.dart';
 import 'package:aturaja/theme/theme_scope.dart';
 import 'package:aturaja/widgets/quick_add_modal.dart';
 
@@ -77,6 +78,25 @@ Future<AppProvider> pumpApp(
     await tester.pumpAndSettle();
   }
   return app;
+}
+
+Future<void> pumpTaskBrainDump(
+  WidgetTester tester, {
+  required ValueChanged<TaskItem> onSave,
+}) async {
+  await tester.pumpWidget(
+    ThemeScope(
+      controller: ThemeController(),
+      child: MaterialApp(
+        home: TaskFormScreen(
+          nextTaskId: 'test-task',
+          onSave: onSave,
+          enableBrainDump: true,
+        ),
+      ),
+    ),
+  );
+  await tester.pumpAndSettle();
 }
 
 Future<void> pumpProfile(
@@ -295,8 +315,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Tambah Tugas Baru'), findsOneWidget);
-    expect(find.text('Form Manual'), findsOneWidget);
-    expect(find.text('AI Brain Dump'), findsOneWidget);
+    expect(find.text('Form Manual'), findsNothing);
+    expect(find.text('AI Brain Dump'), findsNothing);
 
     final Finder fields = find.byType(TextField);
     await tester.enterText(fields.first, 'Submit laporan');
@@ -353,11 +373,10 @@ void main() {
     expect(find.text(other.title), findsNothing);
   });
 
-  testWidgets('Add form switches between Manual and Brain Dump modes', (
+  testWidgets('Task tab opens the manual form with Brain Dump hidden', (
     WidgetTester tester,
   ) async {
     await pumpApp(tester);
-
     await tester.tap(find.byTooltip('Tugas'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Tambah'));
@@ -365,8 +384,13 @@ void main() {
 
     expect(find.text('Tambah Tugas Baru'), findsOneWidget);
     expect(find.text('JUDUL TUGAS *'), findsOneWidget);
-    expect(find.text('AI Brain Dump Tugas'), findsNothing);
+    expect(find.text('AI Brain Dump'), findsNothing);
+  });
 
+  testWidgets('Task Brain Dump still works when explicitly enabled', (
+    WidgetTester tester,
+  ) async {
+    await pumpTaskBrainDump(tester, onSave: (_) {});
     await tester.tap(find.text('AI Brain Dump'));
     await tester.pumpAndSettle();
 
@@ -452,12 +476,8 @@ void main() {
   testWidgets('Brain dump fills the deadline time from the text', (
     WidgetTester tester,
   ) async {
-    await pumpApp(tester);
+    await pumpTaskBrainDump(tester, onSave: (_) {});
 
-    await tester.tap(find.byTooltip('Tugas'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Tambah'));
-    await tester.pumpAndSettle();
     await tester.tap(find.text('AI Brain Dump'));
     await tester.pumpAndSettle();
 
@@ -472,6 +492,12 @@ void main() {
     await tester.tap(find.text('Proses Brain Dump ✨'));
     await tester.pumpAndSettle();
 
+    expect(find.text('Periksa hasil AI sebelum disimpan'), findsOneWidget);
+    expect(find.text('Edit Tugas Ini'), findsOneWidget);
+
+    await tester.tap(find.text('Edit Tugas Ini'));
+    await tester.pumpAndSettle();
+
     expect(find.text('JUDUL TUGAS *'), findsOneWidget);
     expect(find.text('Besok'), findsOneWidget);
     expect(find.text('19:00'), findsOneWidget);
@@ -480,12 +506,8 @@ void main() {
   testWidgets('Brain dump moves a time that already passed to tomorrow', (
     WidgetTester tester,
   ) async {
-    await pumpApp(tester);
+    await pumpTaskBrainDump(tester, onSave: (_) {});
 
-    await tester.tap(find.byTooltip('Tugas'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Tambah'));
-    await tester.pumpAndSettle();
     await tester.tap(find.text('AI Brain Dump'));
     await tester.pumpAndSettle();
 
@@ -501,10 +523,100 @@ void main() {
     await tester.tap(find.text('Proses Brain Dump ✨'));
     await tester.pumpAndSettle();
 
+    expect(find.text('Periksa hasil AI sebelum disimpan'), findsOneWidget);
+
+    await tester.tap(find.text('Edit Tugas Ini'));
+    await tester.pumpAndSettle();
+
     expect(find.text('Besok'), findsOneWidget);
     expect(find.text('00:00'), findsOneWidget);
     expect(find.text('Tenggat ini sudah lewat.'), findsNothing);
   });
+
+  testWidgets(
+    'Task brain dump previews multiple tasks with edit, delete, and save',
+    (WidgetTester tester) async {
+      final List<TaskItem> saved = <TaskItem>[];
+      await pumpTaskBrainDump(tester, onSave: saved.add);
+      await tester.tap(find.text('AI Brain Dump'));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.byType(TextField).first,
+        'Besok jam 08:00 ada Quiz Kalkulus untuk Tugas Kuliah dan kumpulkan laporan praktikum lalu ambil laundry jam 3 sore',
+      );
+      tester.testTextInput.hide();
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Proses Brain Dump ✨'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Proses Brain Dump ✨'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('3 tugas ditemukan. Edit atau hapus dulu sebelum menyimpan.'),
+        findsOneWidget,
+      );
+      expect(find.text('Simpan 3 Tugas'), findsOneWidget);
+      expect(find.text('Quiz Kalkulus untuk Tugas Kuliah'), findsOneWidget);
+      expect(find.text('Kumpulkan laporan praktikum'), findsOneWidget);
+      expect(find.text('Ambil laundry'), findsOneWidget);
+
+      final Finder editSecond = find.text('Edit Tugas Ini').at(1);
+      await tester.ensureVisible(editSecond);
+      await tester.pumpAndSettle();
+      await tester.tap(editSecond);
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.byType(TextField).first,
+        'Laporan praktikum final',
+      );
+      tester.testTextInput.hide();
+      await tester.pumpAndSettle();
+      await tester.tap(find.bySemanticsLabel('Simpan perubahan hasil AI'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Laporan praktikum final'), findsOneWidget);
+      expect(
+        find.text('3 tugas ditemukan. Edit atau hapus dulu sebelum menyimpan.'),
+        findsOneWidget,
+      );
+
+      final Finder deleteThird = find.byTooltip('Hapus tugas').last;
+      await tester.ensureVisible(deleteThird);
+      await tester.pumpAndSettle();
+      await tester.tap(deleteThird);
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('2 tugas ditemukan. Edit atau hapus dulu sebelum menyimpan.'),
+        findsOneWidget,
+      );
+      expect(find.text('Ambil laundry'), findsNothing);
+
+      final Finder saveButton = find.bySemanticsLabel('Simpan 2 tugas');
+      await tester.ensureVisible(saveButton);
+      await tester.pumpAndSettle();
+      await tester.tap(saveButton);
+      await tester.pumpAndSettle();
+
+      expect(saved.length, 2);
+      expect(
+        saved.any(
+          (TaskItem task) => task.title == 'Quiz Kalkulus untuk Tugas Kuliah',
+        ),
+        isTrue,
+      );
+      expect(
+        saved.any((TaskItem task) => task.title == 'Laporan praktikum final'),
+        isTrue,
+      );
+      expect(
+        saved.any((TaskItem task) => task.title == 'Ambil laundry'),
+        isFalse,
+      );
+    },
+  );
 
   testWidgets('Edit form keeps the manual layout without mode switcher', (
     WidgetTester tester,
@@ -766,10 +878,98 @@ void main() {
       // Kata kasar sudah dibersihkan dari judul
       expect(find.text('Bayar kos'), findsOneWidget);
       expect(find.text('Tugas kalkulus'), findsOneWidget);
-      // Nominal kos diperkirakan otomatis (650000)
-      expect(find.text('650000'), findsOneWidget);
+      expect(find.text('Isi nominal'), findsOneWidget);
     },
   );
+
+  testWidgets('Brain Dump separates a completed purchase from planned work', (
+    WidgetTester tester,
+  ) async {
+    await pumpApp(tester);
+    await tester.tap(find.text('Brain Dump'));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+      find.byType(TextField).first,
+      'Tadi beli nasi 15rb; besok bayar listrik 100rb; '
+      'revisi bab 2; rapat BEM lusa jam 8 malam; tidak jadi beli kopi 12rb',
+    );
+    tester.testTextInput.hide();
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Proses Brain Dump'));
+    await tester.tap(find.text('Proses Brain Dump'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('1. BAGIAN KEUANGAN (1)'), findsOneWidget);
+    expect(find.text('2. BAGIAN TUGAS (3)'), findsOneWidget);
+    expect(find.text('15000'), findsOneWidget);
+    expect(find.textContaining('Bayar listrik'), findsWidgets);
+    expect(find.textContaining('Revisi bab 2'), findsWidgets);
+    expect(find.textContaining('Beli kopi'), findsNothing);
+  });
+
+  testWidgets('Brain Dump saves a past expenses-only list with its dates', (
+    WidgetTester tester,
+  ) async {
+    final AppProvider app = await pumpApp(tester);
+    final int tasksBefore = app.tasks.length;
+    final int transactionsBefore = app.transactions.length;
+    final DateTime now = DateTime.now();
+    final String yesterday = DateTime(
+      now.year,
+      now.month,
+      now.day - 1,
+    ).toIso8601String().split('T').first;
+
+    await tester.tap(find.text('Brain Dump'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byType(TextField).first,
+      'Pengeluaran kemarin:\n1. Nasi 15rb\n2. Kopi 12k\n3. Sabun 18000\nTotal 45000',
+    );
+    tester.testTextInput.hide();
+    await tester.pumpAndSettle();
+    final Finder process = find.text('Proses Brain Dump');
+    await tester.ensureVisible(process);
+    await tester.tap(process);
+    await tester.pumpAndSettle();
+
+    expect(find.text('1. BAGIAN KEUANGAN (3)'), findsOneWidget);
+    final Finder save = find.text('Simpan Semua Catatan');
+    await tester.ensureVisible(save);
+    await tester.tap(save);
+    await tester.pumpAndSettle();
+
+    expect(app.tasks, hasLength(tasksBefore));
+    expect(app.transactions, hasLength(transactionsBefore + 3));
+    final Iterable<TransactionItem> saved = app.transactions.take(3);
+    expect(
+      saved.map((item) => item.amount),
+      orderedEquals(<int>[-15000, -12000, -18000]),
+    );
+    expect(saved.map((item) => item.date), everyElement(yesterday));
+  });
+
+  testWidgets('Brain Dump previews a tasks-only list without finance', (
+    WidgetTester tester,
+  ) async {
+    await pumpApp(tester);
+    await tester.tap(find.text('Brain Dump'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byType(TextField).first,
+      'Daftar tugas:\n1. Revisi bab 2 besok\n2. Kirim slide lusa\n3. Hubungi dosen\n4. Beli alat tulis 25rb',
+    );
+    tester.testTextInput.hide();
+    await tester.pumpAndSettle();
+    final Finder process = find.text('Proses Brain Dump');
+    await tester.ensureVisible(process);
+    await tester.tap(process);
+    await tester.pumpAndSettle();
+
+    expect(find.text('BAGIAN TUGAS (4)'), findsOneWidget);
+    expect(find.textContaining('BAGIAN KEUANGAN'), findsNothing);
+  });
 
   testWidgets('Profile setting rows navigate to five detail screens', (
     WidgetTester tester,
@@ -866,10 +1066,7 @@ void main() {
     await tester.ensureVisible(find.text('Simpan'));
     await tester.tap(find.text('Simpan'));
     await tester.pump();
-    expect(
-      find.text('Limit anggaran harus lebih besar dari nol.'),
-      findsOneWidget,
-    );
+    expect(find.text('Target anggaran tidak boleh negatif.'), findsOneWidget);
 
     await tester.enterText(field, '2000000');
     tester.testTextInput.hide();
@@ -887,6 +1084,48 @@ void main() {
     await tester.tap(find.text('Batal'));
     await tester.pumpAndSettle();
     expect(find.text('Rp2.000.000/bulan'), findsOneWidget);
+  });
+
+  testWidgets('Saldo dimulai dari nol dan dapat menjadi negatif', (
+    WidgetTester tester,
+  ) async {
+    final AppProvider app = await pumpApp(
+      tester,
+      transactions: const <TransactionItem>[],
+    );
+    expect(find.text('Rp0'), findsWidgets);
+    expect(app.budgetLimit, 0);
+    await app.addTransaction(
+      const TransactionItem(
+        id: 'expense',
+        label: 'Makan',
+        amount: -25000,
+        cat: 'food',
+        time: '09:00',
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('-Rp25.000'), findsWidgets);
+    expect(find.text('Defisit Rp25.000'), findsOneWidget);
+
+    await app.addTransaction(
+      const TransactionItem(
+        id: 'income',
+        label: 'Tabungan',
+        amount: 100000,
+        cat: 'other',
+        time: '09:30',
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Rp75.000'), findsOneWidget);
+    expect(find.text('Defisit Rp25.000'), findsNothing);
+
+    await tester.tap(find.byTooltip('Keuangan'));
+    await tester.pumpAndSettle();
+    expect(find.text('Saldo saat ini'), findsOneWidget);
+    expect(find.text('Rp75.000'), findsOneWidget);
+    expect(find.text('Indikator Anggaran'), findsNothing);
   });
 
   testWidgets('NLP simulation detects tasks, schedules, and expenses', (
@@ -1153,10 +1392,31 @@ void main() {
   });
 
   testWidgets(
-    'Scan struk creates a real transaction that persists in history',
+    'Scan struk retries photo, edits and removes line items before saving',
     (WidgetTester tester) async {
       ReceiptCamera.debugCaptureOverride = () async => 'test-receipt.jpg';
-      addTearDown(() => ReceiptCamera.debugCaptureOverride = null);
+      int scanAttempts = 0;
+      ReceiptOcrService.debugExtractTextOverride = (_) async {
+        scanAttempts++;
+        return 'INDOMARET\nTOTAL 28500\n';
+      };
+      ReceiptOcrService.debugParseTextOverride = (_) async =>
+          const ReceiptOcrResult(
+            merchant: 'Belanja di Indomaret',
+            total: 28500,
+            date: null,
+            items: <ReceiptItem>[
+              ReceiptItem(name: 'Susu', amount: 8500),
+              ReceiptItem(name: 'Sabun', amount: 15000),
+              ReceiptItem(name: 'Parkir', amount: 5000),
+            ],
+            rawText: 'INDOMARET\nTOTAL 28500',
+          );
+      addTearDown(() {
+        ReceiptCamera.debugCaptureOverride = null;
+        ReceiptOcrService.debugExtractTextOverride = null;
+        ReceiptOcrService.debugParseTextOverride = null;
+      });
       final AppProvider app = await pumpApp(tester);
       final int before = app.transactions.length;
 
@@ -1172,7 +1432,25 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 950));
 
-      expect(find.text('Konfirmasi & Catat'), findsOneWidget);
+      expect(find.text('Pratinjau Struk'), findsOneWidget);
+      expect(app.transactions, hasLength(before));
+      final Finder retry = find.text('Scan Ulang Foto Ini');
+      await tester.ensureVisible(retry);
+      await tester.tap(retry);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Scan Ulang'));
+      await tester.pumpAndSettle();
+      expect(scanAttempts, 2);
+
+      final Finder remove = find.byTooltip('Hapus item').last;
+      await tester.ensureVisible(remove);
+      await tester.tap(remove);
+      await tester.pumpAndSettle();
+      final Finder firstAmount = find.widgetWithText(TextField, '8500');
+      await tester.ensureVisible(firstAmount);
+      await tester.enterText(firstAmount, '9000');
+      tester.testTextInput.hide();
+      await tester.pumpAndSettle();
 
       await tester.ensureVisible(find.text('Konfirmasi & Catat'));
       await tester.tap(find.text('Konfirmasi & Catat'));
@@ -1180,11 +1458,17 @@ void main() {
       await tester.pump(const Duration(milliseconds: 650));
       await tester.pump(const Duration(milliseconds: 400));
 
-      expect(app.transactions.length, before + 1);
-      expect(app.transactions.first.label, 'Belanja di Indomaret');
-      expect(app.transactions.first.amount, -28500);
-      expect(app.transactions.first.cat, 'belanja');
-      expect(app.transactions.first.receiptImagePath, 'test-receipt.jpg');
+      expect(app.transactions.length, before + 2);
+      expect(app.transactions[0].label, 'Susu');
+      expect(app.transactions[0].amount, -9000);
+      expect(app.transactions[0].cat, 'food');
+      expect(app.transactions[1].label, 'Sabun');
+      expect(app.transactions[1].amount, -15000);
+      expect(app.transactions[1].cat, 'belanja');
+      expect(
+        app.transactions.take(2).map((item) => item.receiptImagePath),
+        everyElement(isNull),
+      );
       expect(find.textContaining('berhasil dicatat'), findsOneWidget);
     },
   );
@@ -1205,6 +1489,7 @@ void main() {
 
       final Finder fields = find.byType(TextField);
       await tester.enterText(fields.at(0), '25000');
+      expect(find.text('25.000'), findsOneWidget);
       await tester.enterText(fields.at(1), 'Jajan sore');
       await tester.ensureVisible(find.text('Simpan'));
       await tester.tap(find.text('Simpan'));
@@ -1241,7 +1526,7 @@ void main() {
   });
 
   testWidgets(
-    'Finance screen computes budget usage and category totals from real transactions',
+    'Finance screen computes signed balance and category totals from real transactions',
     (WidgetTester tester) async {
       final AppProvider app = await pumpApp(
         tester,
@@ -1266,10 +1551,9 @@ void main() {
       app.settings.setMonthlyBudgetLimit(200000);
       await tester.pumpAndSettle();
 
-      expect(find.text('Anggaran Bulan Ini'), findsOneWidget);
-      expect(find.text('Rp200.000'), findsOneWidget);
-      expect(find.text('Terpakai: Rp100.000'), findsOneWidget);
-      expect(find.text('Sisa Rp100.000'), findsOneWidget);
+      expect(find.text('Saldo saat ini'), findsOneWidget);
+      expect(find.text('-Rp100.000'), findsOneWidget);
+      expect(find.text('Anggaran Bulan Ini'), findsNothing);
       expect(find.text('50% dari total pengeluaran'), findsNWidgets(2));
     },
   );
