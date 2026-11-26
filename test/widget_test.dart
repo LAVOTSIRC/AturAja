@@ -688,86 +688,88 @@ void main() {
     expect(app.transactions.first.cat, 'belanja');
   });
 
-  testWidgets('Brain Dump handles mixed finance and tasks (finance first then tasks), supports manual edit and AI refinement', (
-    WidgetTester tester,
-  ) async {
-    final AppProvider app = await pumpApp(tester);
-    final int txBefore = app.transactions.length;
-    final int taskBefore = app.tasks.length;
+  testWidgets(
+    'Brain Dump handles mixed finance and tasks (finance first then tasks), supports manual edit and AI refinement',
+    (WidgetTester tester) async {
+      final AppProvider app = await pumpApp(tester);
+      final int txBefore = app.transactions.length;
+      final int taskBefore = app.tasks.length;
 
-    await tester.tap(find.text('Brain Dump'));
-    await tester.pumpAndSettle();
+      await tester.tap(find.text('Brain Dump'));
+      await tester.pumpAndSettle();
 
-    await tester.tap(
-      find.text('Makan batagor 15k lalu besok jam 08:00 quiz kalkulus'),
-    );
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Proses Brain Dump'));
-    await tester.pumpAndSettle();
+      await tester.tap(
+        find.text('Makan batagor 15k lalu besok jam 08:00 quiz kalkulus'),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Proses Brain Dump'));
+      await tester.pumpAndSettle();
 
-    // Menampilkan bagian Keuangan terlebih dahulu lalu bagian Tugas
-    expect(find.text('1. BAGIAN KEUANGAN (1)'), findsOneWidget);
-    expect(find.text('2. BAGIAN TUGAS (1)'), findsOneWidget);
-    expect(find.text('Edit Manual'), findsNWidgets(2));
-    expect(find.text('Perbaiki AI'), findsNWidgets(2));
-    expect(find.text('Perbaiki Semua (AI)'), findsOneWidget);
+      // Menampilkan bagian Keuangan terlebih dahulu lalu bagian Tugas
+      expect(find.text('1. BAGIAN KEUANGAN (1)'), findsOneWidget);
+      expect(find.text('2. BAGIAN TUGAS (1)'), findsOneWidget);
+      expect(find.text('Edit Manual'), findsNWidgets(2));
+      expect(find.text('Perbaiki AI'), findsNWidgets(2));
+      expect(find.text('Perbaiki Semua (AI)'), findsOneWidget);
 
-    // Uji perbaikan AI pada 1 item keuangan
-    await tester.tap(find.text('Perbaiki AI').first);
-    await tester.pumpAndSettle();
-    expect(find.text('Minta AI Perbaiki Item Ini'), findsOneWidget);
-    await tester.tap(find.text('Ubah nominal jadi 25rb'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Perbaiki Item dengan AI'));
-    await tester.pumpAndSettle();
-    expect(find.text('25000'), findsOneWidget);
+      // Uji perbaikan AI pada 1 item keuangan
+      await tester.tap(find.text('Perbaiki AI').first);
+      await tester.pumpAndSettle();
+      expect(find.text('Minta AI Perbaiki Item Ini'), findsOneWidget);
+      await tester.tap(find.text('Ubah nominal jadi 25rb'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Perbaiki Item dengan AI'));
+      await tester.pumpAndSettle();
+      expect(find.text('25000'), findsOneWidget);
 
-    // Simpan semua catatan (keuangan & tugas sekaligus)
-    await tester.ensureVisible(find.text('Simpan Semua Catatan'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Simpan Semua Catatan'));
-    await tester.pumpAndSettle();
+      // Simpan semua catatan (keuangan & tugas sekaligus)
+      await tester.ensureVisible(find.text('Simpan Semua Catatan'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Simpan Semua Catatan'));
+      await tester.pumpAndSettle();
 
-    expect(app.transactions.length, txBefore + 1);
-    expect(app.transactions.first.amount, -25000);
-    expect(app.tasks.length, taskBefore + 1);
-    expect(
-      app.tasks.any(
-        (TaskItem t) => t.title.toLowerCase().contains('quiz kalkulus'),
-      ),
-      isTrue,
-    );
-  });
+      expect(app.transactions.length, txBefore + 1);
+      expect(app.transactions.first.amount, -25000);
+      expect(app.tasks.length, taskBefore + 1);
+      expect(
+        app.tasks.any(
+          (TaskItem t) => t.title.toLowerCase().contains('quiz kalkulus'),
+        ),
+        isTrue,
+      );
+    },
+  );
 
-  testWidgets('Brain Dump handles incomplete, vague, or rude input by cleaning and inferring intent without rejecting', (
-    WidgetTester tester,
-  ) async {
-    await tester.pumpWidget(
-      ThemeScope(
-        controller: ThemeController(),
-        child: const MaterialApp(home: BrainDumpFinanceScreen()),
-      ),
-    );
+  testWidgets(
+    'Brain Dump handles incomplete, vague, or rude input by cleaning and inferring intent without rejecting',
+    (WidgetTester tester) async {
+      await tester.pumpWidget(
+        ThemeScope(
+          controller: ThemeController(),
+          child: const MaterialApp(home: BrainDumpFinanceScreen()),
+        ),
+      );
 
-    // Input tidak sopan + data keuangan tidak lengkap (tanpa nominal) + tugas tidak jelas
-    await tester.enterText(
-      find.byType(TextField).first,
-      'bayar kos sialan lalu tugas kalkulus bangsat',
-    );
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Proses Brain Dump'));
-    await tester.pumpAndSettle();
+      // Input tidak sopan + data keuangan tidak lengkap (tanpa nominal) + tugas tidak jelas
+      await tester.enterText(
+        find.byType(TextField).first,
+        'bayar kos sialan lalu tugas kalkulus bangsat',
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Proses Brain Dump'));
+      await tester.pumpAndSettle();
 
-    // Tidak boleh ditolak, melainkan disimpulkan otomatis (Keuangan dulu, lalu Tugas)
-    expect(find.text('Periksa hasil AI sebelum disimpan'), findsOneWidget);
-    expect(find.text('1. BAGIAN KEUANGAN (1)'), findsOneWidget);
-    expect(find.text('2. BAGIAN TUGAS (1)'), findsOneWidget);
-    // Kata kasar sudah dibersihkan dari judul
-    expect(find.text('Bayar kos'), findsOneWidget);
-    expect(find.text('Tugas kalkulus'), findsOneWidget);
-    // Nominal kos diperkirakan otomatis (650000)
-    expect(find.text('650000'), findsOneWidget);
-  });
+      // Tidak boleh ditolak, melainkan disimpulkan otomatis (Keuangan dulu, lalu Tugas)
+      expect(find.text('Periksa hasil AI sebelum disimpan'), findsOneWidget);
+      expect(find.text('1. BAGIAN KEUANGAN (1)'), findsOneWidget);
+      expect(find.text('2. BAGIAN TUGAS (1)'), findsOneWidget);
+      // Kata kasar sudah dibersihkan dari judul
+      expect(find.text('Bayar kos'), findsOneWidget);
+      expect(find.text('Tugas kalkulus'), findsOneWidget);
+      // Nominal kos diperkirakan otomatis (650000)
+      expect(find.text('650000'), findsOneWidget);
+    },
+  );
 
   testWidgets('Profile setting rows navigate to five detail screens', (
     WidgetTester tester,
