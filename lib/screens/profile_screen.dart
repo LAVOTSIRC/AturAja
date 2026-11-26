@@ -29,14 +29,14 @@ class _SettingItem {
 }
 
 class _ProfileDraft {
-  final String fullName;
-  final String nim;
-  final String program;
+  final String username;
+  final String email;
+  final String? password;
 
   const _ProfileDraft({
-    required this.fullName,
-    required this.nim,
-    required this.program,
+    required this.username,
+    required this.email,
+    this.password,
   });
 }
 
@@ -48,30 +48,12 @@ class _StatItem {
   const _StatItem(this.icon, this.value, this.label);
 }
 
-String _compactRupiah(int value) {
-  final int absolute = value.abs();
-  final String sign = value < 0 ? '-' : '';
-  if (absolute >= 1000000) {
-    final double millions = absolute / 1000000;
-    final String amount = millions == millions.roundToDouble()
-        ? millions.toStringAsFixed(0)
-        : millions.toStringAsFixed(1);
-    return '$sign${amount}jt';
-  }
-  if (absolute >= 1000) {
-    return '$sign${(absolute / 1000).round()}rb';
-  }
-  return '$value';
-}
-
 class ProfileScreen extends StatefulWidget {
   final SettingsController settings;
   final ProfileData? initialProfile;
   final ValueChanged<ProfileData>? onProfileChanged;
+  final ValueChanged<String>? onPasswordChanged;
   final Future<void> Function() onLogout;
-  final int completedTaskCount;
-  final int totalSavings;
-  final int streakDays;
   final String? cloudBackupStatus;
 
   const ProfileScreen({
@@ -79,10 +61,8 @@ class ProfileScreen extends StatefulWidget {
     required this.settings,
     this.initialProfile,
     this.onProfileChanged,
+    this.onPasswordChanged,
     required this.onLogout,
-    this.completedTaskCount = 12,
-    this.totalSavings = 874000,
-    this.streakDays = 7,
     this.cloudBackupStatus,
   });
 
@@ -120,28 +100,25 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> {
   late String fullName;
-  late String nim;
-  late String program;
+  late String email;
   late String avatarLabel;
 
   @override
   void initState() {
     super.initState();
     final ProfileData profile = widget.initialProfile ?? ProfileData.initial;
-    fullName = profile.fullName;
-    nim = profile.nim;
-    program = profile.program;
-    avatarLabel = profile.avatarLabel;
+    fullName = profile.fullName.isEmpty
+        ? ProfileData.initial.fullName
+        : profile.fullName;
+    email = profile.email.isEmpty ? ProfileData.initial.email : profile.email;
+    avatarLabel = profile.avatarLabel.isEmpty
+        ? _initialsFromName(fullName)
+        : profile.avatarLabel;
   }
 
   void _notifyProfileChanged() {
     widget.onProfileChanged?.call(
-      ProfileData(
-        fullName: fullName,
-        nim: nim,
-        program: program,
-        avatarLabel: avatarLabel,
-      ),
+      ProfileData(fullName: fullName, email: email, avatarLabel: avatarLabel),
     );
   }
 
@@ -209,20 +186,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
       context: context,
       isScrollControlled: true,
       backgroundColor: c.transparent,
-      builder: (_) =>
-          _EditProfileSheet(fullName: fullName, nim: nim, program: program),
+      builder: (_) => _EditProfileSheet(username: fullName, email: email),
     );
 
     if (!mounted || draft == null) {
       return;
     }
     setState(() {
-      fullName = draft.fullName;
-      nim = draft.nim;
-      program = draft.program;
-      avatarLabel = _initialsFromName(draft.fullName);
+      fullName = draft.username;
+      email = draft.email;
+      avatarLabel = _initialsFromName(draft.username);
     });
     _notifyProfileChanged();
+    if (draft.password != null && draft.password!.isNotEmpty) {
+      widget.onPasswordChanged?.call(draft.password!);
+    }
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Profil berhasil diperbarui.')),
     );
@@ -300,7 +278,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 children: [
                   _buildHeader(c),
                   _buildProfileSummary(c),
-                  _buildStats(c),
                   const SizedBox(height: AppSpacing.md),
                   _buildSettings(c),
                 ],
@@ -339,11 +316,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
             _buildAvatar(c),
             const SizedBox(height: AppSpacing.sm),
             _buildName(c),
-            const SizedBox(height: AppSpacing.xxs),
-            Text(
-              nim.isEmpty || program.isEmpty ? nim : '$nim · $program',
-              style: AppTypography.meta(c.textMuted),
-            ),
+            if (email.isNotEmpty) ...[
+              const SizedBox(height: AppSpacing.xxs),
+              Text(email, style: AppTypography.meta(c.textMuted)),
+            ],
             const SizedBox(height: AppSpacing.xs),
             _buildStatus(c),
           ],
@@ -454,70 +430,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget _buildStats(AppColors c) {
-    final List<_StatItem> stats = <_StatItem>[
-      _StatItem(
-        Icons.task_alt_outlined,
-        '${widget.completedTaskCount}',
-        'Tugas Selesai',
-      ),
-      _StatItem(
-        Icons.savings_outlined,
-        _compactRupiah(widget.totalSavings),
-        'Total Hemat',
-      ),
-      _StatItem(
-        Icons.local_fire_department_outlined,
-        '${widget.streakDays} hari',
-        'Streak',
-      ),
-    ];
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
-      child: Row(
-        children: stats
-            .map(
-              (_StatItem stat) => Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: AppSpacing.xxs,
-                  ),
-                  child: AppCard(
-                    padding: const EdgeInsets.symmetric(
-                      vertical: AppSpacing.sm,
-                      horizontal: AppSpacing.xs,
-                    ),
-                    child: Column(
-                      children: [
-                        Icon(
-                          stat.icon,
-                          size: AppSpacing.iconSmall,
-                          color: c.blue,
-                        ),
-                        const SizedBox(height: AppSpacing.xs),
-                        Text(
-                          stat.value,
-                          style: AppTypography.bodyLarge(c.text)
-                              .copyWith(fontWeight: FontWeight.w700),
-                        ),
-                        const SizedBox(height: AppSpacing.xxs),
-                        Text(
-                          stat.label,
-                          textAlign: TextAlign.center,
-                          style: AppTypography.micro(c.textMuted)
-                              .copyWith(height: 1.3),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            )
-            .toList(),
-      ),
-    );
-  }
-
   String _settingStatus(_SettingItem item) {
     final SettingsController settings = widget.settings;
     return switch (item.destination) {
@@ -525,7 +437,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
       _SettingsDestination.cloud =>
         widget.cloudBackupStatus ?? settings.cloudBackupStatus,
       _SettingsDestination.budget =>
-        '${formatRupiah(settings.monthlyBudgetLimit)}/bulan',
+        settings.monthlyBudgetLimit == 0
+            ? 'Nonaktif (opsional)'
+            : '${formatRupiah(settings.monthlyBudgetLimit)}/bulan',
       _SettingsDestination.nlp => settings.nlpModelStatus,
       _SettingsDestination.privacy => settings.privacyStatus,
       null => '',
@@ -644,75 +558,93 @@ class _ProfileScreenState extends State<ProfileScreen> {
 }
 
 class _EditProfileSheet extends StatefulWidget {
-  final String fullName;
-  final String nim;
-  final String program;
+  final String username;
+  final String email;
 
-  const _EditProfileSheet({
-    required this.fullName,
-    required this.nim,
-    required this.program,
-  });
+  const _EditProfileSheet({required this.username, required this.email});
 
   @override
   State<_EditProfileSheet> createState() => _EditProfileSheetState();
 }
 
 class _EditProfileSheetState extends State<_EditProfileSheet> {
-  late final TextEditingController nameController;
-  late final TextEditingController nimController;
-  late final TextEditingController programController;
-  String? nameError;
-  String? nimError;
+  late final TextEditingController usernameController;
+  late final TextEditingController emailController;
+  late final TextEditingController passwordController;
+  String? usernameError;
+  String? emailError;
+  String? passwordError;
+  bool obscurePassword = true;
 
   @override
   void initState() {
     super.initState();
-    nameController = TextEditingController(text: widget.fullName);
-    nimController = TextEditingController(text: widget.nim);
-    programController = TextEditingController(text: widget.program);
+    usernameController = TextEditingController(text: widget.username);
+    emailController = TextEditingController(text: widget.email);
+    passwordController = TextEditingController();
   }
 
   @override
   void dispose() {
-    nameController.dispose();
-    nimController.dispose();
-    programController.dispose();
+    usernameController.dispose();
+    emailController.dispose();
+    passwordController.dispose();
     super.dispose();
   }
 
   void _save() {
-    final String name = nameController.text.trim();
-    final String nim = nimController.text.trim();
-    final String program = programController.text.trim();
-    final String? nextNameError = name.isEmpty
-        ? 'Nama tidak boleh kosong.'
-        : null;
-    final String? nextNimError = RegExp(r'^\d+$').hasMatch(nim)
-        ? null
-        : 'NIM harus berupa angka.';
+    final String username = usernameController.text.trim();
+    final String email = emailController.text.trim();
+    final String password = passwordController.text;
 
-    if (nextNameError != null || nextNimError != null) {
+    final String? nextUsernameError = username.isEmpty
+        ? 'Username tidak boleh kosong.'
+        : null;
+    final String? nextEmailError = email.isEmpty
+        ? 'Email tidak boleh kosong.'
+        : (!RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(email)
+              ? 'Masukkan format email yang valid.'
+              : null);
+    final String? nextPasswordError =
+        (password.isNotEmpty && password.length < 6)
+        ? 'Password minimal 6 karakter.'
+        : null;
+
+    if (nextUsernameError != null ||
+        nextEmailError != null ||
+        nextPasswordError != null) {
       setState(() {
-        nameError = nextNameError;
-        nimError = nextNimError;
+        usernameError = nextUsernameError;
+        emailError = nextEmailError;
+        passwordError = nextPasswordError;
       });
       return;
     }
 
-    Navigator.of(context)
-        .pop(_ProfileDraft(fullName: name, nim: nim, program: program));
+    Navigator.of(context).pop(
+      _ProfileDraft(
+        username: username,
+        email: email,
+        password: password.isEmpty ? null : password,
+      ),
+    );
   }
 
-  void _clearNameError() {
-    if (nameError != null) {
-      setState(() => nameError = null);
+  void _clearUsernameError() {
+    if (usernameError != null) {
+      setState(() => usernameError = null);
     }
   }
 
-  void _clearNimError() {
-    if (nimError != null) {
-      setState(() => nimError = null);
+  void _clearEmailError() {
+    if (emailError != null) {
+      setState(() => emailError = null);
+    }
+  }
+
+  void _clearPasswordError() {
+    if (passwordError != null) {
+      setState(() => passwordError = null);
     }
   }
 
@@ -757,34 +689,49 @@ class _EditProfileSheetState extends State<_EditProfileSheet> {
               Text('Edit Profil', style: AppTypography.titleLarge(c.text)),
               const SizedBox(height: AppSpacing.xs),
               Text(
-                'Perbarui informasi yang ditampilkan di profil.',
+                'Atur username, email, dan password akunmu.',
                 style: AppTypography.caption(c.textSub),
               ),
               const SizedBox(height: AppSpacing.md),
               _profileField(
-                controller: nameController,
-                label: 'Nama Lengkap',
+                controller: usernameController,
+                label: 'Username',
                 hint: 'Contoh: M Zidan Ruriano A.G',
-                errorText: nameError,
+                errorText: usernameError,
+                textCapitalization: TextCapitalization.words,
                 textInputAction: TextInputAction.next,
-                onChanged: (_) => _clearNameError(),
+                onChanged: (_) => _clearUsernameError(),
               ),
               const SizedBox(height: AppSpacing.sm),
               _profileField(
-                controller: nimController,
-                label: 'NIM',
-                hint: 'Masukkan NIM',
-                errorText: nimError,
-                keyboardType: TextInputType.number,
+                controller: emailController,
+                label: 'Email',
+                hint: 'Contoh: zidan@aturaja.id',
+                errorText: emailError,
+                keyboardType: TextInputType.emailAddress,
                 textInputAction: TextInputAction.next,
-                onChanged: (_) => _clearNimError(),
+                onChanged: (_) => _clearEmailError(),
               ),
               const SizedBox(height: AppSpacing.sm),
               _profileField(
-                controller: programController,
-                label: 'Program Studi',
-                hint: 'Contoh: Ilmu Komputer',
+                controller: passwordController,
+                label: 'Password Baru (Opsional)',
+                hint: 'Kosongkan jika tidak ingin mengubah password',
+                errorText: passwordError,
+                obscureText: obscurePassword,
                 textInputAction: TextInputAction.done,
+                onChanged: (_) => _clearPasswordError(),
+                suffixIcon: IconButton(
+                  onPressed: () =>
+                      setState(() => obscurePassword = !obscurePassword),
+                  icon: Icon(
+                    obscurePassword
+                        ? Icons.visibility_off_outlined
+                        : Icons.visibility_outlined,
+                    size: AppSpacing.iconSmall,
+                    color: c.textMuted,
+                  ),
+                ),
               ),
               const SizedBox(height: AppSpacing.md),
               Row(
@@ -841,6 +788,9 @@ class _EditProfileSheetState extends State<_EditProfileSheet> {
     required String label,
     required String hint,
     required TextInputAction textInputAction,
+    TextCapitalization textCapitalization = TextCapitalization.none,
+    bool obscureText = false,
+    Widget? suffixIcon,
     String? errorText,
     TextInputType? keyboardType,
     ValueChanged<String>? onChanged,
@@ -848,7 +798,8 @@ class _EditProfileSheetState extends State<_EditProfileSheet> {
     final AppColors c = ThemeScope.of(context).colors;
     return TextField(
       controller: controller,
-      textCapitalization: TextCapitalization.words,
+      textCapitalization: textCapitalization,
+      obscureText: obscureText,
       keyboardType: keyboardType,
       textInputAction: textInputAction,
       onChanged: onChanged,
@@ -856,6 +807,7 @@ class _EditProfileSheetState extends State<_EditProfileSheet> {
         labelText: label,
         hintText: hint,
         errorText: errorText,
+        suffixIcon: suffixIcon,
         hintStyle: AppTypography.body(c.textMuted),
         filled: true,
         fillColor: c.surfaceHigh,

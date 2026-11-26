@@ -28,6 +28,9 @@ Map<String, dynamic> taskToFirestore(TaskItem task) => <String, dynamic>{
   'deadline': task.deadline,
   'dueDate': task.dueDate == null ? null : Timestamp.fromDate(task.dueDate!),
   'done': task.done,
+  'completedAt': task.completedAt == null
+      ? null
+      : Timestamp.fromDate(task.completedAt!),
   'legacyId': task.legacyId,
   'schemaVersion': firestoreSchemaVersion,
   'createdAt': _createdAt(task.createdAt),
@@ -52,6 +55,7 @@ TaskItem taskFromFirestore(String id, Map<String, dynamic> data) {
     done: data['done'] as bool? ?? false,
     createdAt: _timestampToDate(data['createdAt']),
     updatedAt: _timestampToDate(data['updatedAt']),
+    completedAt: _timestampToDate(data['completedAt']),
   );
 }
 
@@ -199,6 +203,7 @@ class FirestoreCloudRepository implements CloudRepository {
         );
       }
       if (profile.fullName.isNotEmpty ||
+          profile.email.isNotEmpty ||
           profile.nim.isNotEmpty ||
           profile.program.isNotEmpty) {
         transaction.set(profileRef, profileToFirestore(profile));

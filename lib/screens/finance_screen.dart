@@ -217,6 +217,7 @@ class _FinanceScreenState extends State<FinanceScreen> {
                       const SizedBox(height: AppSpacing.xs),
                       TextField(
                         controller: amountCtrl,
+                        inputFormatters: const [RupiahInputFormatter()],
                         autofocus: true,
                         keyboardType: TextInputType.number,
                         onChanged: (_) {
@@ -508,14 +509,6 @@ class _FinanceScreenState extends State<FinanceScreen> {
       ),
     ];
 
-    final int budget = app.budgetLimit;
-    final double usagePct = budget <= 0 ? 0 : totalExpense / budget;
-    final Color budgetColor = usagePct < 0.70
-        ? c.success
-        : usagePct < 0.90
-        ? c.warning
-        : c.expense;
-
     return Container(
       color: c.bg,
       child: SafeArea(
@@ -553,27 +546,6 @@ class _FinanceScreenState extends State<FinanceScreen> {
                           ),
                         ],
                       ),
-                    ),
-                    // Theme toggle with label hint
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.remove_red_eye_outlined,
-                              size: 14,
-                              color: c.textMuted,
-                            ),
-                            const SizedBox(width: AppSpacing.xxs),
-                            const ThemeToggleSwitch(),
-                          ],
-                        ),
-                        const SizedBox(height: 2),
-                        Text('Tema', style: AppTypography.micro(c.textMuted)),
-                      ],
                     ),
                   ],
                 ),
@@ -730,7 +702,6 @@ class _FinanceScreenState extends State<FinanceScreen> {
                 ),
               ),
 
-              // ── Budget indicator ──────────────────────────────────────
               Padding(
                 padding: const EdgeInsets.fromLTRB(
                   AppSpacing.md,
@@ -738,171 +709,24 @@ class _FinanceScreenState extends State<FinanceScreen> {
                   AppSpacing.md,
                   AppSpacing.md,
                 ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const SectionLabel('Indikator Anggaran'),
-                    AppCard(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: AppSpacing.md,
-                        vertical: AppSpacing.sm,
+                child: AppCard(
+                  padding: const EdgeInsets.all(AppSpacing.md),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Saldo saat ini',
+                        style: AppTypography.meta(c.textSub),
                       ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          // Title row
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text(
-                                'Anggaran Bulan Ini',
-                                style: AppTypography.label(c.text),
-                              ),
-                              Text(
-                                formatRupiah(budget),
-                                style: AppTypography.caption(c.blue)
-                                    .copyWith(fontWeight: FontWeight.w600),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: AppSpacing.sm),
-                          // Overall usage bar
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(
-                              AppSpacing.huge,
-                            ),
-                            child: LinearProgressIndicator(
-                              value: usagePct.clamp(0.0, 1.0),
-                              minHeight: AppSpacing.progressThin,
-                              backgroundColor: c.surfaceHigh,
-                              valueColor: AlwaysStoppedAnimation<Color>(
-                                budgetColor,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: AppSpacing.xs),
-                          // Segmented bar by category (skip categories with
-                          // 0% so Expanded never receives a zero flex factor)
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(
-                              AppSpacing.huge,
-                            ),
-                            child: SizedBox(
-                              height: AppSpacing.progressMedium,
-                              child: totalExpense == 0
-                                  ? Container(color: c.surfaceHigh)
-                                  : Row(
-                                      children: cats
-                                          .where((slice) => slice.pct > 0)
-                                          .map(
-                                            (_CategorySlice slice) => Expanded(
-                                              flex: slice.pct,
-                                              child: Container(
-                                                margin:
-                                                    const EdgeInsets.symmetric(
-                                                      horizontal:
-                                                          AppSpacing.xxs,
-                                                    ),
-                                                color: slice.color,
-                                              ),
-                                            ),
-                                          )
-                                          .toList(),
-                                    ),
-                            ),
-                          ),
-                          const SizedBox(height: AppSpacing.xs),
-                          // Spent / Remaining row
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text.rich(
-                                TextSpan(
-                                  style: AppTypography.micro(c.textMuted),
-                                  children: [
-                                    const TextSpan(text: 'Terpakai: '),
-                                    TextSpan(
-                                      text: formatRupiah(totalExpense),
-                                      style: AppTypography.micro(
-                                        c.text,
-                                      ).copyWith(fontWeight: FontWeight.w700),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              Text(
-                                usagePct > 1.0
-                                    ? 'Lebih ${formatRupiah(totalExpense - budget)}'
-                                    : 'Sisa ${formatRupiah(budget - totalExpense)}',
-                                style: AppTypography.micro(budgetColor),
-                              ),
-                            ],
-                          ),
-                          if (usagePct > 1.0) ...[
-                            const SizedBox(height: AppSpacing.xs),
-                            Container(
-                              width: double.infinity,
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: AppSpacing.sm,
-                                vertical: AppSpacing.xs,
-                              ),
-                              decoration: BoxDecoration(
-                                color: c.expenseDim,
-                                borderRadius: BorderRadius.circular(
-                                  AppSpacing.sm,
-                                ),
-                                border: Border.all(color: c.expense),
-                              ),
-                              child: Row(
-                                children: [
-                                  Icon(
-                                    Icons.warning_amber_rounded,
-                                    size: AppSpacing.iconSmall,
-                                    color: c.expense,
-                                  ),
-                                  const SizedBox(width: AppSpacing.xs),
-                                  Expanded(
-                                    child: Text(
-                                      'Anggaran bulan ini terlampaui ${formatRupiah(totalExpense - budget)}',
-                                      style: AppTypography.micro(
-                                        c.expense,
-                                      ).copyWith(fontWeight: FontWeight.w600),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                          const SizedBox(height: AppSpacing.xs),
-                          // Legend row
-                          Wrap(
-                            spacing: AppSpacing.sm,
-                            runSpacing: AppSpacing.xxs,
-                            children: cats.map((slice) {
-                              return Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Container(
-                                    width: 8,
-                                    height: 8,
-                                    decoration: BoxDecoration(
-                                      color: slice.color,
-                                      shape: BoxShape.circle,
-                                    ),
-                                  ),
-                                  const SizedBox(width: AppSpacing.xxs),
-                                  Text(
-                                    slice.label,
-                                    style: AppTypography.micro(c.textMuted),
-                                  ),
-                                ],
-                              );
-                            }).toList(),
-                          ),
-                        ],
+                      const SizedBox(height: AppSpacing.xs),
+                      Text(
+                        formatRupiahSigned(app.balance),
+                        style: AppTypography.title(
+                          app.balance < 0 ? c.expense : c.text,
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
 
@@ -1177,7 +1001,7 @@ class _TransactionDetailSheetState extends State<_TransactionDetailSheet> {
     super.initState();
     _labelCtrl = TextEditingController(text: widget.transaction.label);
     _amountCtrl = TextEditingController(
-      text: widget.transaction.amount.abs().toString(),
+      text: formatRupiah(widget.transaction.amount).substring(2),
     );
     _selectedCategory = _catLabel(widget.transaction.cat);
   }
@@ -1417,6 +1241,7 @@ class _TransactionDetailSheetState extends State<_TransactionDetailSheet> {
             const SizedBox(height: AppSpacing.xs),
             TextField(
               controller: _amountCtrl,
+              inputFormatters: const [RupiahInputFormatter()],
               keyboardType: TextInputType.number,
               onChanged: (_) {
                 if (_errorMessage != null) {

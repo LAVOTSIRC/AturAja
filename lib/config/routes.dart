@@ -16,6 +16,7 @@ import '../screens/home_screen.dart';
 import '../screens/login_screen.dart';
 import '../screens/main_shell.dart';
 import '../screens/nlp_simulation_screen.dart';
+import '../screens/notification_diagnostics_screen.dart';
 import '../screens/notification_settings_screen.dart';
 import '../screens/privacy_security_screen.dart';
 import '../screens/profile_screen.dart';
@@ -42,6 +43,8 @@ class AppRoutes {
   static const String budgetLimit = '/settings/budget-limit';
   static const String nlpSimulation = '/settings/nlp-simulation';
   static const String privacySecurity = '/settings/privacy-security';
+  static const String notificationDiagnostics =
+      '/settings/notification-diagnostics';
 }
 
 GoRouter createAppRouter({
@@ -171,6 +174,10 @@ GoRouter createAppRouter({
             settings: app.settings,
             onDeadlineChanged: app.setDeadlineNotifications,
             onBudgetAlertsChanged: app.setBudgetAlerts,
+            onBudgetRoastingChanged: app.setBudgetRoasting,
+            onDeadlineRoastingChanged: app.setDeadlineRoasting,
+            onDailyRoastingChanged: app.setDailyRoasting,
+            onDailyTimeChanged: app.setDailyRoastingTime,
           );
         },
       ),
@@ -207,6 +214,12 @@ GoRouter createAppRouter({
             appLockService: appLockService,
             exportService: exportService,
           );
+        },
+      ),
+      GoRoute(
+        path: AppRoutes.notificationDiagnostics,
+        builder: (BuildContext context, GoRouterState state) {
+          return const NotificationDiagnosticsScreen();
         },
       ),
       StatefulShellRoute(
@@ -292,14 +305,20 @@ GoRouter createAppRouter({
                 builder: (BuildContext context, GoRouterState state) {
                   return Consumer<AppProvider>(
                     builder: (BuildContext context, AppProvider app, _) {
+                      final String? authEmail = context
+                          .read<AuthProvider>()
+                          .user
+                          ?.email;
+                      final ProfileData profile =
+                          (app.profile.email.isEmpty &&
+                              authEmail != null &&
+                              authEmail.isNotEmpty)
+                          ? app.profile.copyWith(email: authEmail)
+                          : app.profile;
                       return ProfileScreen(
                         settings: app.settings,
-                        initialProfile: app.profile,
+                        initialProfile: profile,
                         onProfileChanged: app.updateProfile,
-                        completedTaskCount: app.tasks
-                            .where((TaskItem task) => task.done)
-                            .length,
-                        totalSavings: app.balance,
                         onLogout: () async {
                           await app.save();
                           if (context.mounted) {
@@ -321,29 +340,31 @@ GoRouter createAppRouter({
 }
 
 Future<void> _openBrainDump(BuildContext context) async {
-  final List<TransactionItem>? notes = await context
-      .push<List<TransactionItem>>(AppRoutes.brainDump);
-  if (notes == null || notes.isEmpty || !context.mounted) {
+  final Object? result = await context.push<Object?>(AppRoutes.brainDump);
+  if (result == null || !context.mounted) {
     return;
   }
-  ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-    SnackBar(
-      content: Text('${notes.length} catatan keuangan berhasil dicatat.'),
-    ),
-  );
+  if (result is BrainDumpSaveResult) {
+    if (result.isEmpty) return;
+    ScaffoldMessenger.maybeOf(context)
+        ?.showSnackBar(SnackBar(content: Text(result.summaryMessage)));
+  } else if (result is List<TransactionItem> && result.isNotEmpty) {
+    ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+      SnackBar(
+        content: Text('${result.length} catatan keuangan berhasil dicatat.'),
+      ),
+    );
+  }
 }
 
 Future<void> _openScan(BuildContext context) async {
-  final TransactionItem? transaction = await context.push<TransactionItem>(
-    AppRoutes.scan,
-  );
-  if (transaction == null || !context.mounted) {
-    return;
-  }
+  final List<TransactionItem>? transactions = await context
+      .push<List<TransactionItem>>(AppRoutes.scan);
+  if (transactions == null || transactions.isEmpty || !context.mounted) return;
   ScaffoldMessenger.maybeOf(context)?.showSnackBar(
     SnackBar(
       content: Text(
-        'Transaksi "${transaction.label}" dari scan struk berhasil dicatat.',
+        '${transactions.length} transaksi dari scan struk berhasil dicatat.',
       ),
     ),
   );

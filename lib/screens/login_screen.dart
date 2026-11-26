@@ -151,10 +151,6 @@ class _LoginScreenState extends State<LoginScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      const Align(
-                        alignment: Alignment.centerRight,
-                        child: ThemeToggleSwitch(),
-                      ),
                       const SizedBox(height: AppSpacing.xl),
                       _buildBrand(c),
                       const SizedBox(height: AppSpacing.xl),

@@ -1,3 +1,5 @@
+import '../utils/task_schedule.dart';
+
 String _stringId(dynamic value) {
   if (value is String && value.trim().isNotEmpty) {
     return value.trim();
@@ -131,6 +133,7 @@ class TaskItem {
   final bool done;
   final DateTime? createdAt;
   final DateTime? updatedAt;
+  final DateTime? completedAt;
 
   TaskItem({
     required this.id,
@@ -144,12 +147,19 @@ class TaskItem {
     this.done = false,
     this.createdAt,
     this.updatedAt,
+    this.completedAt,
   }) : categories =
            categories ??
            (sub != null && sub.isNotEmpty ? [sub] : const ['Tugas Kuliah']);
 
   /// Formatted category list string for displays
   String get sub => categories.isNotEmpty ? categories.join(', ') : 'Pribadi';
+
+  /// Label tenggat untuk tampilan. Dihitung dari [dueDate] agar "Besok" atau
+  /// "Hari ini" selalu sesuai tanggal sekarang, bukan teks yang tersimpan saat
+  /// tugas dibuat.
+  String get deadlineLabel =>
+      dueDate == null ? deadline : formatDeadline(dueDate!);
 
   /// Calculates if task is overdue (past deadline)
   bool get isOverdue {
@@ -189,6 +199,8 @@ class TaskItem {
     bool? done,
     DateTime? createdAt,
     DateTime? updatedAt,
+    DateTime? completedAt,
+    bool clearCompletedAt = false,
   }) => TaskItem(
     id: id ?? this.id,
     legacyId: legacyId ?? this.legacyId,
@@ -200,6 +212,7 @@ class TaskItem {
     done: done ?? this.done,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
+    completedAt: clearCompletedAt ? null : (completedAt ?? this.completedAt),
   );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
@@ -213,6 +226,7 @@ class TaskItem {
     'done': done,
     'createdAt': createdAt?.toIso8601String(),
     'updatedAt': updatedAt?.toIso8601String(),
+    'completedAt': completedAt?.toIso8601String(),
   };
 
   factory TaskItem.fromJson(Map<String, dynamic> json) {
@@ -234,32 +248,39 @@ class TaskItem {
       done: json['done'] as bool? ?? false,
       createdAt: _dateTime(json['createdAt']),
       updatedAt: _dateTime(json['updatedAt']),
+      completedAt: _dateTime(json['completedAt']),
     );
   }
 }
 
 class ProfileData {
   final String fullName;
+  final String email;
   final String nim;
   final String program;
   final String avatarLabel;
 
   const ProfileData({
     required this.fullName,
-    required this.nim,
-    required this.program,
+    this.email = '',
+    this.nim = '',
+    this.program = '',
     required this.avatarLabel,
   });
 
+  String get username => fullName;
+
   static const ProfileData initial = ProfileData(
     fullName: 'M Zidan Ruriano A.G',
-    nim: '241401063',
-    program: 'Ilmu Komputer',
+    email: 'zidan@aturaja.id',
+    nim: '',
+    program: '',
     avatarLabel: 'ZR',
   );
 
   static const ProfileData empty = ProfileData(
     fullName: '',
+    email: '',
     nim: '',
     program: '',
     avatarLabel: '',
@@ -267,12 +288,14 @@ class ProfileData {
 
   ProfileData copyWith({
     String? fullName,
+    String? email,
     String? nim,
     String? program,
     String? avatarLabel,
   }) {
     return ProfileData(
       fullName: fullName ?? this.fullName,
+      email: email ?? this.email,
       nim: nim ?? this.nim,
       program: program ?? this.program,
       avatarLabel: avatarLabel ?? this.avatarLabel,
@@ -281,6 +304,7 @@ class ProfileData {
 
   Map<String, dynamic> toJson() => <String, dynamic>{
     'fullName': fullName,
+    'email': email,
     'nim': nim,
     'program': program,
     'avatarLabel': avatarLabel,
@@ -288,9 +312,13 @@ class ProfileData {
 
   factory ProfileData.fromJson(Map<String, dynamic> json) {
     return ProfileData(
-      fullName: json['fullName'] as String? ?? initial.fullName,
-      nim: json['nim'] as String? ?? initial.nim,
-      program: json['program'] as String? ?? initial.program,
+      fullName:
+          (json['fullName'] as String?) ??
+          (json['username'] as String?) ??
+          initial.fullName,
+      email: json['email'] as String? ?? initial.email,
+      nim: json['nim'] as String? ?? '',
+      program: json['program'] as String? ?? '',
       avatarLabel: json['avatarLabel'] as String? ?? initial.avatarLabel,
     );
   }

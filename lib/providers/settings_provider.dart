@@ -1,11 +1,23 @@
 import 'package:flutter/foundation.dart';
 
+import '../data/roasting_intensity.dart';
+
 class SettingsController extends ChangeNotifier {
   bool deadlineNotificationsEnabled = true;
   bool budgetAlertsEnabled = true;
   bool roastingAiEnabled = true;
+  RoastingIntensity roastingIntensity = RoastingIntensity.defaultIntensity;
+
+  /// Notifikasi roasting otomatis nonaktif secara default agar perilaku
+  /// pengguna lama tidak berubah tanpa persetujuan.
+  bool budgetRoastingEnabled = false;
+  bool deadlineRoastingEnabled = false;
+  bool dailyRoastingEnabled = false;
+  int dailyRoastingHour = 20;
+  int dailyRoastingMinute = 0;
+
   bool autoBackupEnabled = true;
-  int monthlyBudgetLimit = 1200000;
+  int monthlyBudgetLimit = 0;
   bool biometricLockEnabled = false;
   bool pinWasUpdated = false;
   bool accountDeletionRequested = false;
@@ -21,6 +33,12 @@ class SettingsController extends ChangeNotifier {
       return 'Semua notifikasi nonaktif';
     }
     return '$activeNotificationCount dari 3 kategori aktif';
+  }
+
+  String get dailyRoastingTimeLabel {
+    final String hour = dailyRoastingHour.toString().padLeft(2, '0');
+    final String minute = dailyRoastingMinute.toString().padLeft(2, '0');
+    return '$hour.$minute';
   }
 
   String get cloudSyncStatus {
@@ -54,8 +72,14 @@ class SettingsController extends ChangeNotifier {
     deadlineNotificationsEnabled = true;
     budgetAlertsEnabled = true;
     roastingAiEnabled = true;
+    roastingIntensity = RoastingIntensity.defaultIntensity;
+    budgetRoastingEnabled = false;
+    deadlineRoastingEnabled = false;
+    dailyRoastingEnabled = false;
+    dailyRoastingHour = 20;
+    dailyRoastingMinute = 0;
     autoBackupEnabled = true;
-    monthlyBudgetLimit = 1200000;
+    monthlyBudgetLimit = 0;
     biometricLockEnabled = false;
     pinWasUpdated = false;
     accountDeletionRequested = false;
@@ -84,6 +108,49 @@ class SettingsController extends ChangeNotifier {
       return;
     }
     roastingAiEnabled = value;
+    notifyListeners();
+  }
+
+  void setRoastingIntensity(RoastingIntensity value) {
+    if (roastingIntensity == value) {
+      return;
+    }
+    roastingIntensity = value;
+    notifyListeners();
+  }
+
+  void setBudgetRoasting(bool value) {
+    if (budgetRoastingEnabled == value) {
+      return;
+    }
+    budgetRoastingEnabled = value;
+    notifyListeners();
+  }
+
+  void setDeadlineRoasting(bool value) {
+    if (deadlineRoastingEnabled == value) {
+      return;
+    }
+    deadlineRoastingEnabled = value;
+    notifyListeners();
+  }
+
+  void setDailyRoasting(bool value) {
+    if (dailyRoastingEnabled == value) {
+      return;
+    }
+    dailyRoastingEnabled = value;
+    notifyListeners();
+  }
+
+  void setDailyRoastingTime(int hour, int minute) {
+    final int safeHour = hour.clamp(0, 23);
+    final int safeMinute = minute.clamp(0, 59);
+    if (dailyRoastingHour == safeHour && dailyRoastingMinute == safeMinute) {
+      return;
+    }
+    dailyRoastingHour = safeHour;
+    dailyRoastingMinute = safeMinute;
     notifyListeners();
   }
 
@@ -139,6 +206,12 @@ class SettingsController extends ChangeNotifier {
     'deadlineNotificationsEnabled': deadlineNotificationsEnabled,
     'budgetAlertsEnabled': budgetAlertsEnabled,
     'roastingAiEnabled': roastingAiEnabled,
+    'roastingIntensity': roastingIntensity.name,
+    'budgetRoastingEnabled': budgetRoastingEnabled,
+    'deadlineRoastingEnabled': deadlineRoastingEnabled,
+    'dailyRoastingEnabled': dailyRoastingEnabled,
+    'dailyRoastingHour': dailyRoastingHour,
+    'dailyRoastingMinute': dailyRoastingMinute,
     'autoBackupEnabled': autoBackupEnabled,
     'monthlyBudgetLimit': monthlyBudgetLimit,
     'biometricLockEnabled': biometricLockEnabled,
@@ -154,6 +227,22 @@ class SettingsController extends ChangeNotifier {
     budgetAlertsEnabled =
         json['budgetAlertsEnabled'] as bool? ?? budgetAlertsEnabled;
     roastingAiEnabled = json['roastingAiEnabled'] as bool? ?? roastingAiEnabled;
+    roastingIntensity = RoastingIntensity.fromStorage(
+      json['roastingIntensity'],
+    );
+    budgetRoastingEnabled = json['budgetRoastingEnabled'] as bool? ?? false;
+    deadlineRoastingEnabled = json['deadlineRoastingEnabled'] as bool? ?? false;
+    dailyRoastingEnabled = json['dailyRoastingEnabled'] as bool? ?? false;
+    final int? storedHour = (json['dailyRoastingHour'] as num?)?.toInt();
+    final int? storedMinute = (json['dailyRoastingMinute'] as num?)?.toInt();
+    dailyRoastingHour =
+        storedHour != null && storedHour >= 0 && storedHour <= 23
+        ? storedHour
+        : 20;
+    dailyRoastingMinute =
+        storedMinute != null && storedMinute >= 0 && storedMinute <= 59
+        ? storedMinute
+        : 0;
     autoBackupEnabled = json['autoBackupEnabled'] as bool? ?? autoBackupEnabled;
     monthlyBudgetLimit =
         (json['monthlyBudgetLimit'] as num?)?.toInt() ?? monthlyBudgetLimit;
