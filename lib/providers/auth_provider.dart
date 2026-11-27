@@ -39,6 +39,8 @@ class AuthProvider extends ChangeNotifier {
 
   bool get needsEmailVerification => isAuthenticated && !isEmailVerified;
 
+  bool get canChangePassword => _user?.hasPasswordProvider ?? false;
+
   /// Mulai mendengarkan perubahan sesi Firebase.
   ///
   /// Dipanggil sekali dari `main` sebelum aplikasi dijalankan. Status awal
@@ -92,6 +94,20 @@ class AuthProvider extends ChangeNotifier {
     final AuthUser? refreshed = await service.reloadUser();
     _applyUser(refreshed);
     return refreshed?.emailVerified ?? false;
+  }
+
+  Future<void> sendPasswordResetEmail({required String email}) async {
+    await service.sendPasswordResetEmail(email: email);
+  }
+
+  Future<void> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    await service.changePassword(
+      currentPassword: currentPassword,
+      newPassword: newPassword,
+    );
   }
 
   Future<void> signOut() async {

@@ -37,6 +37,13 @@ abstract interface class AuthService {
 
   Future<AuthUser?> reloadUser();
 
+  Future<void> sendPasswordResetEmail({required String email});
+
+  Future<void> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  });
+
   Future<void> signOut();
 
   Future<void> deleteAccount();
@@ -159,6 +166,57 @@ class FirebaseAuthService implements AuthService {
   }
 
   @override
+  Future<void> sendPasswordResetEmail({required String email}) async {
+    try {
+      await _auth.sendPasswordResetEmail(email: email.trim());
+    } on firebase.FirebaseAuthException catch (error) {
+      throw _mapFirebaseException(error);
+    }
+  }
+
+  @override
+  Future<void> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    final firebase.User? user = _auth.currentUser;
+    if (user == null) {
+      throw const AuthFailure(
+        'missing-user',
+        'Sesi pengguna tidak ditemukan. Silakan masuk ulang.',
+      );
+    }
+    final bool hasPassword = user.providerData.any(
+      (firebase.UserInfo info) => info.providerId == 'password',
+    );
+    final String? email = user.email;
+    if (!hasPassword || email == null || email.trim().isEmpty) {
+      throw const AuthFailure(
+        'password-not-supported',
+        'Akun ini masuk dengan Google. Kelola kata sandi melalui akun Google kamu.',
+      );
+    }
+    try {
+      final firebase.AuthCredential credential =
+          firebase.EmailAuthProvider.credential(
+            email: email.trim(),
+            password: currentPassword,
+          );
+      await user.reauthenticateWithCredential(credential);
+      await user.updatePassword(newPassword);
+    } on firebase.FirebaseAuthException catch (error) {
+      if (error.code == 'wrong-password' ||
+          error.code == 'invalid-credential') {
+        throw const AuthFailure(
+          'wrong-password',
+          'Kata sandi saat ini salah.',
+        );
+      }
+      throw _mapFirebaseException(error);
+    }
+  }
+
+  @override
   Future<void> signOut() async {
     // Google Sign-In hanya perlu di-reset jika sebelumnya sudah diinisialisasi.
     if (_googleInitialized) {
@@ -216,12 +274,16 @@ class FirebaseAuthService implements AuthService {
     if (user == null) {
       return null;
     }
+    final bool hasPasswordProvider = user.providerData.any(
+      (firebase.UserInfo info) => info.providerId == 'password',
+    );
     return AuthUser(
       uid: user.uid,
       email: user.email,
       displayName: user.displayName,
       photoUrl: user.photoURL,
       emailVerified: user.emailVerified,
+      hasPasswordProvider: hasPasswordProvider,
     );
   }
 

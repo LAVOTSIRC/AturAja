@@ -5,6 +5,7 @@ class AuthUser {
     this.displayName,
     this.photoUrl,
     this.emailVerified = true,
+    this.hasPasswordProvider = true,
   });
 
   final String uid;
@@ -12,4 +13,5 @@ class AuthUser {
   final String? displayName;
   final String? photoUrl;
   final bool emailVerified;
+  final bool hasPasswordProvider;
 }
