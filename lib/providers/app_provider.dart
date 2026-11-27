@@ -1086,11 +1086,6 @@ class AppProvider extends ChangeNotifier {
       return parsedDate.toLocal();
     }
 
-    final DateTime? createdAt = transaction.createdAt;
-    if (createdAt != null) {
-      return createdAt.toLocal();
-    }
-
     final RegExpMatch? legacyDate = RegExp(
       r'^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$',
     ).firstMatch(transaction.date.trim());
@@ -1108,6 +1103,11 @@ class AppProvider extends ChangeNotifier {
         return null;
       }
       return candidate;
+    }
+
+    final DateTime? createdAt = transaction.createdAt;
+    if (createdAt != null) {
+      return createdAt.toLocal();
     }
 
     final String normalized = transaction.date.trim().toLowerCase();
