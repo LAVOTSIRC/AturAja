@@ -18,12 +18,14 @@ class LoginScreen extends StatefulWidget {
   final LoginCallback onLogin;
   final Future<void> Function() onGoogleSignIn;
   final VoidCallback onRegister;
+  final Future<void> Function(String email)? onForgotPassword;
 
   const LoginScreen({
     super.key,
     required this.onLogin,
     required this.onGoogleSignIn,
     required this.onRegister,
+    this.onForgotPassword,
   });
 
   @override
@@ -98,6 +100,29 @@ class _LoginScreenState extends State<LoginScreen> {
         setState(() => submitting = false);
       }
     }
+  }
+
+  Future<void> _openForgotPasswordDialog() async {
+    final Future<void> Function(String email)? onForgotPassword =
+        widget.onForgotPassword;
+    if (onForgotPassword == null || submitting) {
+      return;
+    }
+    FocusScope.of(context).unfocus();
+    final String? sentEmail = await showDialog<String>(
+      context: context,
+      builder: (_) => _ForgotPasswordDialog(
+        initialEmail: emailController.text.trim(),
+        onSubmit: onForgotPassword,
+      ),
+    );
+    if (!mounted || sentEmail == null) {
+      return;
+    }
+    showSuccessSnackBar(
+      context,
+      'Link reset kata sandi telah dikirim ke $sentEmail. Cek inbox atau folder spam.',
+    );
   }
 
   Future<void> _signInWithGoogle() async {
@@ -257,6 +282,29 @@ class _LoginScreenState extends State<LoginScreen> {
               suffixIcon: _buildPasswordToggle(c),
             ),
           ),
+          if (widget.onForgotPassword != null) ...[
+            const SizedBox(height: AppSpacing.xs),
+            Align(
+              alignment: Alignment.centerRight,
+              child: PressableScale(
+                onTap: submitting ? null : _openForgotPasswordDialog,
+                enabled: !submitting,
+                semanticLabel: 'Lupa kata sandi',
+                tooltip: 'Lupa kata sandi',
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.xxs,
+                    vertical: AppSpacing.xs,
+                  ),
+                  child: Text(
+                    'Lupa kata sandi?',
+                    style: AppTypography.caption(c.blue)
+                        .copyWith(fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ),
+            ),
+          ],
           const SizedBox(height: AppSpacing.lg),
           PressableScale(
             onTap: submitting ? null : _submit,
@@ -408,6 +456,132 @@ class _LoginScreenState extends State<LoginScreen> {
                   .copyWith(fontWeight: FontWeight.w700),
             ),
           ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ForgotPasswordDialog extends StatefulWidget {
+  final String initialEmail;
+  final Future<void> Function(String email) onSubmit;
+
+  const _ForgotPasswordDialog({
+    required this.initialEmail,
+    required this.onSubmit,
+  });
+
+  @override
+  State<_ForgotPasswordDialog> createState() => _ForgotPasswordDialogState();
+}
+
+class _ForgotPasswordDialogState extends State<_ForgotPasswordDialog> {
+  late final TextEditingController _emailController;
+  String? _emailError;
+  bool _sending = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _emailController = TextEditingController(text: widget.initialEmail);
+  }
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    if (_sending) {
+      return;
+    }
+    final String email = _emailController.text.trim();
+    final String? error = validateEmail(email);
+    if (error != null) {
+      setState(() => _emailError = error);
+      return;
+    }
+    setState(() {
+      _sending = true;
+      _emailError = null;
+    });
+    try {
+      await widget.onSubmit(email);
+      if (!mounted) {
+        return;
+      }
+      Navigator.of(context).pop(email);
+    } on AuthFailure catch (failure) {
+      if (mounted) {
+        setState(() {
+          _sending = false;
+          _emailError = failure.message;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _sending = false;
+          _emailError =
+              'Gagal mengirim link reset. Periksa koneksi lalu coba lagi.';
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final AppColors c = ThemeScope.of(context).colors;
+    return AlertDialog(
+      backgroundColor: c.surface,
+      title: Text('Reset kata sandi', style: AppTypography.title(c.text)),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'Masukkan email akunmu. Kami akan mengirim link untuk mengatur ulang kata sandi.',
+            style: AppTypography.caption(c.textSub),
+          ),
+          const SizedBox(height: AppSpacing.md),
+          TextField(
+            controller: _emailController,
+            keyboardType: TextInputType.emailAddress,
+            textInputAction: TextInputAction.done,
+            onChanged: (_) {
+              if (_emailError != null) {
+                setState(() => _emailError = null);
+              }
+            },
+            onSubmitted: (_) => _submit(),
+            style: AppTypography.body(c.text),
+            decoration: InputDecoration(
+              labelText: 'Email',
+              hintText: 'nama@kampus.id',
+              errorText: _emailError,
+              errorMaxLines: 2,
+            ),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: _sending ? null : () => Navigator.of(context).pop(),
+          child: const Text('Batal'),
+        ),
+        TextButton(
+          onPressed: _sending ? null : _submit,
+          child: _sending
+              ? SizedBox(
+                  width: AppSpacing.iconSmall,
+                  height: AppSpacing.iconSmall,
+                  child: CircularProgressIndicator(
+                    strokeWidth: AppSpacing.progressThin,
+                    color: c.blue,
+                  ),
+                )
+              : const Text('Kirim link'),
         ),
       ],
     );

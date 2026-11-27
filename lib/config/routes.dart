@@ -94,6 +94,8 @@ GoRouter createAppRouter({
                 auth.signInWithEmail(email: email, password: password),
             onGoogleSignIn: auth.signInWithGoogle,
             onRegister: () => context.go(AppRoutes.register),
+            onForgotPassword: (String email) =>
+                auth.sendPasswordResetEmail(email: email),
           );
         },
       ),
@@ -331,10 +333,8 @@ GoRouter createAppRouter({
                 builder: (BuildContext context, GoRouterState state) {
                   return Consumer<AppProvider>(
                     builder: (BuildContext context, AppProvider app, _) {
-                      final String? authEmail = context
-                          .watch<AuthProvider>()
-                          .user
-                          ?.email;
+                      final AuthProvider auth = context.watch<AuthProvider>();
+                      final String? authEmail = auth.user?.email;
                       final ProfileData profile = _resolveProfileForDisplay(
                         app.profile,
                         authEmail,
@@ -343,6 +343,8 @@ GoRouter createAppRouter({
                         settings: app.settings,
                         initialProfile: profile,
                         onProfileChanged: app.updateProfile,
+                        canChangePassword: auth.canChangePassword,
+                        onChangePassword: auth.changePassword,
                         onLogout: () async {
                           await app.save();
                           if (context.mounted) {

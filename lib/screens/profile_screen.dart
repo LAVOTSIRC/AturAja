@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../config/routes.dart';
 import '../data/models.dart';
 import '../providers/settings_provider.dart';
+import '../services/auth_service.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_typography.dart';
@@ -31,11 +32,13 @@ class _SettingItem {
 class _ProfileDraft {
   final String username;
   final String email;
+  final String? currentPassword;
   final String? password;
 
   const _ProfileDraft({
     required this.username,
     required this.email,
+    this.currentPassword,
     this.password,
   });
 }
@@ -45,6 +48,12 @@ class ProfileScreen extends StatefulWidget {
   final ProfileData? initialProfile;
   final ValueChanged<ProfileData>? onProfileChanged;
   final ValueChanged<String>? onPasswordChanged;
+  final Future<void> Function({
+    required String currentPassword,
+    required String newPassword,
+  })?
+  onChangePassword;
+  final bool canChangePassword;
   final Future<void> Function() onLogout;
   final String? cloudBackupStatus;
 
@@ -54,6 +63,8 @@ class ProfileScreen extends StatefulWidget {
     this.initialProfile,
     this.onProfileChanged,
     this.onPasswordChanged,
+    this.onChangePassword,
+    this.canChangePassword = true,
     required this.onLogout,
     this.cloudBackupStatus,
   });
@@ -192,7 +203,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
       context: context,
       isScrollControlled: true,
       backgroundColor: c.transparent,
-      builder: (_) => _EditProfileSheet(username: fullName, email: email),
+      builder: (_) => _EditProfileSheet(
+        username: fullName,
+        email: email,
+        canChangePassword: widget.canChangePassword,
+        requireCurrentPassword: widget.onChangePassword != null,
+      ),
     );
 
     if (!mounted || draft == null) {
@@ -204,8 +220,43 @@ class _ProfileScreenState extends State<ProfileScreen> {
       avatarLabel = _initialsFromName(draft.username);
     });
     _notifyProfileChanged();
-    if (draft.password != null && draft.password!.isNotEmpty) {
-      widget.onPasswordChanged?.call(draft.password!);
+    final String? newPassword = draft.password;
+    if (newPassword != null && newPassword.isNotEmpty) {
+      final Future<void> Function({
+        required String currentPassword,
+        required String newPassword,
+      })?
+      changePassword = widget.onChangePassword;
+      if (changePassword != null) {
+        try {
+          await changePassword(
+            currentPassword: draft.currentPassword ?? '',
+            newPassword: newPassword,
+          );
+          if (!mounted) {
+            return;
+          }
+          showSuccessSnackBar(
+            context,
+            'Profil dan kata sandi berhasil diperbarui.',
+          );
+          return;
+        } on AuthFailure catch (error) {
+          if (mounted) {
+            showErrorSnackBar(context, error.message);
+          }
+          return;
+        } catch (_) {
+          if (mounted) {
+            showErrorSnackBar(
+              context,
+              'Profil diperbarui, tetapi gagal mengubah kata sandi. Coba lagi.',
+            );
+          }
+          return;
+        }
+      }
+      widget.onPasswordChanged?.call(newPassword);
     }
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Profil berhasil diperbarui.')),
@@ -566,8 +617,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
 class _EditProfileSheet extends StatefulWidget {
   final String username;
   final String email;
+  final bool canChangePassword;
+  final bool requireCurrentPassword;
 
-  const _EditProfileSheet({required this.username, required this.email});
+  const _EditProfileSheet({
+    required this.username,
+    required this.email,
+    this.canChangePassword = true,
+    this.requireCurrentPassword = false,
+  });
 
   @override
   State<_EditProfileSheet> createState() => _EditProfileSheetState();
@@ -576,10 +634,13 @@ class _EditProfileSheet extends StatefulWidget {
 class _EditProfileSheetState extends State<_EditProfileSheet> {
   late final TextEditingController usernameController;
   late final TextEditingController emailController;
+  late final TextEditingController currentPasswordController;
   late final TextEditingController passwordController;
   String? usernameError;
   String? emailError;
+  String? currentPasswordError;
   String? passwordError;
+  bool obscureCurrentPassword = true;
   bool obscurePassword = true;
 
   @override
@@ -587,6 +648,7 @@ class _EditProfileSheetState extends State<_EditProfileSheet> {
     super.initState();
     usernameController = TextEditingController(text: widget.username);
     emailController = TextEditingController(text: widget.email);
+    currentPasswordController = TextEditingController();
     passwordController = TextEditingController();
   }
 
@@ -594,6 +656,7 @@ class _EditProfileSheetState extends State<_EditProfileSheet> {
   void dispose() {
     usernameController.dispose();
     emailController.dispose();
+    currentPasswordController.dispose();
     passwordController.dispose();
     super.dispose();
   }
@@ -601,7 +664,10 @@ class _EditProfileSheetState extends State<_EditProfileSheet> {
   void _save() {
     final String username = usernameController.text.trim();
     final String email = emailController.text.trim();
-    final String password = passwordController.text;
+    final String currentPassword = currentPasswordController.text;
+    final String password = widget.canChangePassword
+        ? passwordController.text
+        : '';
 
     final String? nextUsernameError = username.isEmpty
         ? 'Username tidak boleh kosong.'
@@ -611,6 +677,13 @@ class _EditProfileSheetState extends State<_EditProfileSheet> {
         : (!RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(email)
               ? 'Masukkan format email yang valid.'
               : null);
+    final String? nextCurrentPasswordError =
+        (widget.canChangePassword &&
+            widget.requireCurrentPassword &&
+            password.isNotEmpty &&
+            currentPassword.isEmpty)
+        ? 'Masukkan password saat ini untuk mengganti password.'
+        : null;
     final String? nextPasswordError =
         (password.isNotEmpty && password.length < 6)
         ? 'Password minimal 6 karakter.'
@@ -618,10 +691,12 @@ class _EditProfileSheetState extends State<_EditProfileSheet> {
 
     if (nextUsernameError != null ||
         nextEmailError != null ||
+        nextCurrentPasswordError != null ||
         nextPasswordError != null) {
       setState(() {
         usernameError = nextUsernameError;
         emailError = nextEmailError;
+        currentPasswordError = nextCurrentPasswordError;
         passwordError = nextPasswordError;
       });
       return;
@@ -631,6 +706,7 @@ class _EditProfileSheetState extends State<_EditProfileSheet> {
       _ProfileDraft(
         username: username,
         email: email,
+        currentPassword: currentPassword.isEmpty ? null : currentPassword,
         password: password.isEmpty ? null : password,
       ),
     );
@@ -645,6 +721,12 @@ class _EditProfileSheetState extends State<_EditProfileSheet> {
   void _clearEmailError() {
     if (emailError != null) {
       setState(() => emailError = null);
+    }
+  }
+
+  void _clearCurrentPasswordError() {
+    if (currentPasswordError != null) {
+      setState(() => currentPasswordError = null);
     }
   }
 
@@ -719,26 +801,77 @@ class _EditProfileSheetState extends State<_EditProfileSheet> {
                 onChanged: (_) => _clearEmailError(),
               ),
               const SizedBox(height: AppSpacing.sm),
-              _profileField(
-                controller: passwordController,
-                label: 'Password Baru (Opsional)',
-                hint: 'Kosongkan jika tidak ingin mengubah password',
-                errorText: passwordError,
-                obscureText: obscurePassword,
-                textInputAction: TextInputAction.done,
-                onChanged: (_) => _clearPasswordError(),
-                suffixIcon: IconButton(
-                  onPressed: () =>
-                      setState(() => obscurePassword = !obscurePassword),
-                  icon: Icon(
-                    obscurePassword
-                        ? Icons.visibility_off_outlined
-                        : Icons.visibility_outlined,
-                    size: AppSpacing.iconSmall,
-                    color: c.textMuted,
+              if (widget.canChangePassword) ...[
+                if (widget.requireCurrentPassword) ...[
+                  _profileField(
+                    controller: currentPasswordController,
+                    label: 'Password Saat Ini (Opsional)',
+                    hint: 'Diisi jika ingin mengubah password',
+                    errorText: currentPasswordError,
+                    obscureText: obscureCurrentPassword,
+                    textInputAction: TextInputAction.next,
+                    onChanged: (_) => _clearCurrentPasswordError(),
+                    suffixIcon: IconButton(
+                      onPressed: () => setState(
+                        () => obscureCurrentPassword = !obscureCurrentPassword,
+                      ),
+                      icon: Icon(
+                        obscureCurrentPassword
+                            ? Icons.visibility_off_outlined
+                            : Icons.visibility_outlined,
+                        size: AppSpacing.iconSmall,
+                        color: c.textMuted,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.sm),
+                ],
+                _profileField(
+                  controller: passwordController,
+                  label: 'Password Baru (Opsional)',
+                  hint: 'Kosongkan jika tidak ingin mengubah password',
+                  errorText: passwordError,
+                  obscureText: obscurePassword,
+                  textInputAction: TextInputAction.done,
+                  onChanged: (_) => _clearPasswordError(),
+                  suffixIcon: IconButton(
+                    onPressed: () =>
+                        setState(() => obscurePassword = !obscurePassword),
+                    icon: Icon(
+                      obscurePassword
+                          ? Icons.visibility_off_outlined
+                          : Icons.visibility_outlined,
+                      size: AppSpacing.iconSmall,
+                      color: c.textMuted,
+                    ),
                   ),
                 ),
-              ),
+              ] else
+                Container(
+                  padding: const EdgeInsets.all(AppSpacing.sm),
+                  decoration: BoxDecoration(
+                    color: c.blueDim,
+                    borderRadius: BorderRadius.circular(AppSpacing.sm),
+                    border: Border.all(color: c.border),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(
+                        Icons.info_outline_rounded,
+                        size: AppSpacing.iconSmall,
+                        color: c.blue,
+                      ),
+                      const SizedBox(width: AppSpacing.xs),
+                      Expanded(
+                        child: Text(
+                          'Akun ini masuk dengan Google. Kata sandi dikelola melalui akun Google kamu.',
+                          style: AppTypography.caption(c.textSub),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               const SizedBox(height: AppSpacing.md),
               Row(
                 children: [
