@@ -21,6 +21,9 @@ class FakeAuthService implements AuthService {
   int signOutCalls = 0;
   int deleteAccountCalls = 0;
   int googleSignInCalls = 0;
+  int sendEmailVerificationCalls = 0;
+  int reloadUserCalls = 0;
+  bool verifyOnReload = false;
   String? lastEmail;
   String? lastPassword;
 
@@ -59,11 +62,13 @@ class FakeAuthService implements AuthService {
     if (failure != null) {
       throw failure!;
     }
+    sendEmailVerificationCalls++;
     return _emit(
       AuthUser(
         uid: 'registered-uid',
         email: email,
         displayName: email.split('@').first,
+        emailVerified: false,
       ),
     );
   }
@@ -79,8 +84,44 @@ class FakeAuthService implements AuthService {
         uid: 'google-uid',
         email: 'google@atmaja.id',
         displayName: 'Google User',
+        emailVerified: true,
       ),
     );
+  }
+
+  @override
+  Future<void> sendEmailVerification() async {
+    sendEmailVerificationCalls++;
+    if (failure != null) {
+      throw failure!;
+    }
+    if (_currentUser == null) {
+      throw const AuthFailure('missing-user', 'Sesi pengguna tidak ditemukan.');
+    }
+  }
+
+  @override
+  Future<AuthUser?> reloadUser() async {
+    reloadUserCalls++;
+    if (failure != null) {
+      throw failure!;
+    }
+    final AuthUser? user = _currentUser;
+    if (user == null) {
+      return null;
+    }
+    if (verifyOnReload && !user.emailVerified) {
+      return _emit(
+        AuthUser(
+          uid: user.uid,
+          email: user.email,
+          displayName: user.displayName,
+          photoUrl: user.photoUrl,
+          emailVerified: true,
+        ),
+      );
+    }
+    return user;
   }
 
   @override

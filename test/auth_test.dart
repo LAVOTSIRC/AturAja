@@ -2,13 +2,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 
+import 'package:aturaja/data/auth_user.dart';
+import 'package:aturaja/data/models.dart';
 import 'package:aturaja/data/settings_controller.dart';
 import 'package:aturaja/main.dart';
 import 'package:aturaja/providers/app_provider.dart';
 import 'package:aturaja/providers/auth_provider.dart';
 import 'package:aturaja/screens/login_screen.dart';
 import 'package:aturaja/screens/main_shell.dart';
+import 'package:aturaja/screens/profile_screen.dart';
 import 'package:aturaja/screens/register_screen.dart';
+import 'package:aturaja/screens/verify_email_screen.dart';
 import 'package:aturaja/services/auth_service.dart';
 import 'package:aturaja/theme/theme_scope.dart';
 
@@ -325,6 +329,157 @@ void main() {
       expect(find.byType(LoginScreen), findsOneWidget);
       expect(find.byType(MainShell), findsNothing);
       expect((auth.service as FakeAuthService).signOutCalls, 1);
+    });
+
+    testWidgets(
+      'register email baru langsung mengarah ke halaman verifikasi email, bukan beranda',
+      (WidgetTester tester) async {
+        final FakeAuthService service = FakeAuthService();
+        await pumpAuthApp(
+          tester,
+          isLoggedIn: false,
+          initialLocation: '/register',
+          service: service,
+        );
+
+        expect(find.byType(RegisterScreen), findsOneWidget);
+
+        final Finder fields = find.byType(TextField);
+        await tester.enterText(fields.at(0), 'andi.pratama@gmail.com');
+        await tester.enterText(fields.at(1), 'rahasia123');
+        await tester.enterText(fields.at(2), 'rahasia123');
+        await tester.ensureVisible(find.byTooltip('Daftar'));
+        await tester.tap(find.byTooltip('Daftar'));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(VerifyEmailScreen), findsOneWidget);
+        expect(find.text('andi.pratama@gmail.com'), findsOneWidget);
+        expect(find.byType(MainShell), findsNothing);
+        expect(service.sendEmailVerificationCalls, 1);
+      },
+    );
+
+    testWidgets(
+      'akun belum terverifikasi diarahkan ke halaman verifikasi email sampai terverifikasi',
+      (WidgetTester tester) async {
+        final FakeAuthService service = FakeAuthService(
+          initialUser: const AuthUser(
+            uid: 'unverified-uid',
+            email: 'budi.santoso@gmail.com',
+            displayName: 'Budi Santoso',
+            emailVerified: false,
+          ),
+        );
+        await pumpAuthApp(
+          tester,
+          isLoggedIn: true,
+          initialLocation: '/home',
+          service: service,
+        );
+
+        expect(find.byType(VerifyEmailScreen), findsOneWidget);
+        expect(find.text('budi.santoso@gmail.com'), findsOneWidget);
+        expect(find.byType(MainShell), findsNothing);
+
+        // Kirim ulang verifikasi
+        await tester.ensureVisible(find.byTooltip('Kirim ulang verifikasi'));
+        await tester.tap(find.byTooltip('Kirim ulang verifikasi'));
+        await tester.pump();
+        expect(service.sendEmailVerificationCalls, 1);
+
+        // Cek saat belum verifikasi -> tetap di VerifyEmailScreen
+        await tester.ensureVisible(find.byTooltip('Saya sudah verifikasi'));
+        await tester.tap(find.byTooltip('Saya sudah verifikasi'));
+        await tester.pumpAndSettle();
+        expect(service.reloadUserCalls, 1);
+        expect(find.byType(VerifyEmailScreen), findsOneWidget);
+
+        // Simulasikan link verifikasi sudah diklik di email
+        service.verifyOnReload = true;
+        await tester.ensureVisible(find.byTooltip('Saya sudah verifikasi'));
+        await tester.tap(find.byTooltip('Saya sudah verifikasi'));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(MainShell), findsOneWidget);
+        expect(find.byType(VerifyEmailScreen), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'profil menampilkan email Google dan nama dari prefix email, bukan Zidan statis',
+      (WidgetTester tester) async {
+        final FakeAuthService service = FakeAuthService(
+          initialUser: const AuthUser(
+            uid: 'google-uid',
+            email: 'siti.rahma@gmail.com',
+            displayName: 'Siti Rahma',
+            emailVerified: true,
+          ),
+        );
+        await pumpAuthApp(
+          tester,
+          isLoggedIn: true,
+          initialLocation: '/profile',
+          service: service,
+        );
+
+        expect(find.byType(ProfileScreen), findsOneWidget);
+        expect(find.text('siti.rahma@gmail.com'), findsOneWidget);
+        expect(find.text('Siti Rahma'), findsOneWidget);
+        expect(find.text('zidan@aturaja.id'), findsNothing);
+        expect(find.text('M Zidan Ruriano A.G'), findsNothing);
+      },
+    );
+  });
+
+  group('Profil otomatis dari email', () {
+    test('nameFromEmail memformat prefix email dengan rapi', () {
+      expect(
+        ProfileData.nameFromEmail('budi.santoso@gmail.com'),
+        'Budi Santoso',
+      );
+      expect(
+        ProfileData.nameFromEmail('siti_rahma-putri@kampus.id'),
+        'Siti Rahma Putri',
+      );
+      expect(
+        ProfileData.nameFromEmail('ahmad+test@gmail.com'),
+        'Ahmad',
+      );
+      expect(ProfileData.nameFromEmail(''), '');
+    });
+
+    test('syncProfileWithAuthEmail mengganti profil kosong dan placeholder Zidan', () {
+      final AppProvider app = AppProvider.inMemory(
+        profile: ProfileData.initial,
+        activeUserId: 'google-uid',
+      );
+      addTearDown(app.dispose);
+
+      final bool changed = app.syncProfileWithAuthEmail('dewi.lestari@gmail.com');
+
+      expect(changed, isTrue);
+      expect(app.profile.email, 'dewi.lestari@gmail.com');
+      expect(app.profile.fullName, 'Dewi Lestari');
+      expect(app.profile.avatarLabel, 'DL');
+    });
+
+    test('syncProfileWithAuthEmail mempertahankan nama yang sudah diubah user', () {
+      final AppProvider app = AppProvider.inMemory(
+        profile: const ProfileData(
+          fullName: 'Dewi Kustom',
+          email: 'dewi.lestari@gmail.com',
+          avatarLabel: 'DK',
+        ),
+        activeUserId: 'google-uid',
+      );
+      addTearDown(app.dispose);
+
+      final bool changed = app.syncProfileWithAuthEmail('dewi.lestari@gmail.com');
+
+      expect(changed, isFalse);
+      expect(app.profile.fullName, 'Dewi Kustom');
+      expect(app.profile.email, 'dewi.lestari@gmail.com');
     });
   });
 }
