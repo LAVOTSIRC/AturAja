@@ -35,6 +35,10 @@ class AuthProvider extends ChangeNotifier {
 
   bool get isInitializing => _status == AuthStatus.initializing;
 
+  bool get isEmailVerified => _user?.emailVerified ?? false;
+
+  bool get needsEmailVerification => isAuthenticated && !isEmailVerified;
+
   /// Mulai mendengarkan perubahan sesi Firebase.
   ///
   /// Dipanggil sekali dari `main` sebelum aplikasi dijalankan. Status awal
@@ -78,6 +82,16 @@ class AuthProvider extends ChangeNotifier {
   Future<void> signInWithGoogle() async {
     final AuthUser user = await service.signInWithGoogle();
     _applyUser(user);
+  }
+
+  Future<void> sendEmailVerification() async {
+    await service.sendEmailVerification();
+  }
+
+  Future<bool> reloadUser() async {
+    final AuthUser? refreshed = await service.reloadUser();
+    _applyUser(refreshed);
+    return refreshed?.emailVerified ?? false;
   }
 
   Future<void> signOut() async {

@@ -2,6 +2,7 @@ import 'package:firebase_auth/firebase_auth.dart' as firebase;
 import 'package:google_sign_in/google_sign_in.dart';
 
 import '../data/auth_user.dart';
+import '../data/models.dart';
 
 /// Error autentikasi yang sudah dipetakan ke pesan berbahasa Indonesia.
 class AuthFailure implements Exception {
@@ -31,6 +32,10 @@ abstract interface class AuthService {
   });
 
   Future<AuthUser> signInWithGoogle();
+
+  Future<void> sendEmailVerification();
+
+  Future<AuthUser?> reloadUser();
 
   Future<void> signOut();
 
@@ -73,13 +78,26 @@ class FirebaseAuthService implements AuthService {
     required String email,
     required String password,
   }) async {
+    final String trimmedEmail = email.trim();
     try {
       final firebase.UserCredential credential = await _auth
           .createUserWithEmailAndPassword(
-            email: email.trim(),
+            email: trimmedEmail,
             password: password,
           );
-      return _requireUser(credential.user);
+      final firebase.User? createdUser = credential.user;
+      if (createdUser != null) {
+        final String derivedName = ProfileData.nameFromEmail(trimmedEmail);
+        if (derivedName.isNotEmpty) {
+          try {
+            await createdUser.updateDisplayName(derivedName);
+          } catch (_) {
+            // Kegagalan sinkron displayName tidak boleh membatalkan registrasi.
+          }
+        }
+        await createdUser.sendEmailVerification();
+      }
+      return _requireUser(_auth.currentUser ?? createdUser);
     } on firebase.FirebaseAuthException catch (error) {
       throw _mapFirebaseException(error);
     }
@@ -105,6 +123,36 @@ class FirebaseAuthService implements AuthService {
       return _requireUser(credential.user);
     } on GoogleSignInException catch (error) {
       throw _mapGoogleException(error);
+    } on firebase.FirebaseAuthException catch (error) {
+      throw _mapFirebaseException(error);
+    }
+  }
+
+  @override
+  Future<void> sendEmailVerification() async {
+    final firebase.User? user = _auth.currentUser;
+    if (user == null) {
+      throw const AuthFailure(
+        'missing-user',
+        'Sesi pengguna tidak ditemukan. Silakan masuk ulang.',
+      );
+    }
+    try {
+      await user.sendEmailVerification();
+    } on firebase.FirebaseAuthException catch (error) {
+      throw _mapFirebaseException(error);
+    }
+  }
+
+  @override
+  Future<AuthUser?> reloadUser() async {
+    final firebase.User? user = _auth.currentUser;
+    if (user == null) {
+      return null;
+    }
+    try {
+      await user.reload();
+      return _toAuthUser(_auth.currentUser);
     } on firebase.FirebaseAuthException catch (error) {
       throw _mapFirebaseException(error);
     }
@@ -173,6 +221,7 @@ class FirebaseAuthService implements AuthService {
       email: user.email,
       displayName: user.displayName,
       photoUrl: user.photoURL,
+      emailVerified: user.emailVerified,
     );
   }
 
