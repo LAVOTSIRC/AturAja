@@ -286,6 +286,60 @@ class ProfileData {
     avatarLabel: '',
   );
 
+  /// Membentuk nama tampilan awal dari bagian sebelum `@` pada alamat email.
+  ///
+  /// Contoh: `budi.santoso@gmail.com` -> `Budi Santoso`.
+  static String nameFromEmail(String email) {
+    final String trimmed = email.trim();
+    if (trimmed.isEmpty) {
+      return '';
+    }
+    final int atIndex = trimmed.indexOf('@');
+    final String rawLocal = atIndex >= 0 ? trimmed.substring(0, atIndex) : trimmed;
+    final String withoutTag = rawLocal.split('+').first;
+    final List<String> parts = withoutTag
+        .split(RegExp(r'[._\-\s]+'))
+        .map((String part) => part.trim())
+        .where((String part) => part.isNotEmpty)
+        .toList();
+    if (parts.isEmpty) {
+      return '';
+    }
+    return parts
+        .map(
+          (String part) => part.length == 1
+              ? part.toUpperCase()
+              : '${part[0].toUpperCase()}${part.substring(1)}',
+        )
+        .join(' ');
+  }
+
+  static String initialsFromName(String value) {
+    final List<String> parts = value
+        .trim()
+        .split(RegExp(r'\s+'))
+        .where((String part) => part.isNotEmpty)
+        .toList();
+    if (parts.isEmpty) {
+      return '?';
+    }
+    if (parts.length == 1) {
+      return parts.first.substring(0, 1).toUpperCase();
+    }
+    return '${parts.first.substring(0, 1)}${parts[1].substring(0, 1)}'
+        .toUpperCase();
+  }
+
+  static ProfileData fromEmail(String email) {
+    final String trimmedEmail = email.trim();
+    final String derivedName = nameFromEmail(trimmedEmail);
+    return ProfileData(
+      fullName: derivedName,
+      email: trimmedEmail,
+      avatarLabel: initialsFromName(derivedName),
+    );
+  }
+
   ProfileData copyWith({
     String? fullName,
     String? email,
@@ -315,11 +369,11 @@ class ProfileData {
       fullName:
           (json['fullName'] as String?) ??
           (json['username'] as String?) ??
-          initial.fullName,
-      email: json['email'] as String? ?? initial.email,
+          '',
+      email: json['email'] as String? ?? '',
       nim: json['nim'] as String? ?? '',
       program: json['program'] as String? ?? '',
-      avatarLabel: json['avatarLabel'] as String? ?? initial.avatarLabel,
+      avatarLabel: json['avatarLabel'] as String? ?? '',
     );
   }
 }

@@ -128,14 +128,42 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   void initState() {
     super.initState();
-    final ProfileData profile = widget.initialProfile ?? ProfileData.initial;
-    fullName = profile.fullName.isEmpty
-        ? ProfileData.initial.fullName
-        : profile.fullName;
-    email = profile.email.isEmpty ? ProfileData.initial.email : profile.email;
-    avatarLabel = profile.avatarLabel.isEmpty
-        ? _initialsFromName(fullName)
-        : profile.avatarLabel;
+    _applyInitialProfile(widget.initialProfile);
+  }
+
+  @override
+  void didUpdateWidget(covariant ProfileScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final ProfileData? previous = oldWidget.initialProfile;
+    final ProfileData? current = widget.initialProfile;
+    if (previous?.fullName != current?.fullName ||
+        previous?.email != current?.email ||
+        previous?.avatarLabel != current?.avatarLabel) {
+      _applyInitialProfile(current);
+    }
+  }
+
+  void _applyInitialProfile(ProfileData? initialProfile) {
+    if (initialProfile == null) {
+      fullName = ProfileData.initial.fullName;
+      email = ProfileData.initial.email;
+      avatarLabel = ProfileData.initial.avatarLabel;
+      return;
+    }
+    email = initialProfile.email.trim();
+    final String rawName = initialProfile.fullName.trim();
+    if (rawName.isNotEmpty) {
+      fullName = rawName;
+    } else if (email.isNotEmpty) {
+      final String derived = ProfileData.nameFromEmail(email);
+      fullName = derived.isNotEmpty ? derived : 'Pengguna';
+    } else {
+      fullName = 'Pengguna';
+    }
+    final String rawAvatar = initialProfile.avatarLabel.trim();
+    avatarLabel = rawAvatar.isNotEmpty
+        ? rawAvatar
+        : ProfileData.initialsFromName(fullName);
   }
 
   void _notifyProfileChanged() {
@@ -148,21 +176,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  String _initialsFromName(String value) {
-    final List<String> parts = value
-        .trim()
-        .split(RegExp(r'\s+'))
-        .where((String part) => part.isNotEmpty)
-        .toList();
-    if (parts.isEmpty) {
-      return '?';
-    }
-    if (parts.length == 1) {
-      return parts.first.substring(0, 1).toUpperCase();
-    }
-    return '${parts.first.substring(0, 1)}${parts[1].substring(0, 1)}'
-        .toUpperCase();
-  }
+  String _initialsFromName(String value) => ProfileData.initialsFromName(value);
 
   Future<void> _openAvatarOptions() async {
     final String? choice = await showDialog<String>(

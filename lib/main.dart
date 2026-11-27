@@ -46,13 +46,16 @@ Future<void> main() async {
   final RoastingAiService roastingAiService = RoastingAiService();
   final AppProvider app = await AppProvider.loadPersistent(
     userId: auth.user?.uid,
+    userEmail: auth.user?.email,
     cloudRepository: FirestoreCloudRepository(),
     notifications: notificationService,
     budgetAlerts: budgetAlertService,
     roastingGenerator: roastingAiService,
   );
   auth.addListener(() {
-    unawaited(app.switchUser(auth.user?.uid));
+    unawaited(
+      app.switchUser(auth.user?.uid, userEmail: auth.user?.email),
+    );
   });
   runApp(
     MultiProvider(

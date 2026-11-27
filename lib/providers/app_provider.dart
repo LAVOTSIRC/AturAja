@@ -49,6 +49,7 @@ class AppProvider extends ChangeNotifier {
 
   final SharedPreferences? preferences;
   String? activeUserId;
+  String? activeUserEmail;
   bool _isAppActive = true;
   Future<void> _switchChain = Future<void>.value();
   Future<void> _cloudWriteChain = Future<void>.value();
@@ -81,6 +82,7 @@ class AppProvider extends ChangeNotifier {
     required this.profile,
     this.preferences,
     this.activeUserId,
+    this.activeUserEmail,
     this.cloudRepository,
     this.notifications,
     this.budgetAlerts,
@@ -143,6 +145,7 @@ class AppProvider extends ChangeNotifier {
   /// versi sebelum pemisahan akun dimigrasikan ke akun pertama yang masuk.
   static Future<AppProvider> loadPersistent({
     String? userId,
+    String? userEmail,
     CloudRepository? cloudRepository,
     AppNotificationService? notifications,
     BudgetAlertService? budgetAlerts,
@@ -162,12 +165,14 @@ class AppProvider extends ChangeNotifier {
       profile: isGuest ? ProfileData.initial : ProfileData.empty,
       preferences: preferences,
       activeUserId: userId,
+      activeUserEmail: userEmail,
       cloudRepository: cloudRepository,
       notifications: notifications,
       budgetAlerts: budgetAlerts,
       roastingGenerator: roastingGenerator,
     );
     await provider.load();
+    provider.syncProfileWithAuthEmail(userEmail);
     if (!isGuest && cloudRepository != null) {
       await provider.connectCloud();
     }
@@ -222,17 +227,26 @@ class AppProvider extends ChangeNotifier {
   String get newTaskId => newDocumentId();
 
   /// Berganti penyimpanan saat akun Firebase berubah.
-  Future<void> switchUser(String? userId) {
-    _switchChain = _switchChain.then((_) => _switchUser(userId));
+  Future<void> switchUser(String? userId, {String? userEmail}) {
+    _switchChain = _switchChain.then(
+      (_) => _switchUser(userId, userEmail: userEmail),
+    );
     return _switchChain;
   }
 
-  Future<void> _switchUser(String? userId) async {
+  Future<void> _switchUser(String? userId, {String? userEmail}) async {
     if (activeUserId == userId) {
+      if (userEmail != null && userEmail.trim().isNotEmpty) {
+        activeUserEmail = userEmail;
+        syncProfileWithAuthEmail(userEmail, syncToCloud: true);
+      }
       return;
     }
     final SharedPreferences? prefs = preferences;
     if (prefs == null) {
+      activeUserId = userId;
+      activeUserEmail = userEmail;
+      syncProfileWithAuthEmail(userEmail, syncToCloud: true);
       return;
     }
 
@@ -245,6 +259,7 @@ class AppProvider extends ChangeNotifier {
     }
 
     activeUserId = userId;
+    activeUserEmail = userEmail;
     // Batalkan jadwal akun lama setelah akun aktif berganti agar pekerjaan
     // generasi yang masih berjalan melihat akun yang sudah tidak aktif.
     await roastingNotifications?.cancelForUser(previousUserId);
@@ -256,9 +271,72 @@ class AppProvider extends ChangeNotifier {
     _resetState(seedSampleData: userId == null || userId.trim().isEmpty);
     notifyListeners();
     await load();
+    syncProfileWithAuthEmail(userEmail);
     if (userId != null && cloudRepository != null) {
       await connectCloud();
     }
+  }
+
+  /// Mengisi email dan nama profil awal dari email akun autentikasi bila profil
+  /// masih kosong atau masih berisi placeholder bawaan (`ProfileData.initial`).
+  bool syncProfileWithAuthEmail(
+    String? authEmail, {
+    bool syncToCloud = false,
+  }) {
+    final String? uid = activeUserId?.trim();
+    final String normalizedAuthEmail = authEmail?.trim() ?? '';
+    if (uid == null || uid.isEmpty || normalizedAuthEmail.isEmpty) {
+      return false;
+    }
+
+    final bool isDifferentFromInitial =
+        normalizedAuthEmail.toLowerCase() !=
+        ProfileData.initial.email.toLowerCase();
+    final bool hasPlaceholderEmail =
+        profile.email.trim().toLowerCase() ==
+            ProfileData.initial.email.toLowerCase() &&
+        isDifferentFromInitial;
+    final bool hasPlaceholderName =
+        profile.fullName.trim() == ProfileData.initial.fullName &&
+        isDifferentFromInitial;
+
+    final String nextEmail =
+        (profile.email.trim().isEmpty || hasPlaceholderEmail)
+        ? normalizedAuthEmail
+        : profile.email.trim();
+    final String derivedName = ProfileData.nameFromEmail(nextEmail);
+    final String nextName =
+        (profile.fullName.trim().isEmpty || hasPlaceholderName)
+        ? derivedName
+        : profile.fullName.trim();
+    final String nextAvatar =
+        (profile.avatarLabel.trim().isEmpty || nextName != profile.fullName)
+        ? ProfileData.initialsFromName(nextName)
+        : profile.avatarLabel.trim();
+
+    if (nextEmail == profile.email &&
+        nextName == profile.fullName &&
+        nextAvatar == profile.avatarLabel) {
+      return false;
+    }
+
+    profile = profile.copyWith(
+      fullName: nextName,
+      email: nextEmail,
+      avatarLabel: nextAvatar,
+    );
+    notifyListeners();
+    unawaited(save());
+    if (syncToCloud && canUseCloud) {
+      final ProfileData updated = profile;
+      unawaited(
+        _enqueueCloudWrite(
+          (CloudRepository repository, String userId) =>
+              repository.saveProfile(userId, updated),
+        ),
+      );
+    }
+    return true;
   }
 
   /// Menghubungkan provider ke Firestore dan memigrasikan data lokal sekali.
@@ -368,8 +446,14 @@ class AppProvider extends ChangeNotifier {
         return;
       }
       profile = value;
-      notifyListeners();
-      unawaited(save());
+      final bool normalized = syncProfileWithAuthEmail(
+        activeUserEmail,
+        syncToCloud: true,
+      );
+      if (!normalized) {
+        notifyListeners();
+        unawaited(save());
+      }
     }, onError: _handleCloudStreamError);
     _metaSubscription = repository.watchMeta(userId).listen((CloudMeta value) {
       _hasPendingCloudWrites = value.hasPendingWrites;
