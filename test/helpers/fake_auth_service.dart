@@ -23,9 +23,14 @@ class FakeAuthService implements AuthService {
   int googleSignInCalls = 0;
   int sendEmailVerificationCalls = 0;
   int reloadUserCalls = 0;
+  int passwordResetCalls = 0;
+  int changePasswordCalls = 0;
   bool verifyOnReload = false;
   String? lastEmail;
   String? lastPassword;
+  String? lastResetEmail;
+  String? lastCurrentPassword;
+  String? lastNewPassword;
 
   @override
   AuthUser? get currentUser => _currentUser;
@@ -85,8 +90,40 @@ class FakeAuthService implements AuthService {
         email: 'google@atmaja.id',
         displayName: 'Google User',
         emailVerified: true,
+        hasPasswordProvider: false,
       ),
     );
+  }
+
+  @override
+  Future<void> sendPasswordResetEmail({required String email}) async {
+    passwordResetCalls++;
+    lastResetEmail = email;
+    if (failure != null) {
+      throw failure!;
+    }
+  }
+
+  @override
+  Future<void> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    changePasswordCalls++;
+    lastCurrentPassword = currentPassword;
+    lastNewPassword = newPassword;
+    if (failure != null) {
+      throw failure!;
+    }
+    if (_currentUser == null) {
+      throw const AuthFailure('missing-user', 'Sesi pengguna tidak ditemukan.');
+    }
+    if (!(_currentUser?.hasPasswordProvider ?? false)) {
+      throw const AuthFailure(
+        'password-not-supported',
+        'Akun ini masuk dengan Google. Kelola kata sandi melalui akun Google kamu.',
+      );
+    }
   }
 
   @override

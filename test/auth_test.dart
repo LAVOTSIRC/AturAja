@@ -482,4 +482,106 @@ void main() {
       expect(app.profile.email, 'dewi.lestari@gmail.com');
     });
   });
+
+  group('Reset & ganti kata sandi', () {
+    testWidgets('lupa kata sandi di halaman login mengirim link reset', (
+      WidgetTester tester,
+    ) async {
+      final FakeAuthService service = FakeAuthService();
+      await pumpAuthApp(
+        tester,
+        isLoggedIn: false,
+        initialLocation: '/login',
+        service: service,
+      );
+
+      await tester.ensureVisible(find.byTooltip('Lupa kata sandi'));
+      await tester.tap(find.byTooltip('Lupa kata sandi'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Reset kata sandi'), findsOneWidget);
+
+      final Finder dialogField = find.descendant(
+        of: find.byType(AlertDialog),
+        matching: find.byType(TextField),
+      );
+      await tester.enterText(dialogField, 'budi@kampus.id');
+      await tester.tap(find.widgetWithText(TextButton, 'Kirim link'));
+      await tester.pumpAndSettle();
+
+      expect(service.passwordResetCalls, 1);
+      expect(service.lastResetEmail, 'budi@kampus.id');
+    });
+
+    testWidgets(
+      'edit profil menyembunyikan ganti password untuk akun Google Sign-In',
+      (WidgetTester tester) async {
+        final FakeAuthService service = FakeAuthService(
+          initialUser: const AuthUser(
+            uid: 'google-uid',
+            email: 'siti.rahma@gmail.com',
+            displayName: 'Siti Rahma',
+            emailVerified: true,
+            hasPasswordProvider: false,
+          ),
+        );
+        await pumpAuthApp(
+          tester,
+          isLoggedIn: true,
+          initialLocation: '/profile',
+          service: service,
+        );
+
+        await tester.tap(find.byTooltip('Edit profil'));
+        await tester.pumpAndSettle();
+
+        expect(
+          find.text(
+            'Akun ini masuk dengan Google. Kata sandi dikelola melalui akun Google kamu.',
+          ),
+          findsOneWidget,
+        );
+        expect(find.text('Password Baru (Opsional)'), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'edit profil memanggil changePassword untuk akun email/password',
+      (WidgetTester tester) async {
+        final FakeAuthService service = FakeAuthService(
+          initialUser: testAuthUser,
+        );
+        await pumpAuthApp(
+          tester,
+          isLoggedIn: true,
+          initialLocation: '/profile',
+          service: service,
+        );
+
+        await tester.tap(find.byTooltip('Edit profil'));
+        await tester.pumpAndSettle();
+
+        final Finder currentPwdField = find.byWidgetPredicate(
+          (Widget w) =>
+              w is TextField &&
+              w.decoration?.labelText == 'Password Saat Ini (Opsional)',
+        );
+        final Finder newPwdField = find.byWidgetPredicate(
+          (Widget w) =>
+              w is TextField &&
+              w.decoration?.labelText == 'Password Baru (Opsional)',
+        );
+
+        await tester.enterText(currentPwdField, 'lama123');
+        await tester.enterText(newPwdField, 'baru456');
+        await tester.ensureVisible(find.byTooltip('Simpan profil'));
+        await tester.tap(find.byTooltip('Simpan profil'));
+        await tester.pumpAndSettle();
+
+        expect(service.changePasswordCalls, 1);
+        expect(service.lastCurrentPassword, 'lama123');
+        expect(service.lastNewPassword, 'baru456');
+      },
+    );
+  });
 }
