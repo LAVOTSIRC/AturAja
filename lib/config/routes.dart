@@ -24,11 +24,13 @@ import '../screens/register_screen.dart';
 import '../screens/scan_screen.dart';
 import '../screens/splash_screen.dart';
 import '../screens/task_screen.dart';
+import '../screens/verify_email_screen.dart';
 
 class AppRoutes {
   static const String splash = '/splash';
   static const String login = '/login';
   static const String register = '/register';
+  static const String verifyEmail = '/verify-email';
   static const String home = '/home';
   static const String finance = '/finance';
   static const String tasks = '/tasks';
@@ -60,6 +62,7 @@ GoRouter createAppRouter({
       final bool onSplash = location == AppRoutes.splash;
       final bool onAuthPage =
           location == AppRoutes.login || location == AppRoutes.register;
+      final bool onVerifyEmail = location == AppRoutes.verifyEmail;
 
       if (auth.isInitializing) {
         return onSplash ? null : AppRoutes.splash;
@@ -67,7 +70,10 @@ GoRouter createAppRouter({
       if (!auth.isAuthenticated) {
         return onSplash || onAuthPage ? null : AppRoutes.login;
       }
-      if (onAuthPage) {
+      if (auth.needsEmailVerification) {
+        return onVerifyEmail ? null : AppRoutes.verifyEmail;
+      }
+      if (onAuthPage || onVerifyEmail) {
         return AppRoutes.home;
       }
       return null;
@@ -95,9 +101,25 @@ GoRouter createAppRouter({
         builder: (BuildContext context, GoRouterState state) {
           final AuthProvider auth = context.read<AuthProvider>();
           return RegisterScreen(
-            onRegister: ({required String email, required String password}) =>
-                auth.registerWithEmail(email: email, password: password),
+            onRegister: ({required String email, required String password}) async {
+              await auth.registerWithEmail(email: email, password: password);
+              if (context.mounted && auth.needsEmailVerification) {
+                context.go(AppRoutes.verifyEmail);
+              }
+            },
             onLogin: () => context.go(AppRoutes.login),
+          );
+        },
+      ),
+      GoRoute(
+        path: AppRoutes.verifyEmail,
+        builder: (BuildContext context, GoRouterState state) {
+          final AuthProvider auth = context.watch<AuthProvider>();
+          return VerifyEmailScreen(
+            email: auth.user?.email ?? '',
+            onCheckVerified: auth.reloadUser,
+            onResendEmail: auth.sendEmailVerification,
+            onSignOut: auth.signOut,
           );
         },
       ),
@@ -305,13 +327,11 @@ GoRouter createAppRouter({
                   return Consumer<AppProvider>(
                     builder: (BuildContext context, AppProvider app, _) {
                       final String? authEmail =
-                          context.read<AuthProvider>().user?.email;
-                      final ProfileData profile =
-                          (app.profile.email.isEmpty &&
-                              authEmail != null &&
-                              authEmail.isNotEmpty)
-                          ? app.profile.copyWith(email: authEmail)
-                          : app.profile;
+                          context.watch<AuthProvider>().user?.email;
+                      final ProfileData profile = _resolveProfileForDisplay(
+                        app.profile,
+                        authEmail,
+                      );
                       return ProfileScreen(
                         settings: app.settings,
                         initialProfile: profile,
@@ -337,6 +357,43 @@ GoRouter createAppRouter({
         ],
       ),
     ],
+  );
+}
+
+ProfileData _resolveProfileForDisplay(
+  ProfileData stored,
+  String? authEmail,
+) {
+  final String normalizedAuthEmail = authEmail?.trim() ?? '';
+  if (normalizedAuthEmail.isEmpty) {
+    return stored;
+  }
+  final bool isDifferentFromInitial =
+      normalizedAuthEmail.toLowerCase() !=
+      ProfileData.initial.email.toLowerCase();
+  final bool hasPlaceholderEmail =
+      stored.email.trim().toLowerCase() ==
+          ProfileData.initial.email.toLowerCase() &&
+      isDifferentFromInitial;
+  final bool hasPlaceholderName =
+      stored.fullName.trim() == ProfileData.initial.fullName &&
+      isDifferentFromInitial;
+
+  final String email = (stored.email.trim().isEmpty || hasPlaceholderEmail)
+      ? normalizedAuthEmail
+      : stored.email.trim();
+  final String fullName = (stored.fullName.trim().isEmpty || hasPlaceholderName)
+      ? ProfileData.nameFromEmail(email)
+      : stored.fullName.trim();
+  final String avatarLabel =
+      (stored.avatarLabel.trim().isEmpty || fullName != stored.fullName)
+      ? ProfileData.initialsFromName(fullName)
+      : stored.avatarLabel.trim();
+
+  return stored.copyWith(
+    fullName: fullName,
+    email: email,
+    avatarLabel: avatarLabel,
   );
 }
 

@@ -97,7 +97,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
       if (!mounted) {
         return;
       }
-      showSuccessSnackBar(context, 'Akun berhasil dibuat. Selamat datang!');
+      showSuccessSnackBar(
+        context,
+        'Akun berhasil dibuat. Cek email kamu untuk verifikasi.',
+      );
     } on AuthFailure catch (error) {
       if (mounted) {
         showErrorSnackBar(context, error.message);

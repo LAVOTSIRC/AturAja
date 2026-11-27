@@ -38,7 +38,12 @@ class _SplashScreenState extends State<SplashScreen>
     }
     _navigated = true;
     _fallbackTimer?.cancel();
-    context.go(_auth.isAuthenticated ? AppRoutes.home : AppRoutes.login);
+    final String destination = !_auth.isAuthenticated
+        ? AppRoutes.login
+        : (_auth.needsEmailVerification
+              ? AppRoutes.verifyEmail
+              : AppRoutes.home);
+    context.go(destination);
   }
 
   @override
