@@ -305,14 +305,6 @@ class _TransactionRow extends StatelessWidget {
                       '${t.date} · ${t.time}',
                       style: AppTypography.micro(c.textMuted),
                     ),
-                    if (t.receiptImagePath != null) ...[
-                      const SizedBox(width: AppSpacing.xs),
-                      Icon(
-                        Icons.receipt_outlined,
-                        size: AppSpacing.sm,
-                        color: c.blue,
-                      ),
-                    ],
                   ],
                 ),
               ],
@@ -381,7 +373,7 @@ class _TransactionDetailSheetState extends State<_TransactionDetailSheet> {
     super.initState();
     _labelCtrl = TextEditingController(text: widget.transaction.label);
     _amountCtrl = TextEditingController(
-      text: widget.transaction.amount.abs().toString(),
+      text: formatRupiah(widget.transaction.amount).substring(2),
     );
     _selectedCategory = _catLabel(widget.transaction.cat);
   }
@@ -624,6 +616,7 @@ class _TransactionDetailSheetState extends State<_TransactionDetailSheet> {
             // Amount field
             TextField(
               controller: _amountCtrl,
+              inputFormatters: const [RupiahInputFormatter()],
               keyboardType: TextInputType.number,
               onChanged: (_) {
                 if (_errorMessage != null) {
@@ -688,23 +681,6 @@ class _TransactionDetailSheetState extends State<_TransactionDetailSheet> {
               }).toList(),
             ),
             const SizedBox(height: AppSpacing.md),
-
-            // Receipt section
-            Text('Foto Struk', style: AppTypography.overline(c.textMuted)),
-            const SizedBox(height: AppSpacing.xs),
-            if (widget.transaction.receiptImagePath != null)
-              ClipRRect(
-                borderRadius: BorderRadius.circular(AppSpacing.md),
-                child: Image.asset(
-                  widget.transaction.receiptImagePath!,
-                  width: double.infinity,
-                  fit: BoxFit.cover,
-                  errorBuilder: (ctx2, obj, st) => _receiptPlaceholder(c),
-                ),
-              )
-            else
-              _receiptPlaceholder(c),
-            const SizedBox(height: AppSpacing.lg),
 
             // Action buttons
             Row(
@@ -776,33 +752,6 @@ class _TransactionDetailSheetState extends State<_TransactionDetailSheet> {
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _receiptPlaceholder(AppColors c) {
-    return Container(
-      width: double.infinity,
-      height: 120,
-      decoration: BoxDecoration(
-        color: c.surfaceHigh,
-        borderRadius: BorderRadius.circular(AppSpacing.md),
-        border: Border.all(color: c.border),
-      ),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            Icons.receipt_long_outlined,
-            size: AppSpacing.iconLarge,
-            color: c.textMuted,
-          ),
-          const SizedBox(height: AppSpacing.xxs),
-          Text(
-            'Tidak ada foto struk',
-            style: AppTypography.caption(c.textMuted),
-          ),
-        ],
       ),
     );
   }

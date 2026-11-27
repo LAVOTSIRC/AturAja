@@ -760,16 +760,27 @@ class AppProvider extends ChangeNotifier {
     );
   }
 
-  Future<void> addTransaction(TransactionItem transaction) {
-    final TransactionItem stored = transaction.createdAt == null
-        ? transaction.copyWith(createdAt: DateTime.now())
-        : transaction;
-    _transactions = <TransactionItem>[stored, ..._transactions];
+  Future<void> addTransaction(TransactionItem transaction) =>
+      addTransactions(<TransactionItem>[transaction]);
+
+  Future<void> addTransactions(List<TransactionItem> transactions) async {
+    if (transactions.isEmpty) return;
+    final DateTime createdAt = DateTime.now();
+    final List<TransactionItem> stored = transactions.map((item) {
+      return item.createdAt == null
+          ? item.copyWith(createdAt: createdAt)
+          : item;
+    }).toList();
+    _transactions = <TransactionItem>[...stored, ..._transactions];
     _changed();
     unawaited(_checkBudgetAlert());
-    return _enqueueCloudWrite(
-      (CloudRepository repository, String userId) =>
-          repository.saveTransaction(userId, stored),
+    await Future.wait(
+      stored.map(
+        (TransactionItem item) => _enqueueCloudWrite(
+          (CloudRepository repository, String userId) =>
+              repository.saveTransaction(userId, item),
+        ),
+      ),
     );
   }
 
@@ -978,7 +989,9 @@ class AppProvider extends ChangeNotifier {
   }
 
   Future<void> _syncTaskReminders() {
-    final Future<void> next = _syncReminderChain.then((_) => _doSyncTaskReminders());
+    final Future<void> next = _syncReminderChain.then(
+      (_) => _doSyncTaskReminders(),
+    );
     _syncReminderChain = next.catchError((Object _) {});
     return next;
   }
@@ -1068,14 +1081,14 @@ class AppProvider extends ChangeNotifier {
   }
 
   static DateTime? _transactionDate(TransactionItem transaction, DateTime now) {
-    final DateTime? createdAt = transaction.createdAt;
-    if (createdAt != null) {
-      return createdAt.toLocal();
-    }
-
     final DateTime? parsedDate = DateTime.tryParse(transaction.date);
     if (parsedDate != null) {
       return parsedDate.toLocal();
+    }
+
+    final DateTime? createdAt = transaction.createdAt;
+    if (createdAt != null) {
+      return createdAt.toLocal();
     }
 
     final RegExpMatch? legacyDate = RegExp(

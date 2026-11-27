@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -10,6 +12,7 @@ import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_typography.dart';
 import '../theme/theme_scope.dart';
+import '../utils/expense_categories.dart';
 import '../utils/format.dart';
 import '../utils/task_schedule.dart';
 import '../widgets/common.dart';
@@ -30,10 +33,7 @@ class BrainDumpSaveResult {
   final List<TransactionItem> transactions;
   final List<TaskItem> tasks;
 
-  const BrainDumpSaveResult({
-    required this.transactions,
-    required this.tasks,
-  });
+  const BrainDumpSaveResult({required this.transactions, required this.tasks});
 
   bool get isEmpty => transactions.isEmpty && tasks.isEmpty;
 
@@ -65,14 +65,6 @@ const List<String> expenseCategoryLabels = [
   'Belanja',
   'Lainnya',
 ];
-
-const Map<String, String> expenseCategoryKeys = {
-  'Makan & Minum': 'food',
-  'Hiburan': 'entertainment',
-  'Transport': 'transport',
-  'Belanja': 'belanja',
-  'Lainnya': 'other',
-};
 
 const Map<String, List<String>> incomeKeywords = {
   'Gaji': ['gaji', 'salary', 'bayar kerja'],
@@ -261,84 +253,6 @@ String sanitizeBrainDumpText(String raw) {
   return cleaned;
 }
 
-/// Memperkirakan nominal wajar mahasiswa jika pengguna menulis catatan keuangan
-/// yang tidak lengkap (tanpa nominal eksplisit).
-int estimateReasonableAmount(String text, {required bool isIncome}) {
-  final String lower = text.toLowerCase();
-  if (isIncome) {
-    if (lower.contains('gaji')) return 2000000;
-    if (lower.contains('freelance') ||
-        lower.contains('proyek') ||
-        lower.contains('honor')) {
-      return 500000;
-    }
-    if (lower.contains('kirim') ||
-        lower.contains('ibu') ||
-        lower.contains('ayah') ||
-        lower.contains('ortu') ||
-        lower.contains('transfer')) {
-      return 300000;
-    }
-    return 100000;
-  }
-
-  if (lower.contains('kos') ||
-      lower.contains('kontrakan') ||
-      lower.contains('sewa')) {
-    return 650000;
-  }
-  if (lower.contains('listrik') ||
-      lower.contains('token') ||
-      lower.contains('pln') ||
-      lower.contains('wifi') ||
-      lower.contains('kuota') ||
-      lower.contains('pulsa')) {
-    return 50000;
-  }
-  if (lower.contains('parkir')) return 2000;
-  if (lower.contains('bensin') ||
-      lower.contains('pertalite') ||
-      lower.contains('pertamax') ||
-      lower.contains('ojek') ||
-      lower.contains('gojek') ||
-      lower.contains('grab')) {
-    return 25000;
-  }
-  if (lower.contains('kopi') ||
-      lower.contains('ngopi') ||
-      lower.contains('es teh') ||
-      lower.contains('minum') ||
-      lower.contains('jajan') ||
-      lower.contains('snack') ||
-      lower.contains('cemilan')) {
-    return 12000;
-  }
-  if (lower.contains('makan') ||
-      lower.contains('nasi') ||
-      lower.contains('mie') ||
-      lower.contains('ayam') ||
-      lower.contains('batagor') ||
-      lower.contains('bakso') ||
-      lower.contains('sarapan')) {
-    return 15000;
-  }
-  if (lower.contains('laundry') || lower.contains('cuci')) return 20000;
-  if (lower.contains('belanja') ||
-      lower.contains('sayur') ||
-      lower.contains('indomaret') ||
-      lower.contains('alfamart') ||
-      lower.contains('supermarket')) {
-    return 50000;
-  }
-  if (lower.contains('nonton') ||
-      lower.contains('bioskop') ||
-      lower.contains('game') ||
-      lower.contains('hiburan')) {
-    return 40000;
-  }
-  return 15000;
-}
-
 int? parseBrainDumpAmount(String raw) {
   // Hapus pola jam seperti "jam 08:00", "pukul 19.30", "15:00" dan tanggal
   // seperti "2026-11-20" atau "12/11/2026" agar tidak salah terbaca sebagai nominal.
@@ -372,7 +286,10 @@ int? parseBrainDumpAmount(String raw) {
         ' ',
       )
       .replaceAll(
-        RegExp(r'\b\d+\s*(?:hari|minggu|bulan|jam|menit|km|kg)\b', caseSensitive: false),
+        RegExp(
+          r'\b\d+\s*(?:hari|minggu|bulan|jam|menit|km|kg)\b',
+          caseSensitive: false,
+        ),
         ' ',
       );
 
@@ -399,8 +316,10 @@ int? parseBrainDumpAmount(String raw) {
     return (base * 1000000).round();
   }
 
-  final String rawDigits = (match.group(3) ?? match.group(4) ?? '')
-      .replaceAll(RegExp('[.,\\s]'), '');
+  final String rawDigits = (match.group(3) ?? match.group(4) ?? '').replaceAll(
+    RegExp('[.,\\s]'),
+    '',
+  );
   final int? parsed = int.tryParse(rawDigits);
   if (parsed == null || parsed <= 0) {
     return null;
@@ -519,14 +438,11 @@ class _BrainDumpFinanceScreenState extends State<BrainDumpFinanceScreen> {
     final String sanitizedTitle = sanitizeBrainDumpText(item.title);
     if (item.isFinance) {
       final bool isIncome = item.type == BrainDumpItemType.income;
-      final int amount =
-          (item.amount != null && item.amount! > 0)
-              ? item.amount!
-              : (parseBrainDumpAmount(source) ??
-                    estimateReasonableAmount(source, isIncome: isIncome));
+      final int? amount = item.amount;
       String category = (item.category ?? '').trim();
-      final List<String> allowed =
-          isIncome ? incomeCategoryLabels : expenseCategoryLabels;
+      final List<String> allowed = isIncome
+          ? incomeCategoryLabels
+          : expenseCategoryLabels;
       if (!allowed.contains(category)) {
         category = isIncome
             ? detectIncomeCategory(source)
@@ -606,97 +522,81 @@ class _BrainDumpFinanceScreenState extends State<BrainDumpFinanceScreen> {
       hasPreview = false;
     });
 
+    List<BrainDumpItem> items = <BrainDumpItem>[];
+    bool usedLocal = false;
     try {
-      final List<BrainDumpItem> aiItems = await BrainDumpAiService().parse(text);
-      final List<BrainDumpItem> processed = <BrainDumpItem>[];
-      final List<int> localAmounts = _localAmounts(text);
-      int financeCounter = 0;
-
-      for (final BrainDumpItem rawItem in aiItems) {
-        if (rawItem.isFinance) {
-          final bool isIncome = rawItem.type == BrainDumpItemType.income;
-          final int? fallbackAmount = financeCounter < localAmounts.length
-              ? localAmounts[financeCounter]
-              : parseBrainDumpAmount(rawItem.title);
-          financeCounter++;
-          final int finalAmount =
-              (rawItem.amount != null && rawItem.amount! > 0)
-                  ? rawItem.amount!
-                  : (fallbackAmount ??
-                        estimateReasonableAmount(
-                          '${rawItem.title} $text',
-                          isIncome: isIncome,
-                        ));
-          processed.add(
-            _normalizeItem(
-              rawItem.copyWith(amount: finalAmount),
-              sourceSegment: text,
-            ),
-          );
-        } else {
-          processed.add(_normalizeItem(rawItem, sourceSegment: text));
-        }
-      }
-
-      if (processed.isEmpty) {
-        processed.addAll(_localItems(text));
-      }
-
-      if (processed.any(
-        (BrainDumpItem item) =>
-            item.isFinance &&
-            item.amount != null &&
-            item.amount! > kMaxTransactionAmount,
-      )) {
-        throw BrainDumpAiException(
-          'Salah satu nominal melebihi maksimal '
-          '${formatRupiah(kMaxTransactionAmount)}.',
-        );
-      }
-
-      if (!mounted) {
-        return;
-      }
-
-      setState(() {
-        isProcessing = false;
-        parsedItems = _orderFinanceThenTasks(processed);
-        hasPreview = true;
-      });
+      items = (await BrainDumpAiService().parse(text))
+          .map(_normalizeItem)
+          .toList();
     } catch (_) {
-      if (!mounted) {
-        return;
-      }
-      final List<BrainDumpItem> fallbackItems = _orderFinanceThenTasks(
-        _localItems(text),
-      );
-      setState(() {
-        isProcessing = false;
-        parsedItems = fallbackItems;
-        hasPreview = fallbackItems.isNotEmpty;
-        infoMessage =
-            'AI telah menyimpulkan maksud catatanmu secara otomatis. Periksa atau edit hasilnya di bawah.';
-      });
+      // Parser lokal juga menangani daftar jika Gemini gagal atau kosong.
     }
+    if (!mounted) return;
+    if (items.isEmpty) {
+      items = _localItems(text);
+      usedLocal = items.isNotEmpty;
+    }
+    setState(() {
+      isProcessing = false;
+      parsedItems = _orderFinanceThenTasks(items);
+      hasPreview = items.isNotEmpty;
+      if (items.isEmpty) {
+        errorMessage =
+            'Tidak ada transaksi, tugas, atau jadwal yang terdeteksi.';
+      } else if (usedLocal) {
+        infoMessage = 'Periksa hasil pembacaan lokal sebelum menyimpan.';
+      }
+    });
   }
 
-  /// Parser lokal cerdas yang mampu memisahkan kalimat campuran (Keuangan & Tugas),
-  /// menyaring kata tidak sopan, serta menyimpulkan sendiri maksud kalimat yang
-  /// tidak lengkap atau tidak jelas tanpa pernah menolaknya.
+  String? _transactionDate(String text) {
+    final DateTime now = DateTime.now();
+    final String lower = text.toLowerCase();
+    final int? daysAgo = int.tryParse(
+      RegExp(r'\b(\d+)\s+hari\s+(?:yang\s+)?lalu\b').firstMatch(lower)?[1] ??
+          '',
+    );
+    final DateTime? date = switch (lower) {
+      _ when daysAgo != null && daysAgo <= 36500 => DateTime(
+        now.year,
+        now.month,
+        now.day - daysAgo,
+      ),
+      _
+          when RegExp(r'\b(?:kemarin\s+lusa|dua\s+hari\s+(?:yang\s+)?lalu)\b')
+              .hasMatch(lower) =>
+        DateTime(now.year, now.month, now.day - 2),
+      _ when RegExp(r'\bkemarin\b').hasMatch(lower) => DateTime(
+        now.year,
+        now.month,
+        now.day - 1,
+      ),
+      _ => parseDueDate(text, now: now),
+    };
+    return date?.toIso8601String().split('T').first;
+  }
+
+  /// Membaca klausa transaksi dan tugas ketika Gemini tidak tersedia.
   List<BrainDumpItem> _localItems(String text) {
-    final List<String> rawSegments = text
+    final List<String> segments = text
         .split(
           RegExp(
-            r'(?:[;\n]+|,\s+(?=(?:lalu|terus|kemudian|dan|besok|lusa|hari ini|malam ini|pagi ini|siang ini|sore ini|jangan lupa|sekalian|sama|tambah)\b)|\b(?:lalu|terus|kemudian|selanjutnya|habis itu|setelah itu|sekalian)\b|\bdan\s+(?=(?:beli|bayar|jajan|makan|minum|belanja|transfer|dapat|gaji|kumpul|kumpulkan|kerjakan|tugas|quiz|kuis|rapat|meeting|jogging|ambil|besok|lusa|hari ini|malam ini)\b))',
+            r'[;\n]+|(?<!\d)[.!?]\s+|,\s+|:\s*(?=[^\d\s])|'
+            r'\b(?:terus|kemudian|selanjutnya|habis itu|setelah itu|sekalian)\s+|'
+            r'\blalu\s+(?=(?:beli|bayar|revisi|kirim|ambil|kerjakan|besok|lusa|rapat|tugas)\b)|'
+            r'\b(?:dan|serta|sama)\s+(?=(?:revisi|kirim|belajar|hubungi|beli|bayar|jajan|makan|minum|belanja|transfer|dapat|gaji|kumpul|kumpulkan|kerjakan|tugas|quiz|kuis|rapat|meeting|jogging|ambil|besok|lusa|hari ini|malam ini)\b)',
             caseSensitive: false,
           ),
         )
-        .map((String s) => s.trim())
-        .where((String s) => s.isNotEmpty)
+        .map(
+          (String segment) => segment
+              .replaceFirst(RegExp(r'^\s*(?:[-*?]\s*|\d+[.)]\s+)'), '')
+              .trim(),
+        )
+        .where((String segment) => segment.isNotEmpty)
         .toList();
-
-    final List<String> segments =
-        rawSegments.isEmpty ? <String>[text.trim()] : rawSegments;
+    BrainDumpItemType? groupType;
+    String? groupDate;
     final List<BrainDumpItem> items = <BrainDumpItem>[];
 
     for (final String segment in segments) {
@@ -711,26 +611,87 @@ class _BrainDumpFinanceScreenState extends State<BrainDumpFinanceScreen> {
             )
             .trim(),
       );
-      final String effectiveSegment =
-          cleanedSegment.isEmpty ? segment.trim() : cleanedSegment;
+      final String effectiveSegment = cleanedSegment.isEmpty
+          ? segment.trim()
+          : cleanedSegment;
       if (effectiveSegment.isEmpty) {
         continue;
       }
 
       final String lower = effectiveSegment.toLowerCase();
       final int? explicitAmount = parseBrainDumpAmount(effectiveSegment);
+      final Match? group = RegExp(
+        r'^(?:(?:daftar|catatan|rekap)\s+)?(pengeluaran|pemasukan|belanja|tugas|jadwal)\b',
+      ).firstMatch(lower);
+      final String? lineDate = _transactionDate(effectiveSegment);
+      if (group != null &&
+          explicitAmount == null &&
+          (lineDate != null ||
+              lower.replaceFirst(RegExp(r'[:\s]+$'), '') == group[0])) {
+        groupType = switch (group[1]) {
+          'pemasukan' => BrainDumpItemType.income,
+          'tugas' || 'jadwal' => BrainDumpItemType.task,
+          _ => BrainDumpItemType.expense,
+        };
+        groupDate = lineDate;
+        continue;
+      }
+      if (RegExp(r'^(?:sub\s*total|total|saldo|kembalian)\b').hasMatch(lower)) {
+        continue;
+      }
+      if (lineDate != null &&
+          RegExp(
+            r'^(?:kemarin|hari ini|\d+\s+hari\s+(?:yang\s+)?lalu|\d{1,4}[-/]\d{1,2}[-/]\d{2,4})$',
+          ).hasMatch(lower)) {
+        groupDate = lineDate;
+        continue;
+      }
+
       final bool hasTaskWord = _taskIntentKeywords.any(lower.contains);
       final bool hasFinanceWord = _financeIntentKeywords.any(lower.contains);
       final bool hasSchedule = parseSchedule(effectiveSegment) != null;
 
+      final bool isFuture = RegExp(
+        r'\b(?:besok|lusa|minggu depan|nanti|akan|harus|belum|jangan lupa|rencana)\b',
+      ).hasMatch(lower);
+      final bool isCompleted = RegExp(
+        r'\b(?:sudah|udah|tadi|kemarin|barusan)\b',
+      ).hasMatch(lower);
+      final bool isNegated = RegExp(
+        r'\b(?:tidak jadi|nggak jadi|gak jadi|batal|tidak perlu|jangan catat)\b',
+      ).hasMatch(lower);
+      if (isNegated) continue;
+
+      final bool hasAmountAndLabel =
+          explicitAmount != null &&
+          RegExp(r'[a-zA-Z]').hasMatch(effectiveSegment);
+      final bool isFinanceGroup =
+          groupType == BrainDumpItemType.expense ||
+          groupType == BrainDumpItemType.income;
       final bool isFinanceSegment =
-          (explicitAmount != null &&
-              explicitAmount > 0 &&
-              explicitAmount <= kMaxTransactionAmount) ||
-          (hasFinanceWord && !hasTaskWord);
+          !isFuture &&
+          switch (groupType) {
+            BrainDumpItemType.task => hasFinanceWord && isCompleted,
+            _ =>
+              (hasFinanceWord || hasAmountAndLabel) &&
+                  (!hasTaskWord ||
+                      isCompleted ||
+                      (isFinanceGroup && hasAmountAndLabel)),
+          };
+      if (!isFinanceSegment &&
+          !hasTaskWord &&
+          !hasFinanceWord &&
+          groupType != BrainDumpItemType.task &&
+          !hasSchedule &&
+          !RegExp(
+            r'^(?:baca|tulis|buat|hubungi|kirim|siapkan|cek|urus|ambil|antar|ingat)\b',
+          ).hasMatch(lower)) {
+        continue;
+      }
 
       if (isFinanceSegment) {
         final bool isIncome =
+            groupType == BrainDumpItemType.income ||
             lower.contains('dapat') ||
             lower.contains('gaji') ||
             lower.contains('honor') ||
@@ -743,16 +704,6 @@ class _BrainDumpFinanceScreenState extends State<BrainDumpFinanceScreen> {
             lower.contains('ibu transfer') ||
             lower.contains('transfer masuk') ||
             lower.contains('dibayar');
-
-        final int amount =
-            (explicitAmount != null &&
-                    explicitAmount > 0 &&
-                    explicitAmount <= kMaxTransactionAmount)
-                ? explicitAmount
-                : estimateReasonableAmount(
-                    effectiveSegment,
-                    isIncome: isIncome,
-                  );
 
         final String category = isIncome
             ? detectIncomeCategory(effectiveSegment)
@@ -787,17 +738,17 @@ class _BrainDumpFinanceScreenState extends State<BrainDumpFinanceScreen> {
                 : BrainDumpItemType.expense,
             title: title,
             description: explicitAmount == null
-                ? 'Nominal diperkirakan otomatis oleh AI — kamu bisa mengubahnya sebelum disimpan.'
+                ? 'Isi nominal aktual sebelum menyimpan.'
                 : null,
-            amount: amount,
+            amount: explicitAmount,
             category: category,
+            transactionDate: lineDate ?? groupDate,
           ),
         );
         continue;
       }
 
-      // Semua kalimat lain (baik tugas jelas, kurang lengkap, maupun kalimat singkat/tidak jelas)
-      // disimpulkan menjadi item Tugas yang rapi dan sopan agar tidak pernah ditolak.
+      // Termasuk rencana pembayaran atau pembelian yang belum terjadi.
       final DateTime due =
           parseSchedule(effectiveSegment, useCurrentTimeAsDefault: true) ??
           dueAtCurrentTime();
@@ -835,7 +786,9 @@ class _BrainDumpFinanceScreenState extends State<BrainDumpFinanceScreen> {
           .trim();
 
       if (title.isEmpty) {
-        title = hasSchedule ? 'Jadwal kegiatan ($category)' : ' kerjakan tugas $category'.trim();
+        title = hasSchedule
+            ? 'Jadwal kegiatan ($category)'
+            : ' kerjakan tugas $category'.trim();
       } else if (title.length < 4 && !hasTaskWord) {
         title = 'Catatan kegiatan: $title';
       }
@@ -850,7 +803,12 @@ class _BrainDumpFinanceScreenState extends State<BrainDumpFinanceScreen> {
 
       items.add(
         BrainDumpItem(
-          type: BrainDumpItemType.task,
+          type:
+              hasSchedule &&
+                  RegExp(r'\b(?:rapat|meeting|kelas|janji|pertemuan)\b')
+                      .hasMatch(lower)
+              ? BrainDumpItemType.schedule
+              : BrainDumpItemType.task,
           title: title,
           description:
               'Jadwal ${title.toLowerCase()} pada ${deadlineLabel.toLowerCase()}.',
@@ -861,41 +819,7 @@ class _BrainDumpFinanceScreenState extends State<BrainDumpFinanceScreen> {
       );
     }
 
-    if (items.isEmpty) {
-      final DateTime due = dueAtCurrentTime();
-      final String isoDate =
-          '${due.year.toString().padLeft(4, '0')}-'
-          '${due.month.toString().padLeft(2, '0')}-'
-          '${due.day.toString().padLeft(2, '0')}';
-      final String hmTime = formatDueTimeLabel(due);
-      items.add(
-        BrainDumpItem(
-          type: BrainDumpItemType.task,
-          title: ' Selesaikan agenda hari ini'.trim(),
-          description:
-              'Agenda otomatis yang disimpulkan AI dari catatan singkatmu.',
-          category: 'Pribadi',
-          dueDate: isoDate,
-          dueTime: hmTime,
-        ),
-      );
-    }
-
     return _orderFinanceThenTasks(items);
-  }
-
-  List<int> _localAmounts(String text) {
-    final List<int> amounts = <int>[];
-    final List<String> tokens = text.split(
-      RegExp(r'\b(?:dan|lalu|terus|kemudian|serta)\b|[,;\n]+', caseSensitive: false),
-    );
-    for (final String token in tokens) {
-      final int? amt = parseBrainDumpAmount(token);
-      if (amt != null && amt > 0) {
-        amounts.add(amt);
-      }
-    }
-    return amounts;
   }
 
   /// Memperbaiki item menggunakan AI atau fallback lokal cerdas bila offline.
@@ -916,17 +840,14 @@ class _BrainDumpFinanceScreenState extends State<BrainDumpFinanceScreen> {
     try {
       if (targetIndex != null) {
         final BrainDumpItem current = parsedItems[targetIndex];
-        final List<BrainDumpItem> refinedList =
-            await BrainDumpAiService().refineItems(
+        final List<BrainDumpItem> refinedList = await BrainDumpAiService()
+            .refineItems(
               currentItems: <BrainDumpItem>[current],
               instruction: instruction,
               originalPrompt: dumpController.text,
             );
         if (!mounted) return;
-        final BrainDumpItem updated = _normalizeItem(
-          refinedList.first,
-          sourceSegment: instruction.isNotEmpty ? instruction : current.title,
-        );
+        final BrainDumpItem updated = _normalizeItem(refinedList.first);
         final List<BrainDumpItem> next = List<BrainDumpItem>.of(parsedItems);
         next[targetIndex] = updated;
         setState(() {
@@ -936,21 +857,15 @@ class _BrainDumpFinanceScreenState extends State<BrainDumpFinanceScreen> {
           infoMessage = 'Item "${updated.title}" berhasil diperbaiki AI.';
         });
       } else {
-        final List<BrainDumpItem> refinedList =
-            await BrainDumpAiService().refineItems(
+        final List<BrainDumpItem> refinedList = await BrainDumpAiService()
+            .refineItems(
               currentItems: parsedItems,
               instruction: instruction,
               originalPrompt: dumpController.text,
             );
         if (!mounted) return;
         final List<BrainDumpItem> normalized = refinedList
-            .map(
-              (BrainDumpItem item) => _normalizeItem(
-                item,
-                sourceSegment:
-                    instruction.isNotEmpty ? instruction : item.title,
-              ),
-            )
+            .map(_normalizeItem)
             .toList();
         setState(() {
           isRefining = false;
@@ -1012,7 +927,7 @@ class _BrainDumpFinanceScreenState extends State<BrainDumpFinanceScreen> {
     if (lower.contains('ubah jadi pemasukan') ||
         lower.contains('jadikan pemasukan') ||
         lower.contains('ini pemasukan')) {
-      final int amount = parseBrainDumpAmount(clean) ?? item.amount ?? 10000;
+      final int? amount = parseBrainDumpAmount(clean) ?? item.amount;
       return _normalizeItem(
         BrainDumpItem(
           type: BrainDumpItemType.income,
@@ -1027,7 +942,7 @@ class _BrainDumpFinanceScreenState extends State<BrainDumpFinanceScreen> {
     if (lower.contains('ubah jadi pengeluaran') ||
         lower.contains('jadikan pengeluaran') ||
         lower.contains('ini pengeluaran')) {
-      final int amount = parseBrainDumpAmount(clean) ?? item.amount ?? 10000;
+      final int? amount = parseBrainDumpAmount(clean) ?? item.amount;
       return _normalizeItem(
         BrainDumpItem(
           type: BrainDumpItemType.expense,
@@ -1063,7 +978,8 @@ class _BrainDumpFinanceScreenState extends State<BrainDumpFinanceScreen> {
           newTitle =
               '${candidateTitle[0].toUpperCase()}${candidateTitle.substring(1)}';
         }
-      } else if (newAmount == null && !candidates.any((String c) => lower.contains(c.toLowerCase()))) {
+      } else if (newAmount == null &&
+          !candidates.any((String c) => lower.contains(c.toLowerCase()))) {
         newTitle = '${clean[0].toUpperCase()}${clean.substring(1)}';
       }
 
@@ -1090,10 +1006,9 @@ class _BrainDumpFinanceScreenState extends State<BrainDumpFinanceScreen> {
         parsedTime?.hour ?? currentDue.hour,
         parsedTime?.minute ?? currentDue.minute,
       );
-      final DateTime finalDue =
-          (parsedDate != null || parsedTime != null)
-              ? mergedDue
-              : (newSchedule ?? currentDue);
+      final DateTime finalDue = (parsedDate != null || parsedTime != null)
+          ? mergedDue
+          : (newSchedule ?? currentDue);
 
       String newCategory = item.category ?? 'Pribadi';
       for (final String cat in availableCategories) {
@@ -1136,8 +1051,9 @@ class _BrainDumpFinanceScreenState extends State<BrainDumpFinanceScreen> {
   void _showAiRefineSheet({int? targetIndex}) {
     final AppColors c = ThemeScope.of(context).colors;
     final TextEditingController instructionCtrl = TextEditingController();
-    final BrainDumpItem? targetItem =
-        targetIndex != null ? parsedItems[targetIndex] : null;
+    final BrainDumpItem? targetItem = targetIndex != null
+        ? parsedItems[targetIndex]
+        : null;
 
     final List<String> quickPrompts = targetItem == null
         ? const <String>[
@@ -1339,11 +1255,12 @@ class _BrainDumpFinanceScreenState extends State<BrainDumpFinanceScreen> {
       text: item.title,
     );
     final TextEditingController amountCtrl = TextEditingController(
-      text: '${item.amount ?? 0}',
+      text: item.amount?.toString() ?? '',
     );
     bool isIncome = item.type == BrainDumpItemType.income;
-    List<String> categories =
-        isIncome ? incomeCategoryLabels : expenseCategoryLabels;
+    List<String> categories = isIncome
+        ? incomeCategoryLabels
+        : expenseCategoryLabels;
     String selectedCategory = categories.contains(item.category)
         ? item.category!
         : categories.first;
@@ -1356,8 +1273,9 @@ class _BrainDumpFinanceScreenState extends State<BrainDumpFinanceScreen> {
       builder: (BuildContext sheetContext) {
         return StatefulBuilder(
           builder: (BuildContext ctx, StateSetter setModalState) {
-            categories =
-                isIncome ? incomeCategoryLabels : expenseCategoryLabels;
+            categories = isIncome
+                ? incomeCategoryLabels
+                : expenseCategoryLabels;
             if (!categories.contains(selectedCategory)) {
               selectedCategory = categories.first;
             }
@@ -1521,13 +1439,14 @@ class _BrainDumpFinanceScreenState extends State<BrainDumpFinanceScreen> {
                               ),
                               child: Text(
                                 cat,
-                                style: AppTypography.caption(
-                                  active ? c.blue : c.textSub,
-                                ).copyWith(
-                                  fontWeight: active
-                                      ? FontWeight.w700
-                                      : FontWeight.w500,
-                                ),
+                                style:
+                                    AppTypography.caption(
+                                      active ? c.blue : c.textSub,
+                                    ).copyWith(
+                                      fontWeight: active
+                                          ? FontWeight.w700
+                                          : FontWeight.w500,
+                                    ),
                               ),
                             ),
                           );
@@ -1551,10 +1470,12 @@ class _BrainDumpFinanceScreenState extends State<BrainDumpFinanceScreen> {
                             );
                             return;
                           }
-                          if (newAmount == null || newAmount <= 0) {
+                          if (newAmount == null ||
+                              newAmount <= 0 ||
+                              newAmount > kMaxTransactionAmount) {
                             setModalState(
                               () => modalError =
-                                  'Masukkan nominal lebih dari 0.',
+                                  'Masukkan Rp1 sampai ${formatRupiah(kMaxTransactionAmount)}.',
                             );
                             return;
                           }
@@ -1663,10 +1584,7 @@ class _BrainDumpFinanceScreenState extends State<BrainDumpFinanceScreen> {
                           ),
                         ),
                       ),
-                      Text(
-                        'Edit Tugas',
-                        style: AppTypography.title(c.text),
-                      ),
+                      Text('Edit Tugas', style: AppTypography.title(c.text)),
                       const SizedBox(height: AppSpacing.md),
                       if (modalError != null) ...[
                         AppErrorMessage(message: modalError!),
@@ -1712,13 +1630,14 @@ class _BrainDumpFinanceScreenState extends State<BrainDumpFinanceScreen> {
                               ),
                               child: Text(
                                 cat,
-                                style: AppTypography.caption(
-                                  active ? c.blue : c.textSub,
-                                ).copyWith(
-                                  fontWeight: active
-                                      ? FontWeight.w700
-                                      : FontWeight.w500,
-                                ),
+                                style:
+                                    AppTypography.caption(
+                                      active ? c.blue : c.textSub,
+                                    ).copyWith(
+                                      fontWeight: active
+                                          ? FontWeight.w700
+                                          : FontWeight.w500,
+                                    ),
                               ),
                             ),
                           );
@@ -1799,15 +1718,15 @@ class _BrainDumpFinanceScreenState extends State<BrainDumpFinanceScreen> {
                                   initialTime: TimeOfDay.fromDateTime(
                                     selectedDue,
                                   ),
-                                  builder: (
-                                    BuildContext context,
-                                    Widget? child,
-                                  ) => MediaQuery(
-                                    data: MediaQuery.of(
-                                      context,
-                                    ).copyWith(alwaysUse24HourFormat: true),
-                                    child: child!,
-                                  ),
+                                  builder:
+                                      (BuildContext context, Widget? child) =>
+                                          MediaQuery(
+                                            data: MediaQuery.of(context)
+                                                .copyWith(
+                                                  alwaysUse24HourFormat: true,
+                                                ),
+                                            child: child!,
+                                          ),
                                 );
                                 if (picked != null) {
                                   setModalState(() {
@@ -1875,8 +1794,8 @@ class _BrainDumpFinanceScreenState extends State<BrainDumpFinanceScreen> {
                           final String newTitle = titleCtrl.text.trim();
                           if (newTitle.isEmpty) {
                             setModalState(
-                              () =>
-                                  modalError = 'Judul tugas tidak boleh kosong.',
+                              () => modalError =
+                                  'Judul tugas tidak boleh kosong.',
                             );
                             return;
                           }
@@ -1961,6 +1880,20 @@ class _BrainDumpFinanceScreenState extends State<BrainDumpFinanceScreen> {
       return;
     }
 
+    final int invalidIndex = parsedItems.indexWhere(
+      (BrainDumpItem item) =>
+          item.isFinance &&
+          ((item.amount ?? 0) <= 0 || item.amount! > kMaxTransactionAmount),
+    );
+    if (invalidIndex != -1) {
+      final String title = parsedItems[invalidIndex].title;
+      setState(
+        () => errorMessage =
+            'Edit nominal "$title". Masukkan Rp1 sampai ${formatRupiah(kMaxTransactionAmount)}.',
+      );
+      return;
+    }
+
     final AppProvider app = context.read<AppProvider>();
     final List<TransactionItem> savedTransactions = <TransactionItem>[];
     final List<TaskItem> savedTasks = <TaskItem>[];
@@ -1969,21 +1902,19 @@ class _BrainDumpFinanceScreenState extends State<BrainDumpFinanceScreen> {
     for (final BrainDumpItem item in parsedItems.where(
       (BrainDumpItem e) => e.isFinance,
     )) {
-      final int amount = item.amount ?? 0;
-      if (amount <= 0) {
-        continue;
-      }
+      final int amount = item.amount!;
       final TransactionItem tx = TransactionItem(
         id: newDocumentId(),
         label: item.title,
         amount: item.type == BrainDumpItemType.income ? amount : -amount,
         cat: _categoryKey(item),
         time: TimeOfDay.now().format(context),
-        date: 'Hari ini',
+        date: _transactionDate(item.transactionDate ?? '') ?? 'Hari ini',
       );
-      app.addTransaction(tx);
       savedTransactions.add(tx);
     }
+
+    unawaited(app.addTransactions(savedTransactions));
 
     // 2. Proses dan simpan bagian Tugas setelah Keuangan
     for (final BrainDumpItem item in parsedItems.where(
@@ -2007,10 +1938,9 @@ class _BrainDumpFinanceScreenState extends State<BrainDumpFinanceScreen> {
         id: newDocumentId(),
         title: item.title,
         categories: finalCategories,
-        description:
-            (item.description ?? '').trim().isNotEmpty
-                ? item.description!.trim()
-                : 'Jadwal ${item.title} pada ${deadline.toLowerCase()}.',
+        description: (item.description ?? '').trim().isNotEmpty
+            ? item.description!.trim()
+            : 'Jadwal ${item.title} pada ${deadline.toLowerCase()}.',
         deadline: deadline,
         dueDate: due,
       );
@@ -2020,10 +1950,7 @@ class _BrainDumpFinanceScreenState extends State<BrainDumpFinanceScreen> {
 
     HapticFeedback.lightImpact();
     Navigator.of(context).pop(
-      BrainDumpSaveResult(
-        transactions: savedTransactions,
-        tasks: savedTasks,
-      ),
+      BrainDumpSaveResult(transactions: savedTransactions, tasks: savedTasks),
     );
   }
 
@@ -2041,10 +1968,7 @@ class _BrainDumpFinanceScreenState extends State<BrainDumpFinanceScreen> {
           icon: const Icon(Icons.arrow_back_rounded),
           tooltip: 'Kembali',
         ),
-        title: Text(
-          'AI Brain Dump',
-          style: AppTypography.titleLarge(c.text),
-        ),
+        title: Text('AI Brain Dump', style: AppTypography.titleLarge(c.text)),
         centerTitle: false,
       ),
       body: SafeArea(
@@ -2147,7 +2071,7 @@ class _BrainDumpFinanceScreenState extends State<BrainDumpFinanceScreen> {
                 controller: dumpController,
                 autofocus: true,
                 maxLines: 4,
-                maxLength: 400,
+                maxLength: BrainDumpAiService.maxInputLength,
                 style: AppTypography.bodyLarge(c.text),
                 onChanged: (_) {
                   if (errorMessage != null || infoMessage != null) {
@@ -2159,8 +2083,7 @@ class _BrainDumpFinanceScreenState extends State<BrainDumpFinanceScreen> {
                 },
                 decoration: _inputDecoration(
                   c,
-                  hintText:
-                      'Contoh: Makan batagor 15k, ibu kirim 500rb, lalu besok jam 08:00 ada quiz kalkulus...',
+                  hintText: 'Contoh: Makan batagor 15k, ibu kirim 500rb, lalu besok jam 08:00 ada quiz kalkulus...',
                 ).copyWith(counterText: ''),
               ),
               const SizedBox(height: AppSpacing.sm),
@@ -2322,11 +2245,7 @@ class _BrainDumpFinanceScreenState extends State<BrainDumpFinanceScreen> {
                       ),
                       const SizedBox(width: AppSpacing.xxs),
                     ] else ...[
-                      Icon(
-                        Icons.auto_fix_high_rounded,
-                        size: 14,
-                        color: c.ai,
-                      ),
+                      Icon(Icons.auto_fix_high_rounded, size: 14, color: c.ai),
                       const SizedBox(width: AppSpacing.xxs),
                     ],
                     Text(
@@ -2508,26 +2427,32 @@ class _BrainDumpFinanceScreenState extends State<BrainDumpFinanceScreen> {
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
                     Text(
-                      '${income ? '+' : '-'}${formatRupiah(item.amount ?? 0)}',
+                      item.amount == null
+                          ? 'Isi nominal'
+                          : '${income ? '+' : '-'}${formatRupiah(item.amount!)}',
                       style: AppTypography.label(accent)
                           .copyWith(fontWeight: FontWeight.w700),
                     ),
                     // Tampilkan juga angka mentah untuk keterbacaan/test compatibility
                     Text(
-                      '${item.amount ?? 0}',
+                      item.amount?.toString() ?? 'Belum diisi',
                       style: AppTypography.micro(c.textMuted),
                     ),
                   ],
                 ),
               ],
             ),
+            if (item.transactionDate != null) ...[
+              const SizedBox(height: AppSpacing.xs),
+              Text(
+                'Tanggal transaksi: ${item.transactionDate}',
+                style: AppTypography.caption(c.textSub),
+              ),
+            ],
             if (item.description != null &&
                 item.description!.trim().isNotEmpty) ...[
               const SizedBox(height: AppSpacing.xs),
-              Text(
-                item.description!,
-                style: AppTypography.caption(c.textSub),
-              ),
+              Text(item.description!, style: AppTypography.caption(c.textSub)),
             ],
             const SizedBox(height: AppSpacing.xs),
             const Divider(height: 1),
@@ -2608,10 +2533,7 @@ class _BrainDumpFinanceScreenState extends State<BrainDumpFinanceScreen> {
             if (item.description != null &&
                 item.description!.trim().isNotEmpty) ...[
               const SizedBox(height: AppSpacing.xs),
-              Text(
-                item.description!,
-                style: AppTypography.caption(c.textSub),
-              ),
+              Text(item.description!, style: AppTypography.caption(c.textSub)),
             ],
             const SizedBox(height: AppSpacing.xs),
             const Divider(height: 1),

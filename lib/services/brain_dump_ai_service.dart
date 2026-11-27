@@ -27,6 +27,7 @@ class BrainDumpItem {
   final String? description;
   final int? amount;
   final String? category;
+  final String? transactionDate;
   final String? dueDate;
   final String? dueTime;
 
@@ -36,6 +37,7 @@ class BrainDumpItem {
     this.description,
     this.amount,
     this.category,
+    this.transactionDate,
     this.dueDate,
     this.dueTime,
   });
@@ -54,6 +56,7 @@ class BrainDumpItem {
     String? description,
     int? amount,
     String? category,
+    String? transactionDate,
     String? dueDate,
     String? dueTime,
     bool clearDescription = false,
@@ -68,6 +71,7 @@ class BrainDumpItem {
       description: clearDescription ? null : (description ?? this.description),
       amount: clearAmount ? null : (amount ?? this.amount),
       category: clearCategory ? null : (category ?? this.category),
+      transactionDate: transactionDate ?? this.transactionDate,
       dueDate: clearDueDate ? null : (dueDate ?? this.dueDate),
       dueTime: clearDueTime ? null : (dueTime ?? this.dueTime),
     );
@@ -79,6 +83,7 @@ class BrainDumpItem {
     if (description != null) 'description': description,
     if (amount != null) 'amount': amount,
     if (category != null) 'category': category,
+    if (transactionDate != null) 'transaction_date': transactionDate,
     if (dueDate != null) 'due_date': dueDate,
     if (dueTime != null) 'due_time': dueTime,
   };
@@ -97,6 +102,7 @@ class BrainDumpItem {
       description: _nullableString(json['description']),
       amount: amount,
       category: _nullableString(json['category']),
+      transactionDate: _nullableString(json['transaction_date']),
       dueDate: _nullableString(json['due_date']),
       dueTime: _nullableString(json['due_time']),
     );
@@ -121,6 +127,7 @@ class BrainDumpAiException implements Exception {
 }
 
 class BrainDumpAiService {
+  static const int maxInputLength = 5000;
   static const Duration _requestTimeout = Duration(seconds: 15);
   static const int _maxAttempts = 2;
 
@@ -138,6 +145,7 @@ class BrainDumpAiService {
       'description': Schema.string(nullable: true),
       'amount': Schema.integer(nullable: true, minimum: 0),
       'category': Schema.string(nullable: true),
+      'transaction_date': Schema.string(nullable: true),
       'due_date': Schema.string(nullable: true),
       'due_time': Schema.string(nullable: true),
     },
@@ -145,6 +153,7 @@ class BrainDumpAiService {
       'description',
       'amount',
       'category',
+      'transaction_date',
       'due_date',
       'due_time',
     ],
@@ -153,11 +162,7 @@ class BrainDumpAiService {
   static final List<SafetySetting> _permissiveSafetySettings = <SafetySetting>[
     SafetySetting(HarmCategory.harassment, HarmBlockThreshold.none, null),
     SafetySetting(HarmCategory.hateSpeech, HarmBlockThreshold.none, null),
-    SafetySetting(
-      HarmCategory.sexuallyExplicit,
-      HarmBlockThreshold.none,
-      null,
-    ),
+    SafetySetting(HarmCategory.sexuallyExplicit, HarmBlockThreshold.none, null),
     SafetySetting(HarmCategory.dangerousContent, HarmBlockThreshold.none, null),
   ];
 
@@ -167,46 +172,51 @@ class BrainDumpAiService {
     generationConfig: GenerationConfig(
       responseMimeType: 'application/json',
       responseSchema: Schema.object(
-        properties: {
-          'items': Schema.array(items: _itemSchema, minItems: 1, maxItems: 10),
-        },
+        properties: {'items': Schema.array(items: _itemSchema, maxItems: 60)},
       ),
       temperature: 0.1,
-      maxOutputTokens: 1200,
+      maxOutputTokens: 8192,
     ),
     systemInstruction: Content.system(
-      'Kamu adalah parser Brain Dump pintar yang sangat tangguh dan toleran untuk aplikasi AturAja mahasiswa. '
-      'JANGAN PERNAH MENOLAK input pengguna meskipun kalimatnya tidak lengkap, singkatan, typo, gaul, '
-      'curhat emosional, marah-marah, atau mengandung kata-kata kasar/umpatan/tidak sopan (seperti anjing, bangsat, goblok, tai, sialan, brengsek, dll). '
-      'Jika ada kata kasar, umpatan, atau kalimat tidak jelas, abaikan dan bersihkan kata kasarnya, '
-      'lalu langsung pikirkan sendiri maksud inti perintah pengguna untuk mengubahnya menjadi judul dan deskripsi Tugas atau Keuangan yang sopan, rapi, dan jelas. '
-      'Jika data keuangan tidak memiliki nominal eksplisit (misal hanya "beli makan sialan" atau "bayar parkir"), '
-      'perkirakan nominal wajar dalam rupiah untuk mahasiswa di Indonesia (misal makan/minum 15000, kopi/jajan 12000, parkir 2000, bensin 25000, laundry 20000, kos 650000, belanja 50000, lainnya 10000) agar tetap menjadi item keuangan yang valid. '
-      'Jika kalimat sangat singkat atau tidak jelas apakah keuangan atau tugas, ubah menjadi item task (tugas) yang masuk akal sesuai konteks mahasiswa. '
-      'Ekstrak semua aktivitas Keuangan (pemasukan/income & pengeluaran/expense) '
-      'maupun Tugas/Jadwal (task/schedule) dari teks Bahasa Indonesia, termasuk '
-      'jika pengguna mencampurkan keuangan dan tugas dalam satu kalimat sekaligus. '
-      'Urutkan item Keuangan (income/expense) terlebih dahulu, lalu diikuti item '
-      'Tugas/Jadwal (task/schedule). '
-      'Kembalikan hanya JSON sesuai schema. '
-      'Gunakan amount sebagai integer rupiah tanpa simbol untuk income/expense. '
-      'Gunakan due_date format YYYY-MM-DD dan due_time format 24 jam HH:mm '
-      'jika tanggal atau jam disebutkan. Konversi keterangan waktu Bahasa '
-      'Indonesia ke 24 jam: "jam 6 pagi" = "06:00", "jam 12 siang" = '
-      '"12:00", "jam 3 sore" = "15:00", "jam 8 malam" = "20:00", '
-      '"jam 7.30" = "07:30". Setiap item bertipe task atau schedule wajib '
-      'memiliki due_date dan due_time. Jika tanggal tidak disebut, pakai '
-      'tanggal referensi hari ini dari pesan pengguna. Jika jam tidak disebut, '
-      'pakai jam referensi (pukul) dari pesan pengguna. Tanggal referensi '
-      'juga dipakai untuk menafsirkan tanggal relatif seperti hari ini, besok, '
-      'lusa, atau tanggal N bulan ini. '
-      'Buat title yang singkat, sopan, dan spesifik. '
-      'Buat description sebagai kalimat Bahasa Indonesia yang lengkap, sopan, rapi, '
-      'dan merangkum aktivitas, tanggal, serta waktu yang disebutkan tanpa menyalin kata kasar. '
-      'Kategori transaksi: Makan & Minum, Hiburan, Transport, Belanja, '
-      'Gaji, Kiriman, Freelance, atau Lainnya. '
-      'Kategori tugas: Tugas Kuliah, Pribadi, Laundry, Olahraga, '
-      'Organisasi, Keuangan, atau Lainnya.',
+      'Ubah catatan bebas bahasa Indonesia menjadi draf AturAja. Baca seluruh '
+      'konteks, termasuk bahasa gaul, singkatan, daftar, serta rujukan antarkalimat. '
+      'Satu aktivitas atau transaksi independen menjadi satu item. Ekstrak semua '
+      'item meskipun tercampur dalam satu kalimat; pertahankan urutan tiap jenis. '
+      'Gabungkan konteks yang melengkapi item sama, dan jangan buat duplikat. '
+      'Abaikan kutipan, percakapan, komentar, contoh, pembatalan, dan penyangkalan '
+      'yang tidak diminta untuk dicatat. Jika tidak ada item, kembalikan items kosong. '
+      'Catatan boleh seluruhnya expense, income, task, atau schedule. '
+      'Judul kelompok seperti "pengeluaran kemarin:" memberi jenis dan tanggal '
+      'untuk semua baris di bawahnya. Nama barang diikuti nominal (mis. "nasi 15k", '
+      '"parkir 2000") sudah cukup sebagai satu transaksi meski tanpa kata beli. '
+      'Baca daftar bernomor, bullet, tabel, dan daftar dipisah koma. '
+      'Pisahkan setiap baris item, termasuk untuk tanggal yang sudah lewat. '
+      'Contoh: "pengeluaran kemarin: nasi 15k, kopi 12k, pulsa 50k" '
+      'menghasilkan tiga expense bertanggal kemarin dan tanpa tugas. '
+      'Isi transaction_date YYYY-MM-DD memakai tanggal transaksi atau tanggal '
+      'judul kelompok; hitung kata kemarin dan N hari lalu dari tanggal referensi. '
+      'Jika tanggal transaksi tidak disebut, biarkan transaction_date null. '
+      'expense adalah pengeluaran yang sudah terjadi atau diminta untuk dicatat. '
+      'income adalah pemasukan yang sudah diterima atau diminta untuk dicatat. '
+      'Rencana membeli, kewajiban membayar, atau janji transfer yang belum terjadi '
+      'adalah task, walaupun nominal disebutkan. Pertemuan atau agenda pada waktu '
+      'tertentu adalah schedule; pekerjaan yang harus selesai adalah task. '
+      'Contoh: "udah bayar kos 650rb, besok bayar listrik 100rb, '
+      'revisi bab 2 dan kirim slide Jumat jam 9" menghasilkan satu expense dan tiga task. '
+      'Contoh: "tadi beli nasi 15rb sama kopi 12rb, ibu transfer 500rb, '
+      'rapat BEM lusa jam 8 malam" menghasilkan dua expense, satu income, dan satu schedule. '
+      'Jangan membuat transaksi tambahan dari total, saldo, atau rincian yang '
+      'sudah termasuk dalam nominal item lain. Angka bab, jam, tanggal, kuantitas, '
+      'dan nominal rencana tugas bukan nominal transaksi. Gunakan integer rupiah '
+      'untuk transaksi. Jika nominal transaksi belum diketahui, biarkan amount null. '
+      'Terapkan tanggal atau jam bersama hanya pada aktivitas yang dirujuk. '
+      'Gunakan due_date YYYY-MM-DD dan due_time HH:mm untuk tugas dan jadwal jika diketahui. '
+      'Isi judul dan deskripsi singkat dalam bahasa Indonesia. Pertahankan detail '
+      'penting seperti nominal kewajiban dan konteks tugas tanpa menambah fakta. '
+      'Kategori pengeluaran: Makan & Minum, Hiburan, Transport, Belanja, Lainnya. '
+      'Kategori pemasukan: Gaji, Kiriman, Freelance, Lainnya. Kategori tugas: '
+      'Tugas Kuliah, Pribadi, Laundry, Olahraga, Organisasi, Keuangan, Lainnya. '
+      'Kembalikan hanya JSON sesuai schema.',
     ),
   );
 
@@ -217,9 +227,9 @@ class BrainDumpAiService {
         'Tuliskan isi brain dump terlebih dahulu.',
       );
     }
-    if (input.length > 1000) {
+    if (input.length > maxInputLength) {
       throw const BrainDumpAiException(
-        'Brain dump terlalu panjang (maksimal 1000 karakter).',
+        'Brain dump terlalu panjang (maksimal $maxInputLength karakter).',
       );
     }
 
@@ -263,7 +273,9 @@ class BrainDumpAiService {
     } on BrainDumpAiException {
       rethrow;
     } on FormatException catch (error) {
-      throw BrainDumpAiException('Hasil perbaikan AI tidak dapat dibaca: $error');
+      throw BrainDumpAiException(
+        'Hasil perbaikan AI tidak dapat dibaca: $error',
+      );
     } on FirebaseAIException catch (error) {
       throw BrainDumpAiException('Gemini gagal memperbaiki item: $error');
     }
@@ -279,16 +291,19 @@ class BrainDumpAiService {
       throw const BrainDumpAiException('Format hasil Gemini tidak valid.');
     }
     final dynamic rawItems = decoded['items'];
-    if (rawItems is! List || rawItems.isEmpty) {
+    if (rawItems is! List) {
       throw const BrainDumpAiException('Tidak ada item yang terdeteksi.');
     }
 
-    return rawItems.map((dynamic item) {
-      if (item is! Map) {
-        throw const FormatException('Item hasil AI bukan object JSON.');
-      }
-      return BrainDumpItem.fromJson(Map<String, dynamic>.from(item));
-    }).toList();
+    return rawItems
+        .map((dynamic item) {
+          if (item is! Map) {
+            throw const FormatException('Item hasil AI bukan object JSON.');
+          }
+          return BrainDumpItem.fromJson(Map<String, dynamic>.from(item));
+        })
+        .where((BrainDumpItem item) => item.type != BrainDumpItemType.unknown)
+        .toList();
   }
 
   Future<GenerateContentResponse> _generateWithRetry(String input) async {
@@ -310,9 +325,8 @@ class BrainDumpAiService {
                 'Tanggal hari ini adalah $referenceDate pukul $referenceTime. '
                 'Tafsirkan "tanggal N bulan ini" sebagai tanggal N pada '
                 'bulan dan tahun tersebut. Tafsirkan "jam 6 pagi" sebagai '
-                '"06:00". Untuk tugas/jadwal tanpa tanggal atau jam, isi '
-                'due_date dengan $referenceDate dan due_time dengan '
-                '$referenceTime. Parse atau perbaiki brain dump berikut dan '
+                '"06:00". Gunakan tanggal dan jam referensi untuk '
+                'menafsirkan waktu relatif. Parse atau perbaiki brain dump berikut dan '
                 'kembalikan JSON sesuai schema:\n$input',
               ),
             ])

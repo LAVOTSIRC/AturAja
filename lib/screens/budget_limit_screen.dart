@@ -46,8 +46,8 @@ class _BudgetLimitScreenState extends State<BudgetLimitScreen> {
       setState(() => errorText = 'Masukkan limit berupa angka yang valid.');
       return;
     }
-    if (value <= 0) {
-      setState(() => errorText = 'Limit anggaran harus lebih besar dari nol.');
+    if (value < 0) {
+      setState(() => errorText = 'Target anggaran tidak boleh negatif.');
       return;
     }
 
@@ -71,7 +71,7 @@ class _BudgetLimitScreenState extends State<BudgetLimitScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Nilai ini penting dan hanya berubah setelah kamu menekan Simpan.',
+              'Target ini opsional untuk pengingat belanja. Masukkan 0 untuk mematikan target.',
               style: AppTypography.body(c.textSub),
             ),
             const SizedBox(height: AppSpacing.lg),

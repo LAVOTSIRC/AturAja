@@ -27,14 +27,20 @@ import 'widgets/app_lock_gate.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp();
-  await FirebaseAppCheck.instance.activate(
-    providerAndroid: kDebugMode
-        ? const AndroidDebugProvider()
-        : const AndroidPlayIntegrityProvider(),
-    providerApple: kDebugMode
-        ? const AppleDebugProvider()
-        : const AppleAppAttestProvider(),
-  );
+  try {
+    await FirebaseAppCheck.instance.activate(
+      providerAndroid: kDebugMode
+          ? const AndroidDebugProvider()
+          : const AndroidPlayIntegrityProvider(),
+      providerApple: kDebugMode
+          ? const AppleDebugProvider()
+          : const AppleAppAttestProvider(),
+    );
+  } catch (error) {
+    if (kDebugMode) {
+      debugPrint('App Check gagal diaktifkan: $error');
+    }
+  }
   final AuthProvider auth = AuthProvider(service: FirebaseAuthService());
   await auth.initialize();
   final LocalNotificationService notificationService =

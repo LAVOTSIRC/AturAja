@@ -14,6 +14,8 @@ import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_typography.dart';
 import '../theme/theme_scope.dart';
+import '../utils/expense_categories.dart';
+import 'finance_screen.dart';
 import '../widgets/common.dart';
 
 enum _ScanStep { scan, confirm }
@@ -24,7 +26,7 @@ String _shortDate(DateTime date) {
 }
 
 String _formatReceiptAmount(int amount) {
-  final String digits = amount.toString();
+  final String digits = amount.abs().toString();
   final StringBuffer formatted = StringBuffer();
   for (int index = 0; index < digits.length; index++) {
     if (index > 0 && (digits.length - index) % 3 == 0) {
@@ -32,7 +34,33 @@ String _formatReceiptAmount(int amount) {
     }
     formatted.write(digits[index]);
   }
-  return formatted.toString();
+  return amount < 0 ? '-$formatted' : formatted.toString();
+}
+
+class _EditableItem {
+  final TextEditingController nameCtrl;
+  final TextEditingController amountCtrl;
+
+  /// true = biaya tambahan (pajak, service charge, tip, diskon, dll)
+  bool isCharge;
+  bool isDiscount;
+  String category;
+
+  int? get amount => int.tryParse(amountCtrl.text.replaceAll('.', '').trim());
+
+  _EditableItem({
+    String name = '',
+    String amount = '',
+    this.isCharge = false,
+    this.isDiscount = false,
+    this.category = 'belanja',
+  }) : nameCtrl = TextEditingController(text: name),
+       amountCtrl = TextEditingController(text: amount);
+
+  void dispose() {
+    nameCtrl.dispose();
+    amountCtrl.dispose();
+  }
 }
 
 class ScanScreen extends StatefulWidget {
@@ -45,17 +73,9 @@ class ScanScreen extends StatefulWidget {
 class _ScanScreenState extends State<ScanScreen>
     with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   _ScanStep step = _ScanStep.scan;
-  final TextEditingController merchantController = TextEditingController(
-    text: 'Belanja di Indomaret',
-  );
-  final TextEditingController amountController = TextEditingController(
-    text: '28500',
-  );
-  final TextEditingController dateController = TextEditingController(
-    text: 'Hari ini',
-  );
+  final TextEditingController merchantController = TextEditingController();
+  final TextEditingController dateController = TextEditingController();
   final ReceiptOcrService _ocrService = ReceiptOcrService();
-  String _category = 'belanja';
   bool isProcessing = false;
   bool _isCameraInitializing = false;
   String? errorMessage;
@@ -64,7 +84,12 @@ class _ScanScreenState extends State<ScanScreen>
   CameraController? _cameraController;
   int _cameraSession = 0;
 
-  // Scanning line animation
+  final List<_EditableItem> _editableItems = [];
+  String? _processingStatus;
+  bool _showAccuracyWarning = false;
+  bool _usedLocalFallback = false;
+  bool _isGuardrailError = false;
+
   late AnimationController _scanLineController;
   late Animation<double> _scanLineAnim;
 
@@ -91,9 +116,9 @@ class _ScanScreenState extends State<ScanScreen>
     if (controller != null) {
       unawaited(controller.dispose());
     }
-    amountController.dispose();
     merchantController.dispose();
     dateController.dispose();
+    _disposeAllEditableItems();
     unawaited(_ocrService.close());
     _scanLineController.dispose();
     super.dispose();
@@ -205,39 +230,144 @@ class _ScanScreenState extends State<ScanScreen>
     }
   }
 
-  void _showUndetectedReceiptAlert(String message) {
-    if (!mounted) return;
-    final AppColors c = ThemeScope.of(context).colors;
-    ScaffoldMessenger.of(context).hideCurrentSnackBar();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            Icon(
-              Icons.warning_amber_rounded,
-              color: c.expense,
-              size: AppSpacing.iconSmall,
+  void _disposeAllEditableItems() {
+    for (final item in _editableItems) {
+      item.dispose();
+    }
+    _editableItems.clear();
+  }
+
+  void _populateEditableItems(ReceiptOcrResult result) {
+    final List<_EditableItem> previous = List<_EditableItem>.of(_editableItems);
+    _editableItems.clear();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      for (final _EditableItem item in previous) {
+        item.dispose();
+      }
+    });
+    for (final item in result.items) {
+      _editableItems.add(
+        _EditableItem(
+          name: item.name,
+          amount: item.amount.toString(),
+          isCharge: item.isCharge,
+          isDiscount: item.isDiscount,
+          category: receiptExpenseCategory(
+            item.name,
+            suggestedKey: item.categoryKey,
+          ),
+        ),
+      );
+    }
+    if (_editableItems.isEmpty && (result.total ?? 0) > 0) {
+      final String name = result.merchant.isEmpty
+          ? 'Pengeluaran dari struk'
+          : result.merchant;
+      _editableItems.add(
+        _EditableItem(
+          name: name,
+          amount: result.total.toString(),
+          category: receiptExpenseCategory(name),
+        ),
+      );
+    }
+  }
+
+  void _addItem() {
+    setState(() {
+      _editableItems.add(_EditableItem());
+      errorMessage = null;
+    });
+  }
+
+  void _removeItem(int index) {
+    final _EditableItem removed = _editableItems[index];
+    setState(() {
+      _editableItems.removeAt(index);
+      errorMessage = null;
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) => removed.dispose());
+  }
+
+  int get _previewTotal => _editableItems.fold<int>(0, (total, item) {
+    final int amount = item.amount ?? 0;
+    return total + (item.isDiscount ? -amount : amount);
+  });
+
+  Future<void> _runOcrOnPath(String imagePath) async {
+    if (!mounted || _processingStatus != null) return;
+    setState(() {
+      _processingStatus = 'Membaca teks dari foto...';
+      _isGuardrailError = false;
+      _showAccuracyWarning = false;
+      _usedLocalFallback = false;
+      errorMessage = null;
+    });
+
+    try {
+      final String text = await _ocrService.extractText(imagePath);
+      if (!mounted) return;
+
+      setState(() => _processingStatus = 'Menganalisis struk...');
+      final ReceiptOcrResult result = await _ocrService.parseText(text);
+      if (!mounted) return;
+
+      setState(() {
+        _populateEditableItems(result);
+        merchantController.text = result.merchant;
+        dateController.text = result.date == null
+            ? ''
+            : _shortDate(result.date!);
+        _ocrResult = result;
+        _showAccuracyWarning = _ocrService.isResultSuspicious(result);
+        _usedLocalFallback = result.usedLocalFallback;
+        _processingStatus = null;
+        errorMessage = null;
+      });
+    } on ReceiptOcrException catch (error) {
+      if (!mounted) return;
+      setState(() {
+        errorMessage = error.message;
+        _processingStatus = null;
+        _isGuardrailError = error.isGuardrailError;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _processingStatus = null;
+        errorMessage = 'Struk gagal dianalisis. Coba pindai ulang foto.';
+      });
+      debugPrint('Pemindaian struk gagal: $error');
+    }
+  }
+
+  Future<void> _retryOcr() async {
+    final String? path = _receiptImagePath;
+    if (path == null || isProcessing || _processingStatus != null) return;
+    if (_editableItems.isNotEmpty) {
+      final bool? confirmed = await showDialog<bool>(
+        context: context,
+        builder: (BuildContext context) => AlertDialog(
+          title: const Text('Scan ulang foto ini?'),
+          content: const Text(
+            'Hasil scan baru akan menggantikan daftar dan perubahan sebelumnya.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Batal'),
             ),
-            const SizedBox(width: AppSpacing.xs),
-            Expanded(
-              child: Text(
-                'Struk atau informasi keuangan tidak terdeteksi pada gambar.',
-                style: AppTypography.label(c.text),
-              ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Scan Ulang'),
             ),
           ],
         ),
-        behavior: SnackBarBehavior.floating,
-        backgroundColor: c.surface,
-        elevation: 6,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppSpacing.md),
-          side: BorderSide(color: c.expense, width: 1.5),
-        ),
-        margin: const EdgeInsets.all(AppSpacing.md),
-        duration: const Duration(seconds: 3),
-      ),
-    );
+      );
+      if (!mounted || confirmed != true) return;
+    }
+    FocusScope.of(context).unfocus();
+    await _runOcrOnPath(path);
   }
 
   Future<void> _captureReceipt() async {
@@ -270,36 +400,14 @@ class _ScanScreenState extends State<ScanScreen>
         return;
       }
 
+      _scanLineController.stop();
       setState(() {
         isProcessing = false;
         _receiptImagePath = path;
         step = _ScanStep.confirm;
       });
       await _releaseCamera();
-      try {
-        final ReceiptOcrResult result = await _ocrService.recognizeFile(path);
-        if (!mounted) return;
-        setState(() {
-          if (result.merchant.isNotEmpty) {
-            merchantController.text = result.merchant;
-          }
-          if (result.total != null) {
-            amountController.text = result.total.toString();
-          }
-          if (result.date != null) {
-            dateController.text = _shortDate(result.date!);
-          }
-          _ocrResult = result;
-          errorMessage = null;
-        });
-      } on ReceiptOcrException catch (error) {
-        if (!mounted) return;
-        setState(() {
-          _ocrResult = null;
-          errorMessage = error.message;
-        });
-        _showUndetectedReceiptAlert(error.message);
-      }
+      await _runOcrOnPath(path);
     } on ReceiptCameraException catch (error) {
       if (!mounted) return;
       setState(() {
@@ -330,35 +438,14 @@ class _ScanScreenState extends State<ScanScreen>
         if (mounted) setState(() => isProcessing = false);
         return;
       }
+      _scanLineController.stop();
       setState(() {
         isProcessing = false;
         _receiptImagePath = path;
         step = _ScanStep.confirm;
       });
       await _releaseCamera();
-      final ReceiptOcrResult result = await _ocrService.recognizeFile(path);
-      if (!mounted) return;
-      setState(() {
-        if (result.merchant.isNotEmpty) {
-          merchantController.text = result.merchant;
-        }
-        if (result.total != null) {
-          amountController.text = result.total.toString();
-        }
-        if (result.date != null) {
-          dateController.text = _shortDate(result.date!);
-        }
-        _ocrResult = result;
-        errorMessage = null;
-      });
-    } on ReceiptOcrException catch (error) {
-      if (mounted) {
-        setState(() {
-          _ocrResult = null;
-          errorMessage = error.message;
-        });
-        _showUndetectedReceiptAlert(error.message);
-      }
+      await _runOcrOnPath(path);
     } catch (error) {
       if (mounted) {
         setState(() {
@@ -369,72 +456,75 @@ class _ScanScreenState extends State<ScanScreen>
     }
   }
 
-  Future<void> _confirmScan() async {
-    if (isProcessing) return;
-    final AppProvider app = context.read<AppProvider>();
-    final String transactionTime = TimeOfDay.now().format(context);
-    final NavigatorState navigator = Navigator.of(context);
-    final String rawValue = amountController.text.replaceAll(
-      RegExp(r'[^0-9]'),
-      '',
-    );
-    final int? amount = int.tryParse(rawValue);
-    if (amount == null || amount <= 0) {
+  void _confirmScan() {
+    if (isProcessing || _processingStatus != null) return;
+    if (_editableItems.isEmpty) {
       setState(
-        () => errorMessage = 'Nominal tidak valid. Masukkan angka positif.',
+        () => errorMessage = 'Tambahkan minimal satu item sebelum menyimpan.',
       );
       return;
     }
 
-    setState(() {
-      isProcessing = true;
-      errorMessage = null;
-    });
-
-    try {
-      await Future<void>.delayed(const Duration(milliseconds: 600));
-      if (amountController.text.replaceAll(RegExp(r'[^0-9]'), '') != rawValue) {
-        throw StateError('nominal berubah');
+    final String date = dateController.text.trim();
+    final String time = TimeOfDay.now().format(context);
+    final List<TransactionItem> transactions = [];
+    for (final (index, item) in _editableItems.indexed) {
+      final String label = item.nameCtrl.text.trim();
+      final int? amount = item.amount;
+      if (label.isEmpty ||
+          label.length > 200 ||
+          amount == null ||
+          amount <= 0 ||
+          amount > kMaxTransactionAmount) {
+        setState(
+          () => errorMessage =
+              'Periksa nama (maksimal 200 karakter) dan nominal item ${index + 1}.',
+        );
+        return;
       }
-      if (!mounted) return;
-      final String transactionId = newDocumentId();
-
-      final TransactionItem transaction = TransactionItem(
-        id: transactionId,
-        label: merchantController.text.trim().isEmpty
-            ? 'Belanja di Indomaret'
-            : merchantController.text.trim(),
-        amount: -amount,
-        cat: _category,
-        time: transactionTime,
-        date: dateController.text.trim().isEmpty
-            ? 'Hari ini'
-            : dateController.text.trim(),
-        receiptImagePath: _receiptImagePath,
+      transactions.add(
+        TransactionItem(
+          id: newDocumentId(),
+          label: item.isDiscount && !label.toLowerCase().startsWith('diskon')
+              ? 'Diskon ${label.length > 193 ? label.substring(0, 193) : label}'
+              : label,
+          amount: item.isDiscount ? amount : -amount,
+          cat: item.category,
+          time: time,
+          date: date.isEmpty ? _shortDate(DateTime.now()) : date,
+        ),
       );
-      app.addTransaction(transaction);
-      if (!mounted) return;
-      navigator.pop<TransactionItem>(transaction);
-    } catch (_) {
-      if (!mounted) return;
-      setState(() {
-        isProcessing = false;
-        errorMessage = 'Nominal belum bisa diproses. Periksa kembali angka yang dimasukkan.';
-      });
     }
+    if (date.length > 50) {
+      setState(() => errorMessage = 'Tanggal transaksi terlalu panjang.');
+      return;
+    }
+    final AppProvider app = context.read<AppProvider>();
+    unawaited(app.addTransactions(transactions));
+    Navigator.of(context).pop<List<TransactionItem>>(transactions);
   }
 
   void _scanAgain() {
+    if (isProcessing || _processingStatus != null) return;
+    final List<_EditableItem> previous = List<_EditableItem>.of(_editableItems);
     setState(() {
+      _editableItems.clear();
       step = _ScanStep.scan;
       isProcessing = false;
       errorMessage = null;
       _receiptImagePath = null;
       _ocrResult = null;
-      merchantController.text = 'Belanja di Indomaret';
-      amountController.text = '28500';
-      dateController.text = 'Hari ini';
-      _category = 'belanja';
+      merchantController.text = '';
+      dateController.text = '';
+      _processingStatus = null;
+      _showAccuracyWarning = false;
+      _usedLocalFallback = false;
+      _isGuardrailError = false;
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      for (final _EditableItem item in previous) {
+        item.dispose();
+      }
     });
     if (!_scanLineController.isAnimating) {
       _scanLineController.repeat(reverse: true);
@@ -453,12 +543,412 @@ class _ScanScreenState extends State<ScanScreen>
         ),
       ];
     }
-    return items.take(5).map((ReceiptItem item) {
+    return items.map((ReceiptItem item) {
+      if (item.isCharge) {
+        return Text(
+          '${item.name} - - - - ${_formatReceiptAmount(item.amount)}',
+          style: AppTypography.mono(c.textMuted)
+              .copyWith(fontStyle: FontStyle.italic),
+        );
+      }
       return Text(
         '${item.name} ......... ${_formatReceiptAmount(item.amount)}',
         style: AppTypography.mono(c.textSub),
       );
     }).toList();
+  }
+
+  /// Banner progress saat OCR masih berjalan di step konfirmasi.
+  Widget _buildOcrLoadingBanner(AppColors c) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: AppSpacing.sm),
+      padding: const EdgeInsets.all(AppSpacing.sm),
+      decoration: BoxDecoration(
+        color: c.blue.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(AppSpacing.sm),
+        border: Border.all(color: c.blue.withValues(alpha: 0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              SizedBox(
+                width: AppSpacing.iconSmall,
+                height: AppSpacing.iconSmall,
+                child: CircularProgressIndicator(strokeWidth: 2, color: c.blue),
+              ),
+              const SizedBox(width: AppSpacing.xs),
+              Expanded(
+                child: Text(
+                  _processingStatus ?? 'Memproses...',
+                  style: AppTypography.label(c.blue)
+                      .copyWith(fontWeight: FontWeight.w600),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.xs),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(2),
+            child: LinearProgressIndicator(
+              color: c.blue,
+              backgroundColor: c.blue.withValues(alpha: 0.2),
+              minHeight: 3,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLocalFallbackBanner(AppColors c) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: AppSpacing.sm),
+      padding: const EdgeInsets.all(AppSpacing.sm),
+      decoration: BoxDecoration(
+        color: c.blueDim,
+        borderRadius: BorderRadius.circular(AppSpacing.sm),
+        border: Border.all(color: c.blue.withValues(alpha: 0.5)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            Icons.info_outline_rounded,
+            size: AppSpacing.iconSmall,
+            color: c.blue,
+          ),
+          const SizedBox(width: AppSpacing.xs),
+          Expanded(
+            child: Text(
+              'Gemini/App Check tidak tersedia, struk dibaca dengan parser '
+              'lokal. Periksa kembali daftar item dan nominal sebelum menyimpan.',
+              style: AppTypography.caption(c.blue),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Banner peringatan kuning saat hasil AI mungkin tidak akurat.
+  Widget _buildAccuracyWarningBanner(AppColors c) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: AppSpacing.sm),
+      padding: const EdgeInsets.all(AppSpacing.sm),
+      decoration: BoxDecoration(
+        color: c.warning.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(AppSpacing.sm),
+        border: Border.all(color: c.warning.withValues(alpha: 0.5)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            Icons.info_outline_rounded,
+            size: AppSpacing.iconSmall,
+            color: c.warning,
+          ),
+          const SizedBox(width: AppSpacing.xs),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Periksa kembali sebelum menyimpan',
+                  style: AppTypography.label(c.warning)
+                      .copyWith(fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Hasil analisis AI mungkin tidak 100% akurat — ada item yang '
+                  'terlewat atau harga yang salah baca. Koreksi daftar item dan '
+                  'nominal sebelum konfirmasi.',
+                  style: AppTypography.caption(c.warning),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Banner merah saat gambar bukan struk / foto tidak terbaca.
+  Widget _buildGuardrailErrorBanner(AppColors c) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: AppSpacing.sm),
+      padding: const EdgeInsets.all(AppSpacing.sm),
+      decoration: BoxDecoration(
+        color: c.expense.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(AppSpacing.sm),
+        border: Border.all(color: c.expense.withValues(alpha: 0.5)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            Icons.block_rounded,
+            size: AppSpacing.iconSmall,
+            color: c.expense,
+          ),
+          const SizedBox(width: AppSpacing.xs),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Gambar bukan struk atau tidak terbaca',
+                  style: AppTypography.label(c.expense)
+                      .copyWith(fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  errorMessage ??
+                      'Pastikan memotret struk yang '
+                          'memuat daftar item dan harga dengan jelas.',
+                  style: AppTypography.caption(c.expense),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEditableItemsSection(AppColors c) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: AppSpacing.sm),
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                'Daftar Item',
+                style: AppTypography.label(c.text)
+                    .copyWith(fontWeight: FontWeight.w600),
+              ),
+            ),
+            TextButton.icon(
+              onPressed: _processingStatus == null ? _addItem : null,
+              icon: const Icon(Icons.add, size: AppSpacing.iconSmall),
+              label: const Text('Tambah Item'),
+              style: TextButton.styleFrom(
+                foregroundColor: c.blue,
+                minimumSize: Size.zero,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppSpacing.sm,
+                  vertical: AppSpacing.xxs,
+                ),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: AppSpacing.xs),
+        if (_editableItems.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
+            child: Text(
+              'Tidak ada item terdeteksi. Ketuk + Tambah Item untuk menambah manual.',
+              style: AppTypography.caption(c.textMuted),
+            ),
+          )
+        else
+          ...List<Widget>.generate(
+            _editableItems.length,
+            (int index) => KeyedSubtree(
+              key: ObjectKey(_editableItems[index]),
+              child: _buildEditableItemRow(c, index, _editableItems[index]),
+            ),
+          ),
+        const SizedBox(height: AppSpacing.xs),
+        Text(
+          'Total yang akan dicatat: Rp${_formatReceiptAmount(_previewTotal)}',
+          style: AppTypography.label(c.text),
+        ),
+        if (_ocrResult?.total != null && _ocrResult!.total != _previewTotal)
+          Text(
+            'Total pada struk: Rp${_formatReceiptAmount(_ocrResult!.total!)}. '
+            'Periksa jika ada item atau diskon yang terlewat.',
+            style: AppTypography.caption(c.warning),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildEditableItemRow(AppColors c, int index, _EditableItem item) {
+    final Color accentColor = item.isCharge ? c.warning : c.border;
+    final Color fillColor = item.isCharge
+        ? c.warning.withValues(alpha: 0.08)
+        : c.surface;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpacing.xs),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Badge baris: produk biasa vs biaya tambahan (tappable untuk toggle)
+          GestureDetector(
+            onTap: () => setState(() {
+              if (item.isDiscount) {
+                item.isDiscount = false;
+                item.isCharge = false;
+              } else if (item.isCharge) {
+                item.isDiscount = true;
+              } else {
+                item.isCharge = true;
+              }
+            }),
+            child: Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.xs,
+                vertical: 2,
+              ),
+              decoration: BoxDecoration(
+                color: item.isCharge
+                    ? c.warning.withValues(alpha: 0.15)
+                    : c.surface,
+                border: Border.all(color: accentColor.withValues(alpha: 0.5)),
+                borderRadius: BorderRadius.circular(AppSpacing.xxs),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    item.isCharge
+                        ? Icons.receipt_outlined
+                        : Icons.shopping_bag_outlined,
+                    size: 10,
+                    color: item.isCharge ? c.warning : c.textMuted,
+                  ),
+                  const SizedBox(width: 3),
+                  Text(
+                    item.isDiscount
+                        ? 'DISKON'
+                        : item.isCharge
+                        ? 'BIAYA / PAJAK'
+                        : 'PRODUK',
+                    style: TextStyle(
+                      fontSize: 9,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.5,
+                      color: item.isCharge ? c.warning : c.textMuted,
+                    ),
+                  ),
+                  const SizedBox(width: 3),
+                  Icon(
+                    Icons.swap_horiz,
+                    size: 9,
+                    color: item.isCharge ? c.warning : c.textMuted,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: AppSpacing.xxs),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Expanded(
+                flex: 5,
+                child: TextField(
+                  controller: item.nameCtrl,
+                  onChanged: (_) => _clearError(),
+                  style: AppTypography.body(c.text),
+                  textCapitalization: TextCapitalization.words,
+                  decoration: InputDecoration(
+                    hintText: item.isCharge
+                        ? 'Nama biaya / pajak'
+                        : 'Nama item',
+                    hintStyle: AppTypography.body(c.textMuted),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.sm,
+                      vertical: AppSpacing.xs,
+                    ),
+                    filled: true,
+                    fillColor: fillColor,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(AppSpacing.xs),
+                      borderSide: BorderSide(color: accentColor),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(AppSpacing.xs),
+                      borderSide: BorderSide(color: accentColor),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(AppSpacing.xs),
+                      borderSide: BorderSide(color: c.focus, width: 1.5),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: AppSpacing.xs),
+              Expanded(
+                flex: 3,
+                child: TextField(
+                  controller: item.amountCtrl,
+                  onChanged: (_) => setState(() => errorMessage = null),
+                  keyboardType: TextInputType.number,
+                  style: AppTypography.body(item.isCharge ? c.warning : c.text),
+                  decoration: InputDecoration(
+                    hintText: 'Nominal',
+                    hintStyle: AppTypography.body(c.textMuted),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.sm,
+                      vertical: AppSpacing.xs,
+                    ),
+                    filled: true,
+                    fillColor: fillColor,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(AppSpacing.xs),
+                      borderSide: BorderSide(color: accentColor),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(AppSpacing.xs),
+                      borderSide: BorderSide(color: accentColor),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(AppSpacing.xs),
+                      borderSide: BorderSide(color: c.focus, width: 1.5),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: AppSpacing.xxs),
+              SizedBox(
+                width: AppSpacing.target,
+                height: AppSpacing.target,
+                child: IconButton(
+                  onPressed: () => _removeItem(index),
+                  icon: const Icon(Icons.delete_outline),
+                  color: c.expense,
+                  iconSize: AppSpacing.iconSmall,
+                  padding: EdgeInsets.zero,
+                  tooltip: 'Hapus item',
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.xs),
+          DropdownButtonFormField<String>(
+            initialValue: item.category,
+            isExpanded: true,
+            decoration: const InputDecoration(labelText: 'Kategori item'),
+            items: [
+              for (final entry in expenseCategoryKeys.entries)
+                DropdownMenuItem(value: entry.value, child: Text(entry.key)),
+            ],
+            onChanged: (value) {
+              if (value != null) setState(() => item.category = value);
+            },
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -471,8 +961,6 @@ class _ScanScreenState extends State<ScanScreen>
       ),
     );
   }
-
-  // ── Camera view (scan step) ──────────────────────────────────────────────
 
   Widget _cameraBackground() {
     return Container(
@@ -770,7 +1258,8 @@ class _ScanScreenState extends State<ScanScreen>
                         Text(
                           _isCameraInitializing
                               ? 'Menyiapkan kamera...'
-                              : 'Memproses struk...',
+                              : (_processingStatus ??
+                                    'Menganalisis struk dengan Gemini AI...'),
                           style: const TextStyle(
                             color: Colors.white,
                             fontSize: 13,
@@ -829,8 +1318,6 @@ class _ScanScreenState extends State<ScanScreen>
     );
   }
 
-  // ── Confirm step body ────────────────────────────────────────────────────
-
   Widget _confirmBody(AppColors c) {
     return Scaffold(
       backgroundColor: c.bg,
@@ -866,7 +1353,7 @@ class _ScanScreenState extends State<ScanScreen>
                     ),
                   ),
                   const SizedBox(width: AppSpacing.sm),
-                  Text('Konfirmasi Struk', style: AppTypography.title(c.text)),
+                  Text('Pratinjau Struk', style: AppTypography.title(c.text)),
                 ],
               ),
             ),
@@ -888,7 +1375,17 @@ class _ScanScreenState extends State<ScanScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (errorMessage != null) ...[
+          if (_processingStatus != null) _buildOcrLoadingBanner(c),
+          if (_usedLocalFallback && _processingStatus == null) ...[
+            _buildLocalFallbackBanner(c),
+          ],
+          if (_showAccuracyWarning && _processingStatus == null) ...[
+            _buildAccuracyWarningBanner(c),
+          ],
+          if (_isGuardrailError && _processingStatus == null) ...[
+            _buildGuardrailErrorBanner(c),
+          ],
+          if (errorMessage != null && !_isGuardrailError) ...[
             AppErrorMessage(message: errorMessage!),
             const SizedBox(height: AppSpacing.sm),
           ],
@@ -989,7 +1486,7 @@ class _ScanScreenState extends State<ScanScreen>
                         padding: const EdgeInsets.only(top: AppSpacing.xxs),
                         child: Text(
                           'TOTAL .............. '
-                          '${_formatReceiptAmount(int.tryParse(amountController.text) ?? 0)}',
+                          '${_formatReceiptAmount(_ocrResult?.total ?? 0)}',
                           style: AppTypography.mono(c.text)
                               .copyWith(fontWeight: FontWeight.w600),
                         ),
@@ -998,102 +1495,18 @@ class _ScanScreenState extends State<ScanScreen>
                   ),
                 ),
                 const SizedBox(height: AppSpacing.sm),
-                Row(
-                  children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Nominal',
-                          style: AppTypography.micro(c.textMuted),
-                        ),
-                        const SizedBox(height: AppSpacing.xxs),
-                        Text(
-                          'Rp${_formatReceiptAmount(int.tryParse(amountController.text) ?? 0)}',
-                          style: AppTypography.display(c.text),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(width: AppSpacing.md),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Kategori',
-                          style: AppTypography.micro(c.textMuted),
-                        ),
-                        const SizedBox(height: AppSpacing.xxs),
-                        Row(
-                          children: [
-                            Icon(
-                              Icons.shopping_cart_outlined,
-                              size: AppSpacing.sm,
-                              color: c.blue,
-                            ),
-                            const SizedBox(width: AppSpacing.xxs),
-                            Text(
-                              'Belanja',
-                              style: AppTypography.label(c.blue)
-                                  .copyWith(fontWeight: FontWeight.w600),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
               ],
             ),
           ),
           const SizedBox(height: AppSpacing.sm),
           Text(
-            'Periksa dan koreksi hasil OCR sebelum menyimpan transaksi.',
+            'Periksa nama, nominal, dan kategori. Setiap item akan dicatat sebagai transaksi tersendiri.',
             style: AppTypography.micro(c.textMuted),
           ),
           const SizedBox(height: AppSpacing.sm),
-          TextField(
-            controller: merchantController,
-            onChanged: (_) => _clearError(),
-            style: AppTypography.body(c.text),
-            decoration: InputDecoration(
-              labelText: 'Nama merchant',
-              filled: true,
-              fillColor: c.surface,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(AppSpacing.sm),
-                borderSide: BorderSide(color: c.borderAccent, width: 1.5),
-              ),
-            ),
-          ),
-          const SizedBox(height: AppSpacing.sm),
-          const SizedBox(height: AppSpacing.xs),
-          Text(
-            'Koreksi nominal jika perlu',
-            style: AppTypography.meta(c.textMuted),
-          ),
-          const SizedBox(height: AppSpacing.xs),
-          TextField(
-            controller: amountController,
-            keyboardType: TextInputType.number,
-            onChanged: (_) => _clearError(),
-            style: AppTypography.display(c.text),
-            decoration: InputDecoration(
-              labelText: 'Nominal struk',
-              filled: true,
-              fillColor: c.surface,
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: AppSpacing.md,
-                vertical: AppSpacing.sm,
-              ),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(AppSpacing.sm),
-                borderSide: BorderSide(color: c.borderAccent, width: 1.5),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(AppSpacing.sm),
-                borderSide: BorderSide(color: c.focus, width: 1.5),
-              ),
-            ),
+          AbsorbPointer(
+            absorbing: _processingStatus != null,
+            child: _buildEditableItemsSection(c),
           ),
           const SizedBox(height: AppSpacing.sm),
           TextField(
@@ -1112,33 +1525,7 @@ class _ScanScreenState extends State<ScanScreen>
             ),
           ),
           const SizedBox(height: AppSpacing.sm),
-          DropdownButtonFormField<String>(
-            initialValue: _category,
-            decoration: InputDecoration(
-              labelText: 'Kategori',
-              filled: true,
-              fillColor: c.surface,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(AppSpacing.sm),
-                borderSide: BorderSide(color: c.borderAccent, width: 1.5),
-              ),
-            ),
-            items: const <DropdownMenuItem<String>>[
-              DropdownMenuItem(value: 'belanja', child: Text('Belanja')),
-              DropdownMenuItem(value: 'food', child: Text('Makan & Minum')),
-              DropdownMenuItem(value: 'transport', child: Text('Transport')),
-              DropdownMenuItem(value: 'entertainment', child: Text('Hiburan')),
-              DropdownMenuItem(value: 'other', child: Text('Lainnya')),
-            ],
-            onChanged: isProcessing
-                ? null
-                : (String? value) {
-                    if (value != null) {
-                      setState(() => _category = value);
-                    }
-                  },
-          ),
-          if (errorMessage != null) ...[
+          if (errorMessage != null && !_isGuardrailError) ...[
             const SizedBox(height: AppSpacing.sm),
             AppErrorMessage(message: errorMessage!),
           ],
@@ -1149,7 +1536,7 @@ class _ScanScreenState extends State<ScanScreen>
             SizedBox(
               width: double.infinity,
               child: PressableScale(
-                onTap: _confirmScan,
+                onTap: _processingStatus != null ? null : _confirmScan,
                 semanticLabel: 'Konfirmasi dan catat hasil pemindaian',
                 tooltip: 'Konfirmasi transaksi',
                 child: Container(
@@ -1172,21 +1559,43 @@ class _ScanScreenState extends State<ScanScreen>
           SizedBox(
             width: double.infinity,
             child: TextButton(
-              onPressed: isProcessing ? null : _scanAgain,
+              onPressed: isProcessing || _processingStatus != null
+                  ? null
+                  : _scanAgain,
               style: TextButton.styleFrom(
                 minimumSize: const Size(AppSpacing.target, AppSpacing.target),
                 padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
               ),
-              child: Text('Scan Ulang', style: AppTypography.label(c.textSub)),
+              child: Text(
+                'Ambil atau Pilih Foto Baru',
+                style: AppTypography.label(c.textSub),
+              ),
             ),
           ),
+          if (_receiptImagePath != null) ...[
+            const SizedBox(height: AppSpacing.xs),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: _processingStatus != null ? null : _retryOcr,
+                icon: const Icon(
+                  Icons.refresh_rounded,
+                  size: AppSpacing.iconSmall,
+                ),
+                label: const Text('Scan Ulang Foto Ini'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: c.blue,
+                  side: BorderSide(color: c.blue.withValues(alpha: 0.5)),
+                  minimumSize: const Size(AppSpacing.target, AppSpacing.target),
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );
   }
 }
-
-// ── Custom painters ──────────────────────────────────────────────────────────
 
 /// Paints a semi-transparent overlay with a clear rectangular cutout (viewfinder).
 class _ViewfinderOverlayPainter extends CustomPainter {

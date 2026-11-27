@@ -17,7 +17,7 @@ class SettingsController extends ChangeNotifier {
   int dailyRoastingMinute = 0;
 
   bool autoBackupEnabled = true;
-  int monthlyBudgetLimit = 1200000;
+  int monthlyBudgetLimit = 0;
   bool biometricLockEnabled = false;
   bool pinWasUpdated = false;
   bool accountDeletionRequested = false;
@@ -79,7 +79,7 @@ class SettingsController extends ChangeNotifier {
     dailyRoastingHour = 20;
     dailyRoastingMinute = 0;
     autoBackupEnabled = true;
-    monthlyBudgetLimit = 1200000;
+    monthlyBudgetLimit = 0;
     biometricLockEnabled = false;
     pinWasUpdated = false;
     accountDeletionRequested = false;
