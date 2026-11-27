@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -1308,30 +1310,83 @@ class _TransactionDetailSheetState extends State<_TransactionDetailSheet> {
             // ── Receipt section ──────────────────────────────────────
             Text('Foto Struk', style: AppTypography.overline(c.textMuted)),
             const SizedBox(height: AppSpacing.xs),
-            Container(
-              width: double.infinity,
-              height: 120,
-              decoration: BoxDecoration(
-                color: c.surfaceHigh,
-                borderRadius: BorderRadius.circular(AppSpacing.md),
-                border: Border.all(color: c.border),
-              ),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    Icons.receipt_long_outlined,
-                    size: AppSpacing.iconLarge,
-                    color: c.textMuted,
+            if (widget.transaction.receiptImagePath != null &&
+                File(widget.transaction.receiptImagePath!).existsSync())
+              GestureDetector(
+                onTap: () => _showFullscreenPhoto(
+                  context,
+                  widget.transaction.receiptImagePath!,
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(AppSpacing.md),
+                  child: Stack(
+                    children: [
+                      Image.file(
+                        File(widget.transaction.receiptImagePath!),
+                        width: double.infinity,
+                        height: 150,
+                        fit: BoxFit.cover,
+                      ),
+                      Positioned(
+                        right: AppSpacing.xs,
+                        bottom: AppSpacing.xs,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: AppSpacing.xs,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.black.withValues(alpha: 0.6),
+                            borderRadius: BorderRadius.circular(AppSpacing.xs),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(
+                                Icons.zoom_in_rounded,
+                                size: 14,
+                                color: Colors.white,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                'Perbesar',
+                                style: AppTypography.micro(Colors.white),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: AppSpacing.xxs),
-                  Text(
-                    'Tidak ada foto struk',
-                    style: AppTypography.caption(c.textMuted),
-                  ),
-                ],
+                ),
+              )
+            else
+              Container(
+                width: double.infinity,
+                height: 120,
+                decoration: BoxDecoration(
+                  color: c.surfaceHigh,
+                  borderRadius: BorderRadius.circular(AppSpacing.md),
+                  border: Border.all(color: c.border),
+                ),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.receipt_long_outlined,
+                      size: AppSpacing.iconLarge,
+                      color: c.textMuted,
+                    ),
+                    const SizedBox(height: AppSpacing.xxs),
+                    Text(
+                      widget.transaction.receiptImagePath != null
+                          ? 'Foto struk tidak ditemukan di perangkat'
+                          : 'Tidak ada foto struk',
+                      style: AppTypography.caption(c.textMuted),
+                    ),
+                  ],
+                ),
               ),
-            ),
             const SizedBox(height: AppSpacing.lg),
 
             // ── Action buttons ───────────────────────────────────────
@@ -1401,6 +1456,42 @@ class _TransactionDetailSheetState extends State<_TransactionDetailSheet> {
                   ),
                 ),
               ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showFullscreenPhoto(BuildContext context, String imagePath) {
+    showDialog<void>(
+      context: context,
+      builder: (BuildContext ctx) => Dialog(
+        backgroundColor: Colors.black,
+        insetPadding: const EdgeInsets.all(AppSpacing.md),
+        child: Stack(
+          children: [
+            InteractiveViewer(
+              minScale: 0.8,
+              maxScale: 4.0,
+              child: Center(
+                child: Image.file(
+                  File(imagePath),
+                  fit: BoxFit.contain,
+                ),
+              ),
+            ),
+            Positioned(
+              top: AppSpacing.xs,
+              right: AppSpacing.xs,
+              child: IconButton(
+                onPressed: () => Navigator.of(ctx).pop(),
+                icon: const Icon(Icons.close_rounded, color: Colors.white),
+                style: IconButton.styleFrom(
+                  backgroundColor: Colors.black54,
+                ),
+                tooltip: 'Tutup',
+              ),
             ),
           ],
         ),

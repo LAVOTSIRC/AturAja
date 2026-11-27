@@ -3,6 +3,8 @@ import 'dart:io';
 
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 
 import '../data/id_generator.dart';
@@ -15,14 +17,15 @@ import '../theme/app_spacing.dart';
 import '../theme/app_typography.dart';
 import '../theme/theme_scope.dart';
 import '../utils/expense_categories.dart';
+import '../utils/format.dart';
 import 'finance_screen.dart';
 import '../widgets/common.dart';
 
 enum _ScanStep { scan, confirm }
 
-String _shortDate(DateTime date) {
+String _isoDate(DateTime date) {
   String twoDigits(int value) => value.toString().padLeft(2, '0');
-  return '${twoDigits(date.day)}/${twoDigits(date.month)}/${date.year}';
+  return '${date.year.toString().padLeft(4, '0')}-${twoDigits(date.month)}-${twoDigits(date.day)}';
 }
 
 String _formatReceiptAmount(int amount) {
@@ -46,7 +49,8 @@ class _EditableItem {
   bool isDiscount;
   String category;
 
-  int? get amount => int.tryParse(amountCtrl.text.replaceAll('.', '').trim());
+  int? get amount =>
+      int.tryParse(amountCtrl.text.replaceAll(RegExp(r'[^0-9]'), '').trim());
 
   _EditableItem({
     String name = '',
@@ -89,6 +93,11 @@ class _ScanScreenState extends State<ScanScreen>
   bool _showAccuracyWarning = false;
   bool _usedLocalFallback = false;
   bool _isGuardrailError = false;
+  bool _combineIntoSingleTransaction = true;
+  bool _isTorchOn = false;
+  Offset? _focusPoint;
+  Timer? _focusTimer;
+  Size _previewSize = Size.zero;
 
   late AnimationController _scanLineController;
   late Animation<double> _scanLineAnim;
@@ -110,6 +119,7 @@ class _ScanScreenState extends State<ScanScreen>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _focusTimer?.cancel();
     _cameraSession++;
     final CameraController? controller = _cameraController;
     _cameraController = null;
@@ -196,10 +206,14 @@ class _ScanScreenState extends State<ScanScreen>
       setState(() {
         _cameraController = null;
         _isCameraInitializing = false;
+        _isTorchOn = false;
+        _focusPoint = null;
       });
     } else {
       _cameraController = null;
       _isCameraInitializing = false;
+      _isTorchOn = false;
+      _focusPoint = null;
     }
 
     try {
@@ -249,7 +263,7 @@ class _ScanScreenState extends State<ScanScreen>
       _editableItems.add(
         _EditableItem(
           name: item.name,
-          amount: item.amount.toString(),
+          amount: _formatReceiptAmount(item.amount),
           isCharge: item.isCharge,
           isDiscount: item.isDiscount,
           category: receiptExpenseCategory(
@@ -266,7 +280,7 @@ class _ScanScreenState extends State<ScanScreen>
       _editableItems.add(
         _EditableItem(
           name: name,
-          amount: result.total.toString(),
+          amount: _formatReceiptAmount(result.total!),
           category: receiptExpenseCategory(name),
         ),
       );
@@ -297,7 +311,7 @@ class _ScanScreenState extends State<ScanScreen>
   Future<void> _runOcrOnPath(String imagePath) async {
     if (!mounted || _processingStatus != null) return;
     setState(() {
-      _processingStatus = 'Membaca teks dari foto...';
+      _processingStatus = 'Menganalisis struk...';
       _isGuardrailError = false;
       _showAccuracyWarning = false;
       _usedLocalFallback = false;
@@ -305,11 +319,8 @@ class _ScanScreenState extends State<ScanScreen>
     });
 
     try {
-      final String text = await _ocrService.extractText(imagePath);
-      if (!mounted) return;
-
-      setState(() => _processingStatus = 'Menganalisis struk...');
-      final ReceiptOcrResult result = await _ocrService.parseText(text);
+      final ReceiptOcrResult result =
+          await _ocrService.scanReceiptImage(imagePath);
       if (!mounted) return;
 
       setState(() {
@@ -317,7 +328,7 @@ class _ScanScreenState extends State<ScanScreen>
         merchantController.text = result.merchant;
         dateController.text = result.date == null
             ? ''
-            : _shortDate(result.date!);
+            : _isoDate(result.date!);
         _ocrResult = result;
         _showAccuracyWarning = _ocrService.isResultSuspicious(result);
         _usedLocalFallback = result.usedLocalFallback;
@@ -446,6 +457,13 @@ class _ScanScreenState extends State<ScanScreen>
       });
       await _releaseCamera();
       await _runOcrOnPath(path);
+    } on ReceiptCameraException catch (error) {
+      if (mounted) {
+        setState(() {
+          isProcessing = false;
+          errorMessage = error.message;
+        });
+      }
     } catch (error) {
       if (mounted) {
         setState(() {
@@ -456,7 +474,27 @@ class _ScanScreenState extends State<ScanScreen>
     }
   }
 
-  void _confirmScan() {
+  Future<String?> _persistReceiptImage(String? sourcePath) async {
+    if (sourcePath == null || sourcePath.isEmpty) return null;
+    final File sourceFile = File(sourcePath);
+    if (!sourceFile.existsSync()) return null;
+
+    try {
+      final Directory appDocDir = await getApplicationDocumentsDirectory();
+      final Directory receiptsDir = Directory('${appDocDir.path}/receipts');
+      if (!receiptsDir.existsSync()) {
+        receiptsDir.createSync(recursive: true);
+      }
+      final int ts = DateTime.now().millisecondsSinceEpoch;
+      final String destPath = '${receiptsDir.path}/receipt_$ts.jpg';
+      await sourceFile.copy(destPath);
+      return destPath;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _confirmScan() async {
     if (isProcessing || _processingStatus != null) return;
     if (_editableItems.isEmpty) {
       setState(
@@ -466,8 +504,15 @@ class _ScanScreenState extends State<ScanScreen>
     }
 
     final String date = dateController.text.trim();
-    final String time = TimeOfDay.now().format(context);
-    final List<TransactionItem> transactions = [];
+    if (date.length > 50) {
+      setState(() => errorMessage = 'Tanggal transaksi terlalu panjang.');
+      return;
+    }
+
+    final List<({String label, int amount, String category, bool isCharge})>
+        nonDiscountItems = [];
+    int totalDiscount = 0;
+
     for (final (index, item) in _editableItems.indexed) {
       final String label = item.nameCtrl.text.trim();
       final int? amount = item.amount;
@@ -482,23 +527,148 @@ class _ScanScreenState extends State<ScanScreen>
         );
         return;
       }
-      transactions.add(
-        TransactionItem(
-          id: newDocumentId(),
-          label: item.isDiscount && !label.toLowerCase().startsWith('diskon')
-              ? 'Diskon ${label.length > 193 ? label.substring(0, 193) : label}'
-              : label,
-          amount: item.isDiscount ? amount : -amount,
-          cat: item.category,
-          time: time,
-          date: date.isEmpty ? _shortDate(DateTime.now()) : date,
-        ),
-      );
+      if (item.isDiscount) {
+        totalDiscount += amount;
+      } else {
+        nonDiscountItems.add((
+          label: label,
+          amount: amount,
+          category: item.category,
+          isCharge: item.isCharge,
+        ));
+      }
     }
-    if (date.length > 50) {
-      setState(() => errorMessage = 'Tanggal transaksi terlalu panjang.');
+
+    if (nonDiscountItems.isEmpty) {
+      setState(
+        () => errorMessage =
+            'Tambahkan minimal satu item produk atau biaya selain diskon.',
+      );
       return;
     }
+
+    // Distribusikan diskon secara proporsional ke item produk agar tidak ada
+    // TransactionItem bernominal positif yang masuk ke totalIncome.
+    final List<int> netAmounts =
+        nonDiscountItems.map((e) => e.amount).toList();
+
+    if (totalDiscount > 0) {
+      final List<int> productIndices = [
+        for (int i = 0; i < nonDiscountItems.length; i++)
+          if (!nonDiscountItems[i].isCharge) i,
+      ];
+      final List<int> targetIndices = productIndices.isNotEmpty
+          ? productIndices
+          : List<int>.generate(nonDiscountItems.length, (i) => i);
+
+      final int targetSum = targetIndices.fold<int>(
+        0,
+        (sum, idx) => sum + netAmounts[idx],
+      );
+      final int maxRemovable = targetSum - targetIndices.length;
+      final int discountToApply =
+          totalDiscount > maxRemovable ? (maxRemovable > 0 ? maxRemovable : 0) : totalDiscount;
+
+      int remainingDiscount = discountToApply;
+      if (targetSum > 0 && discountToApply > 0) {
+        for (int k = 0; k < targetIndices.length; k++) {
+          final int idx = targetIndices[k];
+          final int cut;
+          if (k == targetIndices.length - 1) {
+            cut = remainingDiscount;
+          } else {
+            cut = (discountToApply * netAmounts[idx] / targetSum).round();
+          }
+          final int maxCutForItem = netAmounts[idx] - 1;
+          final int safeCut = cut.clamp(0, maxCutForItem).clamp(0, remainingDiscount);
+          netAmounts[idx] -= safeCut;
+          remainingDiscount -= safeCut;
+        }
+        // Sisa pembulatan: potong dari item terbesar yang masih bisa dipotong
+        if (remainingDiscount > 0) {
+          targetIndices.sort((a, b) => netAmounts[b].compareTo(netAmounts[a]));
+          for (final int idx in targetIndices) {
+            if (remainingDiscount <= 0) break;
+            final int maxCut = netAmounts[idx] - 1;
+            if (maxCut > 0) {
+              final int take = remainingDiscount > maxCut ? maxCut : remainingDiscount;
+              netAmounts[idx] -= take;
+              remainingDiscount -= take;
+            }
+          }
+        }
+      }
+    }
+
+    final String time = TimeOfDay.now().format(context);
+    final String finalDate = date.isEmpty ? _isoDate(DateTime.now()) : date;
+    final String? persistedImagePath =
+        await _persistReceiptImage(_receiptImagePath);
+    if (!mounted) return;
+
+    final List<TransactionItem> transactions;
+    if (_combineIntoSingleTransaction) {
+      final int netTotal = netAmounts.fold<int>(0, (sum, amt) => sum + amt);
+      if (netTotal <= 0 || netTotal > kMaxTransactionAmount) {
+        setState(
+          () => errorMessage =
+              'Total transaksi tidak valid. Periksa kembali daftar item dan diskon.',
+        );
+        return;
+      }
+
+      // Pilih kategori dominan dari item produk (atau semua item jika hanya biaya)
+      final Map<String, int> categoryTotals = <String, int>{};
+      for (int i = 0; i < nonDiscountItems.length; i++) {
+        if (nonDiscountItems[i].isCharge) continue;
+        final String cat = nonDiscountItems[i].category;
+        categoryTotals[cat] = (categoryTotals[cat] ?? 0) + netAmounts[i];
+      }
+      if (categoryTotals.isEmpty) {
+        for (int i = 0; i < nonDiscountItems.length; i++) {
+          final String cat = nonDiscountItems[i].category;
+          categoryTotals[cat] = (categoryTotals[cat] ?? 0) + netAmounts[i];
+        }
+      }
+      final String dominantCategory = categoryTotals.entries
+          .reduce((a, b) => a.value >= b.value ? a : b)
+          .key;
+
+      final String merchantName = merchantController.text.trim();
+      final String combinedLabel = merchantName.isNotEmpty
+          ? merchantName
+          : (nonDiscountItems.length == 1
+                ? nonDiscountItems.first.label
+                : 'Belanja Struk');
+
+      transactions = <TransactionItem>[
+        TransactionItem(
+          id: newDocumentId(),
+          label: combinedLabel.length > 200
+              ? combinedLabel.substring(0, 200)
+              : combinedLabel,
+          amount: -netTotal,
+          cat: dominantCategory,
+          time: time,
+          date: finalDate,
+          receiptImagePath: persistedImagePath,
+        ),
+      ];
+    } else {
+      transactions = [
+        for (int i = 0; i < nonDiscountItems.length; i++)
+          TransactionItem(
+            id: newDocumentId(),
+            label: nonDiscountItems[i].label,
+            amount: -netAmounts[i],
+            cat: nonDiscountItems[i].category,
+            time: time,
+            date: finalDate,
+            receiptImagePath: persistedImagePath,
+          ),
+      ];
+    }
+
     final AppProvider app = context.read<AppProvider>();
     unawaited(app.addTransactions(transactions));
     Navigator.of(context).pop<List<TransactionItem>>(transactions);
@@ -766,6 +936,15 @@ class _ScanScreenState extends State<ScanScreen>
             ),
           ),
         const SizedBox(height: AppSpacing.xs),
+        if (_editableItems.any((item) => item.isDiscount))
+          Padding(
+            padding: const EdgeInsets.only(bottom: AppSpacing.xs),
+            child: Text(
+              'Catatan: Nilai diskon akan otomatis memotong harga item secara '
+              'proporsional saat disimpan.',
+              style: AppTypography.caption(c.blue),
+            ),
+          ),
         Text(
           'Total yang akan dicatat: Rp${_formatReceiptAmount(_previewTotal)}',
           style: AppTypography.label(c.text),
@@ -893,6 +1072,10 @@ class _ScanScreenState extends State<ScanScreen>
                   controller: item.amountCtrl,
                   onChanged: (_) => setState(() => errorMessage = null),
                   keyboardType: TextInputType.number,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.digitsOnly,
+                    const RupiahInputFormatter(),
+                  ],
                   style: AppTypography.body(item.isCharge ? c.warning : c.text),
                   decoration: InputDecoration(
                     hintText: 'Nominal',
@@ -975,6 +1158,31 @@ class _ScanScreenState extends State<ScanScreen>
     );
   }
 
+  Future<void> _toggleTorch() async {
+    final CameraController? controller = _cameraController;
+    if (controller == null || !controller.value.isInitialized) return;
+    final FlashMode nextMode = _isTorchOn ? FlashMode.off : FlashMode.torch;
+    await ReceiptCamera.toggleFlash(controller, nextMode);
+    if (mounted) {
+      setState(() => _isTorchOn = !_isTorchOn);
+    }
+  }
+
+  void _onTapFocus(Offset localPosition) {
+    final CameraController? controller = _cameraController;
+    if (controller == null || !controller.value.isInitialized) return;
+    unawaited(
+      ReceiptCamera.setFocusAndExposure(controller, localPosition, _previewSize),
+    );
+    _focusTimer?.cancel();
+    setState(() => _focusPoint = localPosition);
+    _focusTimer = Timer(const Duration(milliseconds: 1400), () {
+      if (mounted) {
+        setState(() => _focusPoint = null);
+      }
+    });
+  }
+
   Widget _buildCameraPreview(AppColors c) {
     final CameraController? controller = _cameraController;
     if (controller == null || !controller.value.isInitialized) {
@@ -1004,13 +1212,13 @@ class _ScanScreenState extends State<ScanScreen>
     return LayoutBuilder(
       builder: (BuildContext context, BoxConstraints constraints) {
         final Size viewport = constraints.biggest;
+        _previewSize = viewport;
         if (viewport.width <= 0 || viewport.height <= 0) {
           return CameraPreview(controller);
         }
 
-        // CameraPreview keeps the sensor aspect ratio inside the available
-        // space. Scale it up until it covers the viewfinder box, cropping the
-        // excess instead of showing black letterbox bars.
+        // CameraPreview mengisi seluruh viewport tanpa memotong/membatasi
+        // framing struk ke kotak sempit.
         final double viewportAspect = viewport.width / viewport.height;
         final double previewAspect = viewport.width > viewport.height
             ? controller.value.aspectRatio
@@ -1019,10 +1227,34 @@ class _ScanScreenState extends State<ScanScreen>
             ? previewAspect / viewportAspect
             : viewportAspect / previewAspect;
 
-        return ClipRect(
-          child: Transform.scale(
-            scale: scale,
-            child: Center(child: CameraPreview(controller)),
+        return GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTapUp: (TapUpDetails details) => _onTapFocus(details.localPosition),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              ClipRect(
+                child: Transform.scale(
+                  scale: scale,
+                  child: Center(child: CameraPreview(controller)),
+                ),
+              ),
+              if (_focusPoint != null)
+                Positioned(
+                  left: _focusPoint!.dx - 24,
+                  top: _focusPoint!.dy - 24,
+                  child: IgnorePointer(
+                    child: Container(
+                      width: 48,
+                      height: 48,
+                      decoration: BoxDecoration(
+                        border: Border.all(color: c.success, width: 2),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
           ),
         );
       },
@@ -1045,7 +1277,75 @@ class _ScanScreenState extends State<ScanScreen>
   Widget _cameraViewBody(AppColors c) {
     return Stack(
       children: [
-        Positioned.fill(child: _cameraBackground()),
+        // Full-frame camera preview (tidak dibatasi kotak sempit)
+        Positioned.fill(child: _buildCameraPreview(c)),
+
+        // Panduan visual tipis di area tengah (opsional, tidak memotong gambar)
+        Positioned.fill(
+          child: IgnorePointer(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.lg,
+                84,
+                AppSpacing.lg,
+                190,
+              ),
+              child: Stack(
+                children: [
+                  Positioned.fill(
+                    child: CustomPaint(
+                      painter: _ViewfinderOverlayPainter(
+                        c.success.withValues(alpha: 0.75),
+                      ),
+                    ),
+                  ),
+                  Positioned.fill(
+                    child: AnimatedBuilder(
+                      animation: _scanLineAnim,
+                      builder: (ctx2, snap) {
+                        return CustomPaint(
+                          painter: _ScanLinePainter(
+                            progress: _scanLineAnim.value,
+                            color: c.success,
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+
+        // Hint singkat di atas kontrol bawah
+        Positioned(
+          left: AppSpacing.md,
+          right: AppSpacing.md,
+          bottom: 196,
+          child: IgnorePointer(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Pastikan seluruh struk terlihat jelas & tidak buram',
+                  textAlign: TextAlign.center,
+                  style: AppTypography.caption(
+                    Colors.white.withValues(alpha: 0.9),
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Ketuk layar untuk fokus • Mendukung struk panjang & nota lebar',
+                  textAlign: TextAlign.center,
+                  style: AppTypography.micro(
+                    Colors.white.withValues(alpha: 0.65),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
 
         // Top bar
         Positioned(
@@ -1095,6 +1395,20 @@ class _ScanScreenState extends State<ScanScreen>
                 const SizedBox(width: AppSpacing.sm),
                 Text('Scan Struk', style: AppTypography.title(Colors.white)),
                 const Spacer(),
+                if (_cameraController != null) ...[
+                  IconButton(
+                    onPressed: _toggleTorch,
+                    tooltip: _isTorchOn ? 'Matikan flash' : 'Nyalakan flash',
+                    icon: Icon(
+                      _isTorchOn ? Icons.flash_on_rounded : Icons.flash_off_rounded,
+                      color: _isTorchOn ? c.warning : Colors.white,
+                    ),
+                    style: IconButton.styleFrom(
+                      backgroundColor: Colors.white.withValues(alpha: 0.15),
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.xs),
+                ],
                 Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: AppSpacing.sm,
@@ -1128,67 +1442,6 @@ class _ScanScreenState extends State<ScanScreen>
                 ),
               ],
             ),
-          ),
-        ),
-
-        // Viewfinder frame + scan line
-        Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              SizedBox(
-                width: AppSpacing.scanFrame + 40,
-                height: AppSpacing.scanFrame + 80,
-                child: Stack(
-                  children: [
-                    // Camera preview is confined to the center viewfinder
-                    // cutout; the rest of the screen stays dark.
-                    Positioned(
-                      left: AppSpacing.xl,
-                      top: AppSpacing.xl,
-                      right: AppSpacing.xl,
-                      bottom: AppSpacing.xl,
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(AppSpacing.md),
-                        child: _buildCameraPreview(c),
-                      ),
-                    ),
-                    // Dim overlay outside the frame
-                    Positioned.fill(
-                      child: CustomPaint(
-                        painter: _ViewfinderOverlayPainter(c.success),
-                      ),
-                    ),
-                    // Animated scan line
-                    Positioned.fill(
-                      child: AnimatedBuilder(
-                        animation: _scanLineAnim,
-                        builder: (ctx2, snap) {
-                          return CustomPaint(
-                            painter: _ScanLinePainter(
-                              progress: _scanLineAnim.value,
-                              color: c.success,
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: AppSpacing.lg),
-              Text(
-                'Ketuk tombol untuk memotret struk',
-                style: AppTypography.caption(
-                  Colors.white.withValues(alpha: 0.8),
-                ),
-              ),
-              const SizedBox(height: AppSpacing.xxs),
-              Text(
-                'Pastikan seluruh struk terlihat jelas',
-                style: AppTypography.meta(Colors.white.withValues(alpha: 0.5)),
-              ),
-            ],
           ),
         ),
 
@@ -1385,10 +1638,6 @@ class _ScanScreenState extends State<ScanScreen>
           if (_isGuardrailError && _processingStatus == null) ...[
             _buildGuardrailErrorBanner(c),
           ],
-          if (errorMessage != null && !_isGuardrailError) ...[
-            AppErrorMessage(message: errorMessage!),
-            const SizedBox(height: AppSpacing.sm),
-          ],
           if (_receiptImagePath != null &&
               File(_receiptImagePath!).existsSync()) ...[
             ClipRRect(
@@ -1471,7 +1720,7 @@ class _ScanScreenState extends State<ScanScreen>
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        '${merchantController.text.toUpperCase()} · ${dateController.text}',
+                        '${merchantController.text.trim().isEmpty ? 'STRUK BELANJA' : merchantController.text.trim().toUpperCase()} · ${dateController.text}',
                         style: AppTypography.mono(c.textSub),
                       ),
                       ..._buildReceiptItemLines(c),
@@ -1510,12 +1759,13 @@ class _ScanScreenState extends State<ScanScreen>
           ),
           const SizedBox(height: AppSpacing.sm),
           TextField(
-            controller: dateController,
-            onChanged: (_) => _clearError(),
+            controller: merchantController,
+            onChanged: (_) => setState(() => errorMessage = null),
+            textCapitalization: TextCapitalization.words,
             style: AppTypography.body(c.text),
             decoration: InputDecoration(
-              labelText: 'Tanggal transaksi',
-              hintText: 'Contoh: 10/11/2026',
+              labelText: 'Nama toko / merchant',
+              hintText: 'Contoh: Indomaret',
               filled: true,
               fillColor: c.surface,
               border: OutlineInputBorder(
@@ -1525,6 +1775,52 @@ class _ScanScreenState extends State<ScanScreen>
             ),
           ),
           const SizedBox(height: AppSpacing.sm),
+          TextField(
+            controller: dateController,
+            onChanged: (_) => _clearError(),
+            style: AppTypography.body(c.text),
+            decoration: InputDecoration(
+              labelText: 'Tanggal transaksi',
+              hintText: 'Contoh: 2026-11-27',
+              filled: true,
+              fillColor: c.surface,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(AppSpacing.sm),
+                borderSide: BorderSide(color: c.borderAccent, width: 1.5),
+              ),
+            ),
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          Container(
+            decoration: BoxDecoration(
+              color: c.surface,
+              borderRadius: BorderRadius.circular(AppSpacing.sm),
+              border: Border.all(color: c.border),
+            ),
+            child: SwitchListTile.adaptive(
+              value: _combineIntoSingleTransaction,
+              onChanged: _processingStatus == null
+                  ? (bool value) => setState(
+                      () => _combineIntoSingleTransaction = value,
+                    )
+                  : null,
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.sm,
+                vertical: 2,
+              ),
+              title: Text(
+                'Gabung jadi 1 transaksi di riwayat',
+                style: AppTypography.label(c.text)
+                    .copyWith(fontWeight: FontWeight.w600),
+              ),
+              subtitle: Text(
+                _combineIntoSingleTransaction
+                    ? 'Dicatat 1 baris (${merchantController.text.trim().isEmpty ? 'Belanja Struk' : merchantController.text.trim()}) • Rp${_formatReceiptAmount(_previewTotal)}'
+                    : 'Setiap item dicatat terpisah di riwayat',
+                style: AppTypography.caption(c.textMuted),
+              ),
+            ),
+          ),
           if (errorMessage != null && !_isGuardrailError) ...[
             const SizedBox(height: AppSpacing.sm),
             AppErrorMessage(message: errorMessage!),
@@ -1597,47 +1893,27 @@ class _ScanScreenState extends State<ScanScreen>
   }
 }
 
-/// Paints a semi-transparent overlay with a clear rectangular cutout (viewfinder).
+/// Paints subtle corner guides without cropping or dimming the full-frame preview.
 class _ViewfinderOverlayPainter extends CustomPainter {
   final Color accentColor;
   _ViewfinderOverlayPainter(this.accentColor);
 
   @override
   void paint(Canvas canvas, Size size) {
-    const double frameInset = AppSpacing.xl;
-    final Rect outer = Rect.fromLTWH(0, 0, size.width, size.height);
-    final RRect inner = RRect.fromRectAndRadius(
-      Rect.fromLTRB(
-        frameInset,
-        frameInset,
-        size.width - frameInset,
-        size.height - frameInset,
-      ),
-      const Radius.circular(AppSpacing.md),
+    const double frameInset = AppSpacing.sm;
+    final Rect inner = Rect.fromLTRB(
+      frameInset,
+      frameInset,
+      size.width - frameInset,
+      size.height - frameInset,
     );
 
-    // Dim the area outside the frame
-    final Paint dimPaint = Paint()..color = Colors.black.withValues(alpha: 0.5);
-    final Path path = Path.combine(
-      PathOperation.difference,
-      Path()..addRect(outer),
-      Path()..addRRect(inner),
-    );
-    canvas.drawPath(path, dimPaint);
-
-    // Draw the frame border
-    final Paint borderPaint = Paint()
-      ..color = accentColor
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2;
-    canvas.drawRRect(inner, borderPaint);
-
-    // Corner accents
-    const double cornerLen = AppSpacing.xl;
+    // Corner accents only (no dark cutout mask)
+    const double cornerLen = AppSpacing.lg;
     final Paint cornerPaint = Paint()
       ..color = accentColor
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 3
+      ..strokeWidth = 2.5
       ..strokeCap = StrokeCap.round;
 
     final double l = inner.left;
