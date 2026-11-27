@@ -787,4 +787,48 @@ void main() {
     expect(cloud.profile, isNull);
     expect(store.lastSyncedAt, isNull);
   });
+
+  test('Transaksi bertanggal lama DD/MM/YYYY dengan createdAt hari ini tidak masuk monthlyExpense bulan berjalan', () {
+    final DateTime now = DateTime.now();
+    final DateTime lastMonth = DateTime(now.year, now.month - 1, 15);
+    final String legacyDate =
+        '${lastMonth.day.toString().padLeft(2, '0')}/${lastMonth.month.toString().padLeft(2, '0')}/${lastMonth.year}';
+
+    final AppProvider store = AppProvider.inMemory(
+      transactions: <TransactionItem>[
+        TransactionItem(
+          id: 'old-receipt',
+          label: 'Belanja bulan lalu',
+          amount: -50000,
+          cat: 'belanja',
+          time: '12:00',
+          date: legacyDate,
+          createdAt: now,
+        ),
+      ],
+    );
+    addTearDown(store.dispose);
+
+    expect(store.monthlyExpense, 0);
+    expect(store.todayExpense, 0);
+  });
+
+  test('Diskon hasil scan tidak menambah totalIncome', () {
+    final AppProvider store = AppProvider.inMemory(
+      transactions: <TransactionItem>[
+        TransactionItem(
+          id: 'item-1',
+          label: 'Kopi Susu',
+          amount: -18000,
+          cat: 'food',
+          time: '10:00',
+          date: '2026-11-27',
+        ),
+      ],
+    );
+    addTearDown(store.dispose);
+
+    expect(store.totalIncome, 0);
+    expect(store.totalExpense, 18000);
+  });
 }

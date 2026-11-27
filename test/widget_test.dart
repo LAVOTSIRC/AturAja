@@ -1396,26 +1396,29 @@ void main() {
     (WidgetTester tester) async {
       ReceiptCamera.debugCaptureOverride = () async => 'test-receipt.jpg';
       int scanAttempts = 0;
-      ReceiptOcrService.debugExtractTextOverride = (_) async {
+      ReceiptOcrService.debugScanImageOverride = (_) async {
         scanAttempts++;
-        return 'INDOMARET\nTOTAL 28500\n';
+        return const ReceiptOcrResult(
+          merchant: 'Belanja di Indomaret',
+          total: 26500,
+          date: null,
+          items: <ReceiptItem>[
+            ReceiptItem(name: 'Susu', amount: 8500),
+            ReceiptItem(name: 'Sabun', amount: 15000),
+            ReceiptItem(
+              name: 'Diskon Member',
+              amount: 2000,
+              isCharge: true,
+              isDiscount: true,
+            ),
+            ReceiptItem(name: 'Parkir', amount: 5000),
+          ],
+          rawText: 'INDOMARET\nTOTAL 26500',
+        );
       };
-      ReceiptOcrService.debugParseTextOverride = (_) async =>
-          const ReceiptOcrResult(
-            merchant: 'Belanja di Indomaret',
-            total: 28500,
-            date: null,
-            items: <ReceiptItem>[
-              ReceiptItem(name: 'Susu', amount: 8500),
-              ReceiptItem(name: 'Sabun', amount: 15000),
-              ReceiptItem(name: 'Parkir', amount: 5000),
-            ],
-            rawText: 'INDOMARET\nTOTAL 28500',
-          );
       addTearDown(() {
         ReceiptCamera.debugCaptureOverride = null;
-        ReceiptOcrService.debugExtractTextOverride = null;
-        ReceiptOcrService.debugParseTextOverride = null;
+        ReceiptOcrService.debugScanImageOverride = null;
       });
       final AppProvider app = await pumpApp(tester);
       final int before = app.transactions.length;
@@ -1442,11 +1445,14 @@ void main() {
       await tester.pumpAndSettle();
       expect(scanAttempts, 2);
 
+      // Hapus item terakhir (Parkir)
       final Finder remove = find.byTooltip('Hapus item').last;
       await tester.ensureVisible(remove);
       await tester.tap(remove);
       await tester.pumpAndSettle();
-      final Finder firstAmount = find.widgetWithText(TextField, '8500');
+
+      // Nominal diformat dengan RupiahInputFormatter ('8.500')
+      final Finder firstAmount = find.widgetWithText(TextField, '8.500');
       await tester.ensureVisible(firstAmount);
       await tester.enterText(firstAmount, '9000');
       tester.testTextInput.hide();
@@ -1458,18 +1464,45 @@ void main() {
       await tester.pump(const Duration(milliseconds: 650));
       await tester.pump(const Duration(milliseconds: 400));
 
-      expect(app.transactions.length, before + 2);
-      expect(app.transactions[0].label, 'Susu');
-      expect(app.transactions[0].amount, -9000);
-      expect(app.transactions[0].cat, 'food');
-      expect(app.transactions[1].label, 'Sabun');
-      expect(app.transactions[1].amount, -15000);
-      expect(app.transactions[1].cat, 'belanja');
-      expect(
-        app.transactions.take(2).map((item) => item.receiptImagePath),
-        everyElement(isNull),
-      );
+      // Diskon 2000 dipotongkan proporsional ke Susu (9000) & Sabun (15000)
+      // Total 24000 - 2000 = 22000; default digabung menjadi 1 transaksi di riwayat
+      expect(app.transactions.length, before + 1);
+      expect(app.transactions[0].label, 'Belanja di Indomaret');
+      expect(app.transactions[0].amount, -22000);
+      expect(app.transactions[0].cat, 'belanja');
+      expect(app.transactions[0].receiptImagePath, isNull);
       expect(find.textContaining('berhasil dicatat'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'Scan struk from gallery loads OCR result via debugPickGalleryOverride',
+    (WidgetTester tester) async {
+      ReceiptCamera.debugPickGalleryOverride = () async => 'gallery-receipt.jpg';
+      ReceiptOcrService.debugScanImageOverride = (_) async => const ReceiptOcrResult(
+        merchant: 'Alfamart',
+        total: 12000,
+        date: null,
+        items: <ReceiptItem>[ReceiptItem(name: 'Air Mineral', amount: 12000)],
+        rawText: 'ALFAMART',
+      );
+      addTearDown(() {
+        ReceiptCamera.debugPickGalleryOverride = null;
+        ReceiptOcrService.debugScanImageOverride = null;
+      });
+
+      final AppProvider app = await pumpApp(tester);
+      await tester.tap(find.text('Scan Struk'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+
+      await tester.tap(find.text('Pilih dari galeri'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 950));
+
+      expect(find.text('Pratinjau Struk'), findsOneWidget);
+      expect(find.widgetWithText(TextField, 'Alfamart'), findsOneWidget);
+      expect(app.transactions, isNotEmpty);
     },
   );
 
